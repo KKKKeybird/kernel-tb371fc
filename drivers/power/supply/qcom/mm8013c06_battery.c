@@ -34,6 +34,10 @@
 #define REG_HOUR                            0x78
 #define REG_CYCLECOUNT                     0x2A
 #define REG_REMAIN_CAPACITY                0x12
+/* Registers used by the stock driver's extended property set (TASK-076). */
+#define REG_CHARGE_COUNTER                 0x2e
+#define REG_CHARGE_FULL                    0x12
+#define REG_CHARGE_FULL_DESIGN             0x16
 
 
 int last_temperature = 0;
@@ -84,6 +88,10 @@ struct mm8013_chip {
     int hours;
     int chg_volt;
 /*Linden code for JLINDEN-11308 by huyh10 at 20230711 end*/
+    /* Extended-property caches (TASK-076). */
+    int charge_full;
+    int charge_full_design;
+    int charge_counter;
 };
 struct mm8013_chip *chip = NULL;
 
@@ -533,6 +541,80 @@ done:
 }
 EXPORT_SYMBOL(mm8013_get_chg_voltage);
 
+/*
+ * Extended properties reported by the stock mm8013 driver but missing here
+ * (TASK-076). Register choices and scaling come from the disassembled stock
+ * mm8013_get_property (see notes/NOTES-tb371fc-mm8013-stock-props-rea.md):
+ *   CHARGE_FULL        <- reg 0x12, raw
+ *   CHARGE_FULL_DESIGN <- reg 0x16, raw
+ *   CHARGE_COUNTER     <- reg 0x2e, raw
+ */
+int mm8013_charge_full(int *val)
+{
+    int v;
+
+    mutex_lock(&chip->suspend_lock);
+    if (chip->suspended) {
+        *val = chip->charge_full;
+        goto done;
+    }
+
+    if (has_8013) {
+        v = mm8013_read_reg(chip->client, REG_CHARGE_FULL);
+        *val = (v < 0) ? chip->charge_full : v;
+    } else {
+        *val = 0;
+    }
+    chip->charge_full = *val;
+done:
+    mutex_unlock(&chip->suspend_lock);
+    return 0;
+}
+
+int mm8013_charge_full_design(int *val)
+{
+    int v;
+
+    mutex_lock(&chip->suspend_lock);
+    if (chip->suspended) {
+        *val = chip->charge_full_design;
+        goto done;
+    }
+
+    if (has_8013) {
+        v = mm8013_read_reg(chip->client, REG_CHARGE_FULL_DESIGN);
+        *val = (v < 0) ? chip->charge_full_design : v;
+    } else {
+        *val = 0;
+    }
+    chip->charge_full_design = *val;
+done:
+    mutex_unlock(&chip->suspend_lock);
+    return 0;
+}
+
+int mm8013_charge_counter(int *val)
+{
+    int v;
+
+    mutex_lock(&chip->suspend_lock);
+    if (chip->suspended) {
+        *val = chip->charge_counter;
+        goto done;
+    }
+
+    if (has_8013) {
+        v = mm8013_read_reg(chip->client, REG_CHARGE_COUNTER);
+        *val = (v < 0) ? chip->charge_counter : v;
+    } else {
+        *val = 0;
+    }
+    chip->charge_counter = *val;
+done:
+    mutex_unlock(&chip->suspend_lock);
+    return 0;
+}
+
 static enum hq_batteryID mm8013_get_bat_id(struct mm8013_chip *chip)
 {
     int ret = 0;
@@ -649,6 +731,10 @@ static enum power_supply_property mm8013_battery_props[] = {
     POWER_SUPPLY_PROP_TEMP,
     POWER_SUPPLY_PROP_CYCLE_COUNT,
     POWER_SUPPLY_PROP_VOLTAGE_MAX,
+    /* Extended set, matching the stock driver's property table (TASK-076). */
+    POWER_SUPPLY_PROP_CHARGE_FULL,
+    POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+    POWER_SUPPLY_PROP_CHARGE_COUNTER,
 };
 
 static int mm8013_get_property(struct power_supply *psy,
@@ -686,6 +772,15 @@ static int mm8013_get_property(struct power_supply *psy,
         break;
     case POWER_SUPPLY_PROP_VOLTAGE_MAX:
         ret = mm8013_get_chg_voltage(&val->intval);
+        break;
+    case POWER_SUPPLY_PROP_CHARGE_FULL:
+        ret = mm8013_charge_full(&val->intval);
+        break;
+    case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+        ret = mm8013_charge_full_design(&val->intval);
+        break;
+    case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+        ret = mm8013_charge_counter(&val->intval);
         break;
     default:
         return -EINVAL;
