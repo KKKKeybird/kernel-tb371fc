@@ -3922,6 +3922,10 @@ static int tfa98xx_read_memtrack_data(struct tfa98xx *tfa98xx, int *pLivedata)
 			sec_devcie = TFA_DEVICE_TYPE_9874_SECONDARY;
 			break;
 		case 0x94:
+			/* TFA9894 is single-channel: there is no secondary
+			 * channel, so sec_devcie deliberately stays at
+			 * TFA_DEVICE_TYPE_MAX and the stereo branch below
+			 * must not index the table with it. */
 			pri_devcie = TFA_DEVICE_TYPE_9894;
 			break;
 		default:
@@ -3969,7 +3973,10 @@ static int tfa98xx_read_memtrack_data(struct tfa98xx *tfa98xx, int *pLivedata)
 		}
 
 		/* build secondary channel struct. */
-		if (tfa98xx_device_count > 1) {
+		/* TFA9894 is single-channel: sec_devcie stays at
+		 * TFA_DEVICE_TYPE_MAX, so there is no secondary row to read.
+		 * Indexing livedata_table with MAX would walk off the array. */
+		if ((tfa98xx_device_count > 1) && (sec_devcie != TFA_DEVICE_TYPE_MAX)) {
 			j = 0;
 			for (i = MEMTRACK_ITEM_MAX*3; i < MEMTRACK_ITEM_MAX*6; i+=3) {
 				buffer[i+6] = (uint8_t)(livedata_table[sec_devcie][j].track & 0xff);
@@ -4071,30 +4078,7 @@ static long tfa98xx_misc_device_control_ioctl(struct file *file,
 
 				/* clear buffer and read livedata from dsp.*/
 				memset((char*)(&livedata[0]), 0x00, sizeof(livedata));
-				/* TFA9894 is single-channel: use the new unit's
-				 * reader, which reads exactly the three primary
-				 * items and cannot walk past its table. */
-				if ((tfa98xx->tfa->rev & 0xff) == 0x94) {
-					struct tfa9894_livedata ld;
-					int rc;
-
-					mutex_lock(&tfa98xx->dsp_lock);
-					rc = tfa9894_read_livedata(tfa98xx->tfa, &ld);
-					mutex_unlock(&tfa98xx->dsp_lock);
-					if (rc == 0) {
-						livedata[0] = ld.f0;
-						livedata[1] = ld.temp;
-						livedata[2] = ld.ret;
-						livedata[3] = ld.rez;
-						livedata[4] = ld.activity;
-						pr_debug("[TFA9874] Device 0x%x livedata ok.\n",
-							 tfa98xx->i2c->addr);
-					} else {
-						pr_err("Device 0x%x livedata read failed.\n",
-						       tfa98xx->i2c->addr);
-					}
-					per_dev_bytes = sizeof(int) * TFA9894_LIVEDATA_ITEMS;
-				} else if (Tfa98xx_Error_Ok ==
+				if (Tfa98xx_Error_Ok ==
 					   tfa98xx_read_memtrack_data(tfa98xx, &livedata[0])) {
 					pr_debug("[TFA9874] Device 0x%x read memtrack data sucessed.\n", tfa98xx->i2c->addr);
 					per_dev_bytes = sizeof(int) * MEMTRACK_ITEM_MAX;

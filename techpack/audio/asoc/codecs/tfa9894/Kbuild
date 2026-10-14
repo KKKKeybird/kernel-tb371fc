@@ -8,4 +8,3 @@ ccflags-y += -I$(TFA9894_ROOT)/inc
 ccflags-y += -I$(srctree)/techpack/audio/asoc/codecs/tfa98xx/inc
 
 obj-y += src/tfa9894_rotation.o
-obj-y += src/tfa9894_livedata.o
