@@ -31,6 +31,8 @@
 #include "dp_debug.h"
 #include "sde_dbg.h"
 
+#include "dp_sysfs.h"
+
 #define DP_MST_DEBUG(fmt, ...) DP_DEBUG(fmt, ##__VA_ARGS__)
 
 #define dp_display_state_show(x) { \
@@ -199,6 +201,25 @@ static const struct of_device_id dp_dt_match[] = {
 	{.compatible = "qcom,dp-display"},
 	{}
 };
+
+/*
+ * Current DP link lane count, read by the Lenovo display HAL through the
+ * lanes_count sysfs attribute (see dp_sysfs.c). Reports the configured link
+ * lane count when a link is present, otherwise 0.
+ */
+unsigned int dp_display_lanes_count(void)
+{
+	struct dp_display_private *dp;
+
+	if (!g_dp_display)
+		return 0;
+
+	dp = container_of(g_dp_display, struct dp_display_private, dp_display);
+	if (!dp->link)
+		return 0;
+
+	return dp->link->link_params.lane_count;
+}
 
 static inline bool dp_display_is_hdcp_enabled(struct dp_display_private *dp)
 {
@@ -3218,6 +3239,14 @@ static int dp_display_probe(struct platform_device *pdev)
 		goto error;
 	}
 
+	/*
+	 * Publish the Lenovo display-HAL attributes. Non-fatal: a missing
+	 * attribute should never keep the display from coming up.
+	 */
+	rc = dp_sysfs_register(&pdev->dev);
+	if (rc)
+		DP_ERR("dp_sysfs_register failed, rc=%d\n", rc);
+
 	return 0;
 error:
 	devm_kfree(&pdev->dev, dp);
@@ -3280,6 +3309,8 @@ static int dp_display_remove(struct platform_device *pdev)
 		return -EINVAL;
 
 	dp = platform_get_drvdata(pdev);
+
+	dp_sysfs_unregister(&pdev->dev);
 
 	dp_display_deinit_sub_modules(dp);
 
