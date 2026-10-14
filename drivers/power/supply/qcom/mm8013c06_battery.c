@@ -35,9 +35,17 @@
 #define REG_CYCLECOUNT                     0x2A
 #define REG_REMAIN_CAPACITY                0x12
 /* Registers used by the stock driver's extended property set (TASK-076). */
+/*
+ * Register choices verified against the disassembled stock
+ * mm8013_get_property jump table (see
+ * notes/NOTES-tb371fc-mm8013-stock-props-rea.md):
+ *   CHARGE_FULL        -> 0x12
+ *   CHARGE_FULL_DESIGN -> 0x3c
+ *   CHARGE_COUNTER     -> 0x2e
+ */
 #define REG_CHARGE_COUNTER                 0x2e
 #define REG_CHARGE_FULL                    0x12
-#define REG_CHARGE_FULL_DESIGN             0x16
+#define REG_CHARGE_FULL_DESIGN             0x3c
 
 
 int last_temperature = 0;
