@@ -86,6 +86,29 @@ static int tfa98xx_ftrace_regs = 0;
 
 static char *fw_name = "tfa98xx_QS.cnt"; /* p247: TB371FC vendor container */
 
+/* p269: runtime speaker channel rotation for the 4x TFA9894 layout.
+ * The stock driver exposes TFA9894_CHAN_SELECTOR.  The audio HAL maps the
+ * framework rotation to selector 0/1/2/3 and writes this control.  The
+ * values are layout selectors, not raw TDM slots.  This table matches the
+ * stock module.
+ */
+static int g_tfa9894_chan_sel = -1;
+
+static const int tfa9894_chan_sel_map[4][4][2] = {
+	{   /* selector 0 */
+		{ 0, 1 }, { 0, 1 }, { 2, 3 }, { 2, 3 },
+	},
+	{   /* selector 1 */
+		{ 2, 3 }, { 1, 0 }, { 2, 3 }, { 0, 1 },
+	},
+	{   /* selector 2 */
+		{ 3, 2 }, { 0, 1 }, { 3, 2 }, { 1, 0 },
+	},
+	{   /* selector 3 */
+		{ 3, 2 }, { 1, 0 }, { 2, 3 }, { 0, 1 },
+	},
+};
+
 /* p249: sync-preload the container from /vendor/firmware into the kernel
  * firmware cache, so the later request_firmware() (which fires long after
  * the ueventd fallback window on this device) is served from cache. */
@@ -209,6 +232,200 @@ static const struct soc_enum nxp_vendor_id[] = {
 
 const struct snd_kcontrol_new nxp_spk_id_controls[] ={
 	SOC_ENUM_EXT("SPK ID", nxp_vendor_id, nxp_vendor_id_get, NULL),
+};
+
+/* p269: stock TFA9894 channel selector implementation */
+int tfa9894_get_store_chan_sel(void)
+{
+	return g_tfa9894_chan_sel;
+}
+
+int tfa9894_get_target_chan_sel(int sel, int dev_idx, int *spks, int *dcs)
+{
+	if ((sel < 0) || (sel > 3) || (dev_idx < 0) || (dev_idx > 3))
+		return -EINVAL;
+
+	*spks = tfa9894_chan_sel_map[sel][dev_idx][0];
+	*dcs = tfa9894_chan_sel_map[sel][dev_idx][1];
+	return 0;
+}
+
+int tfa9894_change_chan_sel(struct tfa_device *tfa, int spks, int dcs)
+{
+	int err;
+
+	pr_debug("p269: set tfa%u spks=%d dcs=%d\n",
+		(unsigned int)tfa->rev & 0xffU, spks, dcs);
+	err = tfa_set_bf(tfa, TFA9894_BF_TDME, 0);
+	if (err < 0)
+		goto exit;
+	err = tfa_set_bf(tfa, TFA9894_BF_TDMSPKS, (uint16_t)spks);
+	if (err < 0)
+		goto exit;
+	err = tfa_set_bf(tfa, TFA9894_BF_TDMDCS, (uint16_t)dcs);
+	if (err < 0)
+		goto exit;
+	err = tfa_set_bf(tfa, TFA9894_BF_TDME, 1);
+exit:
+	pr_debug("p269: set tfa%u spks=%d dcs=%d, ret=%d\n",
+		(unsigned int)tfa->rev & 0xffU, spks, dcs, err);
+	return err;
+}
+
+static int tfa9894_send_chan_sel_to_dsp(struct tfa98xx *tfa98xx, int sel)
+{
+	struct tfa_device *tfa = tfa98xx->tfa;
+	int spks;
+	int dcs;
+	int old_spks;
+	int old_dcs;
+	int old_vol;
+	int err;
+	int rc;
+	int i;
+	static const int vol_table[] = {
+		0x00, 0x24, 0x48, 0x6c, 0x90, 0xb4, 0xd8, 0xff,
+	};
+
+	rc = tfa9894_get_target_chan_sel(sel, tfa->dev_idx, &spks, &dcs);
+	if (rc)
+		return rc;
+
+	old_spks = tfa_get_bf(tfa, TFA9894_BF_TDMSPKS);
+	old_dcs = tfa_get_bf(tfa, TFA9894_BF_TDMDCS);
+	if ((old_spks == spks) && (old_dcs == dcs))
+		return 0;
+
+	pr_info("p269: sending chan_sel=%d to %s, spks %d->%d, dcs %d->%d\n",
+		sel, tfa98xx->i2c->name, old_spks, spks, old_dcs, dcs);
+
+	/* Fade the DSP volume out, then mute and power down before changing
+	 * the TDM slot mapping.  This follows the stock module sequence. */
+	for (i = 0; i < ARRAY_SIZE(vol_table); i++) {
+		err = tfa_set_bf(tfa, TFA9894_BF_VOL, (uint16_t)vol_table[i]);
+		if (err < 0)
+			return err;
+		msleep(1);
+	}
+
+	err = tfa98xx_set_mute(tfa, Tfa98xx_Mute_Amplifier);
+	if (err != Tfa98xx_Error_Ok)
+		return err;
+
+	err = tfa98xx_powerdown(tfa, 1);
+	if (err != Tfa98xx_Error_Ok)
+		return err;
+
+	rc = tfa9894_change_chan_sel(tfa, spks, dcs);
+
+	err = tfa98xx_powerdown(tfa, 0);
+	if ((err == Tfa98xx_Error_Ok) && (rc == 0))
+		err = tfa98xx_set_mute(tfa, Tfa98xx_Mute_Off);
+	else if (err == Tfa98xx_Error_Ok)
+		err = rc;
+	if (err != Tfa98xx_Error_Ok)
+		return err;
+
+	/* The stock module uses the same fixed fade-in sequence. */
+	for (i = ARRAY_SIZE(vol_table) - 1; i >= 0; i--) {
+		err = tfa_set_bf(tfa, TFA9894_BF_VOL, (uint16_t)vol_table[i]);
+		if (err < 0)
+			return err;
+		msleep(1);
+	}
+
+	old_spks = tfa_get_bf(tfa, TFA9894_BF_TDMSPKS);
+	old_dcs = tfa_get_bf(tfa, TFA9894_BF_TDMDCS);
+	old_vol = tfa_get_bf(tfa, TFA9894_BF_VOL);
+	pr_debug("p269: readback spks=%d dcs=%d vol=%d\n",
+		old_spks, old_dcs, old_vol);
+	return 0;
+}
+
+static int tfa9894_info_chan_sel_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 3;
+
+	return 0;
+}
+
+static int tfa9894_get_chan_sel_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	mutex_lock(&tfa98xx_mutex);
+	ucontrol->value.integer.value[0] = g_tfa9894_chan_sel;
+	mutex_unlock(&tfa98xx_mutex);
+
+	return 0;
+}
+
+static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa98xx *tfa98xx;
+	long value = ucontrol->value.integer.value[0];
+	int ready = 0;
+	int change = 0;
+	int count = 0;
+	int rev_ok = 0;
+
+	if (no_start != 0)
+		return 0;
+
+	mutex_lock(&tfa98xx_mutex);
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		count++;
+		if ((tfa98xx->tfa->tfa_family == 2) &&
+			((tfa98xx->tfa->rev & 0xff) == 0x94))
+			rev_ok++;
+	}
+
+	if ((count != 4) || (rev_ok != 4)) {
+		pr_debug("p269: chan selector unsupported, count=%d rev_ok=%d\n",
+			count, rev_ok);
+		mutex_unlock(&tfa98xx_mutex);
+		return -ENODEV;
+	}
+
+	if (value < 0 || value > 3) {
+		pr_debug("p269: invalid chan selector %ld, fallback to 0\n", value);
+		value = 0;
+	}
+
+	if (value == g_tfa9894_chan_sel) {
+		pr_debug("p269: the angle is same\n");
+		mutex_unlock(&tfa98xx_mutex);
+		return 0;
+	}
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		tfa98xx_dsp_system_stable(tfa98xx->tfa, &ready);
+		if (!ready)
+			continue;
+	}
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		mutex_lock(&tfa98xx->dsp_lock);
+		if (tfa9894_send_chan_sel_to_dsp(tfa98xx, (int)value) == 0)
+			change = 1;
+		mutex_unlock(&tfa98xx->dsp_lock);
+	}
+
+	if (change)
+		g_tfa9894_chan_sel = (int)value;
+
+	mutex_unlock(&tfa98xx_mutex);
+
+	return change;
+}
+
+static const struct snd_kcontrol_new tfa9894_chan_sel_controls[] = {
+	SOC_SINGLE_EXT("TFA9894_CHAN_SELECTOR", 0, 0, 3, 0,
+		tfa9894_get_chan_sel_ctl, tfa9894_set_chan_sel_ctl),
 };
 
 static inline char *tfa_cont_profile_name(struct tfa98xx *tfa98xx, int prof_idx)
@@ -1852,6 +2069,12 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 		ret = snd_soc_add_component_controls(tfa98xx->component,
 				nxp_spk_id_controls, ARRAY_SIZE(nxp_spk_id_controls));
 	}
+	if (!ret && (tfa98xx->tfa->tfa_family == 2) &&
+	    ((tfa98xx->tfa->rev & 0xff) == 0x94)) {
+		ret = snd_soc_add_component_controls(tfa98xx->component,
+				tfa9894_chan_sel_controls,
+				ARRAY_SIZE(tfa9894_chan_sel_controls));
+	}
 #else
 
 	ret = snd_soc_add_codec_controls(tfa98xx->codec, tfa98xx_controls, mix_index);
@@ -1864,6 +2087,12 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	if (!ret) {
 		ret = snd_soc_add_codec_controls(tfa98xx->codec,
 				nxp_spk_id_controls, ARRAY_SIZE(nxp_spk_id_controls));
+	}
+	if (!ret && (tfa98xx->tfa->tfa_family == 2) &&
+	    ((tfa98xx->tfa->rev & 0xff) == 0x94)) {
+		ret = snd_soc_add_codec_controls(tfa98xx->codec,
+				tfa9894_chan_sel_controls,
+				ARRAY_SIZE(tfa9894_chan_sel_controls));
 	}
 #endif
 	return ret;
