@@ -15,6 +15,7 @@
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
 #include "dsi_mi_feature.h"
+#include "tb371fc_panel_seq.h"
 
 #include "dsi_display.h"
 #include "sde_dbg.h"
@@ -390,11 +391,20 @@ static int dsi_panel_reset(struct dsi_panel *panel)
 		gpio_set_value(r_config->reset_gpio,
 			       r_config->sequence[i].level);
 
-
-		if (r_config->sequence[i].sleep_ms)
-			usleep_range(r_config->sequence[i].sleep_ms * 1000,
-				(r_config->sequence[i].sleep_ms * 1000) + 100);
+		/*
+		 * TASK-078: the factory driver issues a fixed 10 ms per step
+		 * (its dtbo reset-sequence is 5 x 10 ms, which the stock image
+		 * hard-codes). Use the factory constant instead of trusting the
+		 * dtbo value, so a different dtbo cannot change the timing.
+		 */
+		tb371fc_panel_reset_step_delay(TB371FC_PANEL_RESET_STEP_MS);
 	}
+
+	/*
+	 * TASK-078: the factory driver issues a fixed 1 ms delay between the
+	 * reset train and the backlight bias calls.
+	 */
+	tb371fc_panel_power_on_backlight_delay();
 
 	if (gpio_is_valid(panel->bl_config.en_gpio)) {
 		rc = gpio_direction_output(panel->bl_config.en_gpio, 1);
@@ -462,6 +472,13 @@ static bool p108_keep_panel_power = true;
 static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
+
+	/*
+	 * TASK-078: the factory driver issues a fixed 10 ms delay before it
+	 * touches any regulator or GPIO. Keep that literal so the timing
+	 * matches the stock image rather than whatever the dtbo suggests.
+	 */
+	tb371fc_panel_power_on_initial_delay();
 
 	if (p108_keep_panel_power) {
 		return 0;
