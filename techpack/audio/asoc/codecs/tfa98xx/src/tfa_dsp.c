@@ -72,10 +72,8 @@ void tfa9894_ops(struct tfa_device_ops *ops);
 /* calibration done executed */
 #define TFA_MTPEX_POS           TFA98XX_KEY2_PROTECTED_MTP0_MTPEX_POS /**/
 
-/* p269: stock TFA9894 channel rotation helpers, implemented in tfa98xx.c */
-int tfa9894_get_store_chan_sel(void);
-int tfa9894_get_target_chan_sel(int sel, int dev_idx, int *spks, int *dcs);
-int tfa9894_change_chan_sel(struct tfa_device *tfa, int spks, int dcs);
+/* TASK-072: TFA9894 rotation engine lives in the tfa9894 unit. */
+#include "../../tfa9894/inc/tfa9894.h"
 
 int tfa_get_calibration_info(struct tfa_device *tfa, int channel)
 {
