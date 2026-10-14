@@ -86,26 +86,30 @@ static int tfa98xx_ftrace_regs = 0;
 
 static char *fw_name = "tfa98xx_QS.cnt"; /* p247: TB371FC vendor container */
 
-/* p269: runtime speaker channel rotation for the 4x TFA9894 layout.
+/* p269/p476: runtime speaker channel rotation for the 4x TFA9894 layout.
  * The stock driver exposes TFA9894_CHAN_SELECTOR.  The audio HAL maps the
  * framework rotation to selector 0/1/2/3 and writes this control.  The
- * values are layout selectors, not raw TDM slots.  This table matches the
- * stock module.
+ * values are layout selectors, not raw TDM slots.
+ *
+ * Table transcribed byte-for-byte from the stock module .rodata+0x4b8
+ * (TASK-072 REA re-export; the earlier p269 table was a wrong 4x2
+ * extrapolation whose sel1/2/3 rows did not match stock, which is why
+ * only 0 degrees rotated correctly).
  */
 static int g_tfa9894_chan_sel = -1;
 
 static const int tfa9894_chan_sel_map[4][4][2] = {
-	{   /* selector 0 */
+	{   /* selector 0: 0 deg */
 		{ 0, 1 }, { 0, 1 }, { 2, 3 }, { 2, 3 },
 	},
-	{   /* selector 1 */
-		{ 2, 3 }, { 1, 0 }, { 2, 3 }, { 0, 1 },
+	{   /* selector 1: 90 deg */
+		{ 1, 0 }, { 2, 3 }, { 0, 1 }, { 3, 2 },
 	},
-	{   /* selector 2 */
-		{ 3, 2 }, { 0, 1 }, { 3, 2 }, { 1, 0 },
+	{   /* selector 2: 180 deg */
+		{ 3, 2 }, { 3, 2 }, { 1, 0 }, { 1, 0 },
 	},
-	{   /* selector 3 */
-		{ 3, 2 }, { 1, 0 }, { 2, 3 }, { 0, 1 },
+	{   /* selector 3: 270 deg */
+		{ 2, 3 }, { 1, 0 }, { 3, 2 }, { 0, 1 },
 	},
 };
 
