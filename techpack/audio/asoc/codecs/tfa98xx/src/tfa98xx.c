@@ -4047,6 +4047,8 @@ static long tfa98xx_misc_device_control_ioctl(struct file *file,
 			int livedata_length_bytes = 0;
 			void *pUserData = (void*)arg;
 			list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+				int per_dev_bytes;
+
 				/* clear buffer and read livedata from dsp.*/
 				memset((char*)(&livedata[0]), 0x00, sizeof(livedata));
 				/* TFA9894 is single-channel: use the new unit's
@@ -4063,22 +4065,27 @@ static long tfa98xx_misc_device_control_ioctl(struct file *file,
 						livedata[0] = ld.f0;
 						livedata[1] = ld.temp;
 						livedata[2] = ld.ret;
+						livedata[3] = ld.rez;
+						livedata[4] = ld.activity;
 						pr_debug("[TFA9874] Device 0x%x livedata ok.\n",
 							 tfa98xx->i2c->addr);
 					} else {
 						pr_err("Device 0x%x livedata read failed.\n",
 						       tfa98xx->i2c->addr);
 					}
+					per_dev_bytes = sizeof(int) * TFA9894_LIVEDATA_ITEMS;
 				} else if (Tfa98xx_Error_Ok ==
 					   tfa98xx_read_memtrack_data(tfa98xx, &livedata[0])) {
 					pr_debug("[TFA9874] Device 0x%x read memtrack data sucessed.\n", tfa98xx->i2c->addr);
+					per_dev_bytes = sizeof(int) * MEMTRACK_ITEM_MAX;
 				} else {
 					pr_err("Device 0x%x read memtrack data failed.\n", tfa98xx->i2c->addr);
+					per_dev_bytes = sizeof(int) * MEMTRACK_ITEM_MAX;
 				}
 
 				/* copy data to user spcace. if copied is successed,
 				will be returned actual size to user space. */
-				livedata_length_bytes = sizeof(int) * MEMTRACK_ITEM_MAX;
+				livedata_length_bytes = per_dev_bytes;
 				if ((tfa98xx->tfa->is_probus_device) && (tfa98xx_device_count > 1)) {
 					/* for stereo usecase, if the condition is true, we have already got livedata from host DSP.
 					otherwise, we don't need do anything. */

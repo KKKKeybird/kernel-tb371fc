@@ -55,13 +55,19 @@ int tfa9894_send_chan_sel(struct tfa_device *tfa, const char *name, int sel);
 
 /*
  * Per-amplifier live speaker data read back from the running DSP.
- * Fields are raw DSP units as the stock ioctl returns them (unscaled).
+ * Fields are raw DSP units (unscaled); divide by the container scalefactor
+ * to get engineering units (see notes: fRes x1, T /16384, ReT,ReZ /65536,
+ * activity x1).
  */
 struct tfa9894_livedata {
-	int f0;		/* resonance frequency  (DSP 0x6fc) */
-	int temp;	/* temperature          (DSP 0x705) */
-	int ret;	/* speaker resistance   (DSP 0x70b) */
+	int f0;		/* resonance frequency   (XMEM 0x6fc, x1)      */
+	int temp;	/* temperature           (XMEM 0x705, /16384)  */
+	int ret;	/* speaker resistance    (XMEM 0x70b, /65536)  */
+	int rez;	/* speaker impedance     (XMEM 0x70c, /65536)  */
+	int activity;	/* signal activity       (XMEM 0x752, x1)      */
 };
+
+#define TFA9894_LIVEDATA_ITEMS	5
 
 /*
  * Read F0 / temperature / resistance for one TFA9894.  The DSP must be

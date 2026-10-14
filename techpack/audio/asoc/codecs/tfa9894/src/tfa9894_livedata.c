@@ -27,10 +27,12 @@
 #define TFA9894_XMEM_F0		0x6fc
 #define TFA9894_XMEM_TEMP	0x705
 #define TFA9894_XMEM_RET	0x70b
+#define TFA9894_XMEM_REZ	0x70c
+#define TFA9894_XMEM_ACTIVITY	0x752
 
 int tfa9894_read_livedata(struct tfa_device *tfa, struct tfa9894_livedata *out)
 {
-	int f0, temp, res;
+	int f0, temp, res, rez, act;
 	enum Tfa98xx_Error err;
 
 	if (!tfa || !out)
@@ -45,9 +47,17 @@ int tfa9894_read_livedata(struct tfa_device *tfa, struct tfa9894_livedata *out)
 	err = tfa98xx_dsp_read_mem(tfa, TFA9894_XMEM_RET, 1, &res);
 	if (err != Tfa98xx_Error_Ok)
 		return -EIO;
+	err = tfa98xx_dsp_read_mem(tfa, TFA9894_XMEM_REZ, 1, &rez);
+	if (err != Tfa98xx_Error_Ok)
+		return -EIO;
+	err = tfa98xx_dsp_read_mem(tfa, TFA9894_XMEM_ACTIVITY, 1, &act);
+	if (err != Tfa98xx_Error_Ok)
+		return -EIO;
 
 	out->f0 = f0;
 	out->temp = temp;
 	out->ret = res;
+	out->rez = rez;
+	out->activity = act;
 	return 0;
 }
