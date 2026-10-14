@@ -4090,9 +4090,11 @@ static long tfa98xx_misc_device_control_ioctl(struct file *file,
 				}
 
 				if (livedata_length_bytes != 0) {
-					result	= copy_to_user((void __user *)pUserData, &livedata[0], livedata_length_bytes);
-					if (result) {
-						pr_err("copy to user space failed(%d).\n", result);
+					int cpy = copy_to_user((void __user *)pUserData,
+							       &livedata[0],
+							       livedata_length_bytes);
+					if (cpy) {
+						pr_err("copy to user space failed(%d).\n", cpy);
 						result = -EINVAL;
 						break;
 					} else {
