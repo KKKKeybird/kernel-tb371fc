@@ -261,6 +261,23 @@ static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 		return -ENODEV;
 	}
 
+	/* Stock parity: while a call profile (name contains "nonRotation") is
+	 * active the selector must not be applied.  The active profile is the
+	 * same across the device set, so the first entry is representative. */
+	{
+		struct tfa98xx *first =
+			list_first_entry(&tfa98xx_device_list, struct tfa98xx, list);
+		char *pname = (first->tfa->cnt != NULL) ?
+			tfaContProfileName(first->tfa->cnt, first->tfa->dev_idx,
+					   first->profile) : NULL;
+
+		if (pname != NULL && strstr(pname, "nonRotation") != NULL) {
+			pr_debug("p269: control disabled during a call (%s)\n", pname);
+			mutex_unlock(&tfa98xx_mutex);
+			return 0;
+		}
+	}
+
 	if (value < 0 || value > 3) {
 		pr_debug("p269: invalid chan selector %ld, fallback to 0\n", value);
 		value = 0;
@@ -271,6 +288,12 @@ static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 		mutex_unlock(&tfa98xx_mutex);
 		return 0;
 	}
+
+	/* Stock parity: record the new selector before touching the devices.
+	 * The DSP may not be running yet (rotation while silent); tfa_dev_start
+	 * then applies the stored selector on the next start.  Updating only
+	 * after a successful send would lose the angle in that case. */
+	tfa9894_set_store_chan_sel((int)value);
 
 	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
 		ready = 0;
@@ -285,9 +308,6 @@ static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 			change = 1;
 		mutex_unlock(&tfa98xx->dsp_lock);
 	}
-
-	if (change)
-		tfa9894_set_store_chan_sel((int)value);
 
 	mutex_unlock(&tfa98xx_mutex);
 
