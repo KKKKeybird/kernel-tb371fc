@@ -103,10 +103,7 @@ extern int32_t nvt_set_charger(uint8_t charger_on_off);
 /*Spinel code for charging by wangxin77 at 2023/03/06 end*/
 
 /* Spinel code for OSPINEL-192 by dingying3 at 2023/3/6 start */
-/* TB371FC p133: default-arm double-tap wake. The Lenovo HAL never sends
- * the SYN_CONFIG WAKEUP_ON switch on the self-built kernel, so the flag
- * stayed false and suspend took the plain-sleep path. */
-bool nvt_gesture_flag = true;
+bool nvt_gesture_flag = false;
 EXPORT_SYMBOL(nvt_gesture_flag);
 /* Spinel code for OSPINEL-192 by dingying3 at 2023/3/6 end */
 struct nvt_ts_data *ts;
@@ -134,6 +131,7 @@ static struct pinctrl *nt36672_pinctrl;
 //used to detect KB connection status and control screen off
 extern void kb_hid_suspend(void);
 extern void kb_hid_resume(void);
+extern int check_tp_state(unsigned long param);
 /* Spinel code for OSPINEL-851 by gaobw1 at 2023/03/03 end */
 #if defined(CONFIG_DRM_PANEL)
 static struct drm_panel *active_panel;
@@ -1205,13 +1203,10 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 	}
 
 	if (keycode > 0) {
-		/* TB371FC p146: report on the dedicated wake keyboard device.
-		 * ZUI input policy (mTpWakeUp=false) drops wake attempts from
-		 * the touch panel device, so report like a power button. */
-		input_report_key(ts->wake_input_dev, keycode, 1);
-		input_sync(ts->wake_input_dev);
-		input_report_key(ts->wake_input_dev, keycode, 0);
-		input_sync(ts->wake_input_dev);
+		input_report_key(ts->input_dev, keycode, 1);
+		input_sync(ts->input_dev);
+		input_report_key(ts->input_dev, keycode, 0);
+		input_sync(ts->input_dev);
 	}
 }
 #endif
@@ -1709,10 +1704,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	if (bTouchIsAwake == 0) {
 		input_id = (uint8_t)(point_data[1] >> 3);
 		nvt_ts_wakeup_gesture_report(input_id, point_data);
-		/* TB371FC p174: report only. The recovery (full fw download,
-		 * stock nvt_ts_resume) runs synchronously at the START of
-		 * dsi_display_enable - before any panel-on command - and is
-		 * what actually clears gesture mode for the panel (TASK-022). */
 		mutex_unlock(&ts->lock);
 		return IRQ_HANDLED;
 	}
@@ -2256,8 +2247,6 @@ static int nvt_ts_check_dt(struct device_node *np)
 		panel = of_drm_find_panel(node);
 		of_node_put(node);
 		if (!IS_ERR(panel)) {
-			/* TB371FC p142: keep the panel reference so the wake
-			 * gesture notifier registers (was commented out). */
 			active_panel = panel;
 			return 0;
 		}
@@ -2356,7 +2345,7 @@ static int nvt_charger_notifier_callback(struct notifier_block *nb,unsigned long
 		return -EINVAL;
 	}
 	if (!strcmp(psy->desc->name, "usb")) {
-		if (psy && ts && (val == POWER_SUPPLY_PROP_STATUS || val == POWER_SUPPLY_PROP_PRESENT || val == POWER_SUPPLY_PROP_ONLINE || val == 0)) {
+		if (psy && ts && val == POWER_SUPPLY_PROP_STATUS) {
 			ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &prop);
 			if (ret < 0) {
 				NVT_ERR("Couldn't get POWER_SUPPLY_PROP_PRESENT rc=%d\n", ret);
@@ -2668,24 +2657,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_input_register_device_failed;
 	}
 
-	/* TB371FC p146: dedicated wake keyboard device (TASK-022). A plain
-	 * KEY_WAKEUP keyboard is treated as wake-capable by the framework
-	 * (like gpio-keys), unlike the touch panel device. */
-	ts->wake_input_dev = devm_input_allocate_device(&ts->client->dev);
-	if (!ts->wake_input_dev) {
-		NVT_ERR("allocate wake input device failed\n");
-		goto err_input_register_device_failed;
-	}
-	ts->wake_input_dev->name = "nvt_wake_key";
-	ts->wake_input_dev->id.bustype = BUS_SPI;
-	input_set_capability(ts->wake_input_dev, EV_KEY, KEY_WAKEUP);
-	input_set_capability(ts->wake_input_dev, EV_KEY, KEY_POWER);
-	ret = input_register_device(ts->wake_input_dev);
-	if (ret) {
-		NVT_ERR("register wake input device failed. ret=%d\n", ret);
-		goto err_input_register_device_failed;
-	}
-
 	if (ts->pen_support) {
 		//---allocate pen input device---
 		ts->pen_input_dev = input_allocate_device();
@@ -2771,7 +2742,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
 	// please make sure boot update start after display reset(RESX) sequence
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(14000));
+	queue_delayed_work_on(8, nvt_fwu_wq, &ts->nvt_fwu_work,
+			msecs_to_jiffies(1500));
 #endif
 
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);
@@ -2790,7 +2762,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 /* Spinel code for OSPINEL-3680 by zhangyd22 at 2023/5/11 start */
 #if NVT_HALL_CHECK
 	INIT_DELAYED_WORK(&nvt_hall_check_work, nvt_hall_check_func);
-	nvt_hall_check_wq = create_workqueue("nvt_hall_check_wq");
+	nvt_hall_check_wq = alloc_workqueue("nvt_hall_check_wq",
+			WQ_POWER_EFFICIENT | WQ_MEM_RECLAIM, 1);
 	if (!nvt_hall_check_wq) {
 		NVT_ERR("nvt_hall_check_wqsd_check_wq create workqueue failed\n");
 		ret = -ENOMEM;
@@ -2870,11 +2843,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #if NVT_CUST_PROC_CMD
 	ts->edge_reject_state = 0;
 	ts->game_mode_state = 0;
-	/* TASK-042: pen defaults on (new-pen protocol). Stock probes with
-	 * 0,0 and waits for userspace; arming here removes the boot-window
-	 * dependency on the Lenovo pen unlock properties. */
-	ts->pen_state = 1;
-	ts->pen_version = 1;
+	ts->pen_state = 0;
+	ts->pen_version = 0;
 /* Spinel code for OSPINEL-2020 by zhangyd22 at 2023/4/4 start */
 #if NVT_DPR_SWITCH
 	ts->fw_pen_state = 0;
@@ -2883,8 +2853,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	INIT_WORK(&ts_restore_cmd_work, nvt_restore_cmd_func);
 #endif
 /*Spinel code for control pen state by zhangyd22 at 2023/04/04 start*/
-//	ts->nfc_state = 0;
-//	check_tp_state(1);
+	ts->nfc_state = 0;
+	check_tp_state(1);
 /*Spinel code for control pen state by zhangyd22 at 2023/04/04 end*/
 	NVT_LOG("end\n");
 

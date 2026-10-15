@@ -171,7 +171,7 @@ extern char *MP_UPDATE_FIRMWARE_NAME;
 /* Spinel code for OSPINEL-3680 by zhangyd22 at 2023/5/11 start */
 #define NVT_HALL_CHECK 1
 #if NVT_HALL_CHECK
-#define NVT_HALL_WORK_DELAY 1000
+#define NVT_HALL_WORK_DELAY 250
 #endif
 /* Spinel code for OSPINEL-3680 by zhangyd22 at 2023/5/11 end */
 #if NVT_CUST_PROC_CMD
@@ -186,7 +186,6 @@ struct edge_grid_zone_info {
 struct nvt_ts_data {
 	struct spi_device *client;
 	struct input_dev *input_dev;
-	struct input_dev *wake_input_dev;
 	struct delayed_work nvt_fwu_work;
 	uint16_t addr;
 	int8_t phys[32];

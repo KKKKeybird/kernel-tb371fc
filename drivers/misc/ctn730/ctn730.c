@@ -251,6 +251,8 @@ static const char * const status_text[] = {
 static int ctn730_parse_message(struct ctn730_dev *ctn730_dev, char cmd, char * data, int count);
 
 struct ctn730_dev *ctn730;
+struct i2c_client *client_address;
+int tp_state;
 
 int is_stylus_attached(void){
 	return ctn730->pen_info.attached;
@@ -272,6 +274,32 @@ int ctn730_notifier_call_chain(struct ctn730_dev *ctn730_dev,
 	unsigned long val, void *v)
 {
 	return blocking_notifier_call_chain(&ctn730_dev->nh, val, v);
+}
+
+/* Stock nvt_ts_probe calls this ctn730 interface after probe. The
+ * assembly reads client_address+0x3e8 (i2c_client.dev.driver_data)
+ * and passes pen_info.attached != 1 to nvt_support_pen_set_nfc. */
+extern int32_t nvt_support_pen_set_nfc(uint8_t state);
+int check_tp_state(unsigned long param)
+{
+	int ret = 1;
+
+	if (!client_address->dev.driver_data) {
+		ctn730_err("failed to get CTN730\n");
+		return ret;
+	}
+
+	if ((param & 1) == 0) {
+		tp_state = 0;
+		ctn730_err("TP is not ready!\n");
+		ret = 0;
+	} else {
+		tp_state = 1;
+		nvt_support_pen_set_nfc(ctn730->pen_info.attached != 1);
+		ctn730_err("TP is ready!\n");
+		ret = 0;
+	}
+	return ret;
 }
 
 /**********************************************************
@@ -2067,6 +2095,7 @@ static int ctn730_probe(struct i2c_client *client,
 		return -ENOMEM;
 	}
 	ctn730 = ctn730_dev;
+	client_address = client;
 	ret= ctn730_parse_dt(&client->dev, ctn730_dev);
 	if(ret < 0){
 		ctn730_err("parse device tree fail,probe fail\n");
