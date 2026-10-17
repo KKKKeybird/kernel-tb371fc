@@ -16,6 +16,7 @@
 #include "dsi_parser.h"
 #include "dsi_mi_feature.h"
 #include "tb371fc_panel_seq.h"
+#include "tb371fc_panel_unit.h"
 
 #include "dsi_display.h"
 #include "sde_dbg.h"
@@ -467,9 +468,12 @@ static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
 /* TB371FC p108: kernel power-cut+reset+init at wake always degrades the
  * panel to 0x0c (black); soft sleep with power kept preserves 0x9c
  * (p106/p107 evidence). Skip both power_off and power_on. */
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
 static bool p108_keep_panel_power = true;
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-static int dsi_panel_power_on(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+static int dsi_panel_legacy_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
 
@@ -543,8 +547,10 @@ error_disable_vregs:
 exit:
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-static int dsi_panel_power_off(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+static int dsi_panel_legacy_power_off(struct dsi_panel *panel)
 {
 	int rc = 0;
 
@@ -611,6 +617,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 				enum dsi_cmd_set_type type)
 {
@@ -759,7 +766,8 @@ static int dsi_panel_wled_register_b(struct dsi_panel *panel,
 	return 0;
 }
 
-static int dsi_panel_dcs_set_display_brightness_c2(struct mipi_dsi_device *dsi,
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+static int dsi_panel_legacy_dcs_set_display_brightness_c2(struct mipi_dsi_device *dsi,
 			u32 bl_lvl)
 {
 	u16 brightness = (u16)bl_lvl;
@@ -772,10 +780,12 @@ static int dsi_panel_dcs_set_display_brightness_c2(struct mipi_dsi_device *dsi,
 
 	return mipi_dsi_dcs_write(dsi, 0xC2, payload, sizeof(payload));
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
 
 
-int dsi_panel_update_backlight(struct dsi_panel *panel,
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_update_backlight(struct dsi_panel *panel,
 	u32 bl_lvl)
 {
 	int rc = 0;
@@ -796,7 +806,7 @@ int dsi_panel_update_backlight(struct dsi_panel *panel,
 		bl_lvl = (((bl_lvl & 0xff) << 8) | (bl_lvl >> 8));
 
 	if (panel->bl_config.bl_dcs_subtype == 0xc2)
-		rc = dsi_panel_dcs_set_display_brightness_c2(dsi, bl_lvl);
+		rc = dsi_panel_legacy_dcs_set_display_brightness_c2(dsi, bl_lvl);
 	else if (panel->mi_cfg.bl_is_big_endian) {
 		if ((!mi_cfg->last_bl_level && bl_lvl) ||
 			(mi_cfg->last_bl_level && !bl_lvl))
@@ -836,8 +846,10 @@ int dsi_panel_update_backlight(struct dsi_panel *panel,
 	}
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-static int dsi_panel_update_pwm_backlight(struct dsi_panel *panel,
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+static int dsi_panel_legacy_update_pwm_backlight(struct dsi_panel *panel,
 	u32 bl_lvl)
 {
 	int rc = 0;
@@ -887,6 +899,7 @@ static int dsi_panel_update_pwm_backlight(struct dsi_panel *panel,
 error:
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
 bool dc_skip_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
@@ -950,7 +963,8 @@ int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 	return rc;
 }
 
-int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
@@ -1007,9 +1021,9 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 						mi_cfg->fod_hbm_enabled, mi_cfg->hbm_enabled, mi_cfg->thermal_hbm_disabled, bl_lvl);
 			} else if (mi_cfg->thermal_hbm_disabled && bl_lvl > 2047 && mi_cfg->last_bl_level == 0) {
 				bl_lvl = 2047;
-				rc = dsi_panel_update_backlight(panel, bl_lvl);
+				rc = dsi_panel_legacy_update_backlight(panel, bl_lvl);
 			} else {
-				rc = dsi_panel_update_backlight(panel, bl_lvl);
+				rc = dsi_panel_legacy_update_backlight(panel, bl_lvl);
 			}
 		}
 		break;
@@ -1025,7 +1039,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		break;
 	}
 	case DSI_BACKLIGHT_PWM:
-		rc = dsi_panel_update_pwm_backlight(panel, bl_lvl);
+		rc = dsi_panel_legacy_update_pwm_backlight(panel, bl_lvl);
 		break;
 	default:
 		DSI_ERR("Backlight type(%d) not supported\n", bl->type);
@@ -1059,6 +1073,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		mi_cfg->last_nonzero_bl_level = bl_lvl;
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
 static u32 dsi_panel_get_brightness(struct dsi_backlight_config *bl)
 {
@@ -4629,7 +4644,8 @@ int dsi_panel_get_host_cfg_for_mode(struct dsi_panel *panel,
 	return rc;
 }
 
-int dsi_panel_pre_prepare(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_pre_prepare(struct dsi_panel *panel)
 {
 	int rc = 0;
 
@@ -4640,7 +4656,7 @@ int dsi_panel_pre_prepare(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-	rc = dsi_panel_power_on(panel);
+	rc = dsi_panel_legacy_power_on(panel);
 	if (rc) {
 		DSI_ERR("[%s] panel power on failed, rc=%d\n", panel->name, rc);
 		goto error;
@@ -4650,6 +4666,7 @@ error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
 int dsi_panel_update_pps(struct dsi_panel *panel)
 {
@@ -4694,7 +4711,8 @@ error:
 	return rc;
 }
 
-int dsi_panel_set_lp1(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_set_lp1(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_panel_mi_cfg *mi_cfg;
@@ -4737,8 +4755,10 @@ exit:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-int dsi_panel_set_lp2(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_set_lp2(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_panel_mi_cfg *mi_cfg;
@@ -4762,8 +4782,10 @@ exit:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-int dsi_panel_set_nolp(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_set_nolp(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_panel_mi_cfg *mi_cfg;
@@ -4828,8 +4850,10 @@ exit:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-int dsi_panel_prepare(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_prepare(struct dsi_panel *panel)
 {
 	int rc = 0;
 
@@ -4860,6 +4884,7 @@ error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
 static int dsi_panel_roi_prepare_dcs_cmds(struct dsi_panel_cmd_set *set,
 		struct dsi_rect *roi, int ctrl_idx, int unicast)
@@ -5180,7 +5205,8 @@ int dsi_panel_dc_switch(struct dsi_panel *panel)
 	return rc;
 }
 
-int dsi_panel_enable(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_panel_mi_cfg *mi_cfg;
@@ -5249,8 +5275,10 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-int dsi_panel_post_enable(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_post_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
 
@@ -5342,8 +5370,10 @@ error:
 
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-int dsi_panel_pre_disable(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_pre_disable(struct dsi_panel *panel)
 {
 	int rc = 0;
 
@@ -5365,8 +5395,10 @@ error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-int dsi_panel_disable(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_disable(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_panel_mi_cfg *mi_cfg = NULL;
@@ -5473,8 +5505,10 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-int dsi_panel_unprepare(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_unprepare(struct dsi_panel *panel)
 {
 	int rc = 0;
 
@@ -5496,8 +5530,10 @@ error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
 
-int dsi_panel_post_unprepare(struct dsi_panel *panel)
+#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
+int dsi_panel_legacy_post_unprepare(struct dsi_panel *panel)
 {
 	int rc = 0;
 
@@ -5508,7 +5544,7 @@ int dsi_panel_post_unprepare(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-	rc = dsi_panel_power_off(panel);
+	rc = dsi_panel_legacy_power_off(panel);
 	if (rc) {
 		DSI_ERR("[%s] panel power_Off failed, rc=%d\n",
 		       panel->name, rc);
@@ -5518,3 +5554,4 @@ error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+#endif /* CONFIG_TB371FC_PANEL_UNIT_LEGACY */
