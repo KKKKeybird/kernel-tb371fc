@@ -1910,8 +1910,6 @@ int nvt_update_firmware(const char *firmware_name)
 	struct device *dev = &nvt_ts->client->dev;
 	int ret;
 
-	/* TEMP forensics: confirm which fw variant is downloaded. */
-	pr_info("NVT-ts: nvt_update_firmware: file=%s\n", firmware_name);
 	ret = request_firmware(&fw, firmware_name, dev);
 	if (ret) {
 		pr_err("NVT-ts: nvt_update_firmware: request %s failed %d\n",
