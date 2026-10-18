@@ -149,3 +149,6 @@ modules.builtin
 # Python bytecode (tb371fc helper scripts)
 __pycache__/
 *.pyc
+
+# build artifacts (TASK-083)
+/out/
