@@ -1140,7 +1140,11 @@ static void nvt_hall_check_func(struct work_struct *work)
 				pr_info("NVT-ts: nvt_hall_check_func: The status of double click has changed\n");
 				nvt_hall_status = 1;
 			} else if (hall == 0) {
-				u8 buf[2] = { 0x11, 0x50 };
+				/* D66: stock 0x8adc228 stores halfword 0x1150 ->
+				 * frame {0x50, 0x11} (cmd 0x50, deep sleep).
+				 * The previous {0x11, 0x50} wrote 0x50 to
+				 * register 0x11 instead. */
+				u8 buf[2] = { 0x50, 0x11 };
 
 				pr_info("NVT-ts: nvt_hall_check_func: The keyboard close!\n");
 				CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
@@ -1301,6 +1305,22 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 			input_sync(nvt_ts->pen_dev);
 		}
 		msleep(50);
+		/* TEMP DT2W forensics (REMOVE after acceptance): the FW is
+		 * observed in reset state 0x00 after a gesture-mode suspend;
+		 * capture fw_status + the FW reset-history right here. */
+		{
+			u8 sbuf[6] = { 0x60, 0xff, 0xff, 0xff, 0xff, 0xff };
+
+			mutex_lock(&nvt_ts->lock);
+			nvt_set_page(nvt_ts->mmap[0] | 0x60);
+			CTP_SPI_READ(nvt_ts->client, sbuf, sizeof(sbuf));
+			pr_info("NVT-ts: DT2W diag: fw_status_after_suspend=0x%02X\n",
+				sbuf[1]);
+			nvt_read_fw_history(nvt_ts->mmap[29]);
+			nvt_read_fw_history(nvt_ts->mmap[30]);
+			nvt_set_page(nvt_ts->mmap[0]);
+			mutex_unlock(&nvt_ts->lock);
+		}
 		pr_info("NVT-ts: nvt_ts_suspend: end\n");
 	}
 	return NOTIFY_OK;
@@ -1898,6 +1918,8 @@ int nvt_update_firmware(const char *firmware_name)
 	struct device *dev = &nvt_ts->client->dev;
 	int ret;
 
+	/* TEMP forensics: confirm which fw variant is downloaded. */
+	pr_info("NVT-ts: nvt_update_firmware: file=%s\n", firmware_name);
 	ret = request_firmware(&fw, firmware_name, dev);
 	if (ret) {
 		pr_err("NVT-ts: nvt_update_firmware: request %s failed %d\n",
