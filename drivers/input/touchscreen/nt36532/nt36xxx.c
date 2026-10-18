@@ -1085,14 +1085,22 @@ void nvt_ts_wakeup_gesture_report(u8 id, u8 *buf)
 {
 	u8 idx;
 
-	if (id < 0x1f || (id == 0x1e && buf[2] == 1)) {
-		pr_info("NVT-ts: nvt_ts_wakeup_gesture_report: gesture id=0x%02x\n", id);
-		idx = id - 12;
-		if (idx < 13) {
-			nvt_gesture_report_power();
-			return;
-		}
+	/* D65: stock @0x8ad8ed8 - when id==0x1e && buf[2]==1 the EFFECTIVE
+	 * gesture id is buf[3], not id (stock: mov w8, buf[3] before the
+	 * (id-12)<=12 jump table). The old-tree form used id itself, so a
+	 * 0x1e sub-frame computed idx=0x12 (18) and was dropped as invalid
+	 * - double-tap wake could never fire. */
+	if (id == 0x1e && buf[2] == 1)
+		id = buf[3];
+	if (id >= 0x1f)
+		goto invalid;
+	pr_info("NVT-ts: nvt_ts_wakeup_gesture_report: gesture id=0x%02x\n", id);
+	idx = id - 12;
+	if (idx < 13) {
+		nvt_gesture_report_power();
+		return;
 	}
+invalid:
 	pr_err("NVT-ts: nvt_ts_wakeup_gesture_report: invalid gesture\n");
 }
 
@@ -2499,6 +2507,19 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 	if ((u8)(-checksum) != point_data[0x41]) {
 		pr_err("NVT-ts: nvt_ts_point_data_checksum: i2c/spi packet checksum not match. (point_data[%d]=0x%02X, checksum=0x%02X)\n",
 		       0x41, point_data[0x41], checksum);
+		/* D64b TEMP forensics: stock dumps the frame on checksum fail
+		 * (workfunc 0x8adbe28); bounded to 8 frames and suspend-only
+		 * while chasing the DT2W gesture-frame checksum mismatch.
+		 * REMOVE after DT2W acceptance. */
+		{
+			static u32 ck_fail_dump;
+
+			if (!bTouchIsAwake && ck_fail_dump++ < 8) {
+				print_hex_dump(KERN_ERR, "NVT-ts: gestpkt ",
+					       DUMP_PREFIX_OFFSET, 16, 1,
+					       point_data, 0x50, true);
+			}
+		}
 		goto unlock;
 	}
 
