@@ -676,7 +676,11 @@ static int qcom_smp2p_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to request interrupt\n");
 		goto unreg_ws;
 	}
-	enable_irq_wake(smp2p->irq);
+	/* D70/TASK-082: do not arm the smp2p IRQ as a system wakeup source.
+	 * The action already carries IRQF_NO_SUSPEND (smp2p notifications from
+	 * the remoteprocs must flow through suspend), and combining that with
+	 * enable_irq_wake trips kernel/irq/chip.c irq_may_run() - measured as
+	 * "misconfigured IRQ 413 smp2p0" aborting suspend (TASK-082). */
 
 	return 0;
 
