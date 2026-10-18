@@ -3,6 +3,6 @@
 # Makefile for the Novatek NT36xxx touchscreen driver.
 #
 
-# Each configuration option enables a list of files.
-
-obj-$(CONFIG_TOUCHSCREEN_NT36532) += nt36xxx.o nt36xxx_fw_update.o nt36xxx_ext_proc.o nt36xxx_mp_ctrlram.o
+# TASK-079 stock-parity rebuild: single translation unit, aligned with the
+# factory Image-b symbol layout (no _ext_proc/_fw_update/_mp_ctrlram split).
+obj-$(CONFIG_TOUCHSCREEN_NT36532) += nt36xxx.o

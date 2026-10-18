@@ -4123,6 +4123,8 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	drm_panel_init(&panel->drm_panel);
 	panel->drm_panel.dev = &panel->mipi_device.dev;
 	panel->mipi_device.dev.of_node = of_node;
+	/* D55 forensics: print the panel pointer at registration. */
+	pr_info("DSI: drm_panel registered panel=%p of_node=%p\n", &panel->drm_panel, of_node);
 
 	rc = drm_panel_add(&panel->drm_panel);
 	if (rc)
