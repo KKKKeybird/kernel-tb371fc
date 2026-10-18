@@ -2466,16 +2466,6 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 		pr_err("NVT-ts: nvt_ts_work_func: CTP_SPI_READ failed.(%d)\n", ret);
 		goto unlock;
 	}
-	/* D49 forensics: dump the first 3 IRQ frames (temporary). */
-	{
-		static u32 irq_dump_count;
-
-		if (irq_dump_count++ < 300)
-			print_hex_dump(KERN_ERR, "NVT-ts: irqpkt ",
-				       DUMP_PREFIX_OFFSET, 16, 1, point_data,
-				       0x50, true);
-	}
-
 	nvt_x_error_count++;
 	if ((u8)(point_data[1] + 3) < 2 &&
 	    (u8)(point_data[2] + 3) < 2 && (u8)(point_data[3] + 3) < 2 &&
@@ -2507,16 +2497,8 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 	for (i = 0; i < 64; i++)
 		checksum += point_data[1 + i];
 	if ((u8)(-checksum) != point_data[0x41]) {
-		/* D44 forensics: dump the raw event-buffer frame (stock has no
-		 * such dump; temporary while chasing point_data[65]=0x00). */
-		static u32 dump_count;
-
 		pr_err("NVT-ts: nvt_ts_point_data_checksum: i2c/spi packet checksum not match. (point_data[%d]=0x%02X, checksum=0x%02X)\n",
 		       0x41, point_data[0x41], checksum);
-		if (dump_count++ < 3) {
-			print_hex_dump(KERN_ERR, "NVT-ts: pkt ", DUMP_PREFIX_OFFSET,
-				       16, 1, point_data, sizeof(point_data), true);
-		}
 		goto unlock;
 	}
 
