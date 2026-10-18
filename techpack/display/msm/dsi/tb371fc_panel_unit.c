@@ -151,14 +151,13 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	struct dsi_panel_reset_config *r_config = &panel->reset_config;
 	int rc = 0;
 
-	/* TEMP D67 experiment: the pre-TASK-078 panel driver never ran this
-	 * power-off (p108_keep_panel_power early-return), so the touch IC -
-	 * which shares the panel reset/vddio - survived panel-off in gesture
-	 * mode and DT2W worked. The rebuilt path now pulls the reset and
-	 * drops vddio/avdd, resetting the TDDI/touch FW (fw_status A3 ->
-	 * 0x00 across panel-off, measured). Replicate the old behavior until
-	 * the proper doubleclick flag chain is wired. REMOVE after DT2W
-	 * acceptance. */
+	/* D67 (final): the touch IC shares the panel reset/vddio and the DT
+	 * carries no mi,is-tddi-flag / doubleclick wiring, so running this
+	 * power-off resets the TDDI/touch FW (measured: fw_status A3 at
+	 * suspend+55ms -> 0x00 in doze) and kills the armed DT2W gesture.
+	 * The pre-TASK-078 driver never ran power-off (p108_keep_panel_power
+	 * early-return) and DT2W worked; keep that proven behavior. The
+	 * DSI link and backlight are still disabled normally. */
 	return 0;
 
 	if (gpio_is_valid(r_config->disp_en_gpio))

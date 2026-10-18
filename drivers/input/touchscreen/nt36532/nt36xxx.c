@@ -1308,22 +1308,6 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 			input_sync(nvt_ts->pen_dev);
 		}
 		msleep(50);
-		/* TEMP DT2W forensics (REMOVE after acceptance): the FW is
-		 * observed in reset state 0x00 after a gesture-mode suspend;
-		 * capture fw_status + the FW reset-history right here. */
-		{
-			u8 sbuf[6] = { 0x60, 0xff, 0xff, 0xff, 0xff, 0xff };
-
-			mutex_lock(&nvt_ts->lock);
-			nvt_set_page(nvt_ts->mmap[0] | 0x60);
-			CTP_SPI_READ(nvt_ts->client, sbuf, sizeof(sbuf));
-			pr_info("NVT-ts: DT2W diag: fw_status_after_suspend=0x%02X\n",
-				sbuf[1]);
-			nvt_read_fw_history(nvt_ts->mmap[29]);
-			nvt_read_fw_history(nvt_ts->mmap[30]);
-			nvt_set_page(nvt_ts->mmap[0]);
-			mutex_unlock(&nvt_ts->lock);
-		}
 		pr_info("NVT-ts: nvt_ts_suspend: end\n");
 	}
 	return NOTIFY_OK;
@@ -2532,19 +2516,6 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 	if ((u8)(-checksum) != point_data[0x41]) {
 		pr_err("NVT-ts: nvt_ts_point_data_checksum: i2c/spi packet checksum not match. (point_data[%d]=0x%02X, checksum=0x%02X)\n",
 		       0x41, point_data[0x41], checksum);
-		/* D64b TEMP forensics: stock dumps the frame on checksum fail
-		 * (workfunc 0x8adbe28); bounded to 8 frames and suspend-only
-		 * while chasing the DT2W gesture-frame checksum mismatch.
-		 * REMOVE after DT2W acceptance. */
-		{
-			static u32 ck_fail_dump;
-
-			if (!bTouchIsAwake && ck_fail_dump++ < 8) {
-				print_hex_dump(KERN_ERR, "NVT-ts: gestpkt ",
-					       DUMP_PREFIX_OFFSET, 16, 1,
-					       point_data, 0x50, true);
-			}
-		}
 		goto unlock;
 	}
 
