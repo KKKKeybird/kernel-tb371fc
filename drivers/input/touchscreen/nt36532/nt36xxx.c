@@ -1075,10 +1075,13 @@ int nvt_check_stylus_state(u8 id, u8 *buf)
 /* ---- nvt_ts_wakeup_gesture_report ---- */
 static void nvt_gesture_report_power(void)
 {
-	input_report_key(nvt_ts->input_dev, KEY_POWER, 1);
-	input_sync(nvt_ts->input_dev);
-	input_report_key(nvt_ts->input_dev, KEY_POWER, 0);
-	input_sync(nvt_ts->input_dev);
+	/* D67/p146 (old-tree proven fix): ZUI input policy (mTpWakeUp=false)
+	 * drops wake attempts from the touch panel device; report on the
+	 * dedicated wake keyboard device like a power button. */
+	input_report_key(nvt_ts->wake_input_dev, KEY_POWER, 1);
+	input_sync(nvt_ts->wake_input_dev);
+	input_report_key(nvt_ts->wake_input_dev, KEY_POWER, 0);
+	input_sync(nvt_ts->wake_input_dev);
 }
 
 void nvt_ts_wakeup_gesture_report(u8 id, u8 *buf)
@@ -2976,6 +2979,24 @@ static int nvt_ts_probe(struct spi_device *client)
 	}
 
 	device_init_wakeup(&client->dev, 1);
+
+	/* D67/p146: dedicated wake keyboard device (old-tree TASK-022).
+	 * A plain KEY_WAKEUP keyboard is treated as wake-capable by the
+	 * framework (like gpio-keys), unlike the touch panel device. */
+	nvt_ts->wake_input_dev = devm_input_allocate_device(&client->dev);
+	if (!nvt_ts->wake_input_dev) {
+		dev_err(&client->dev, "NVT-ts: allocate wake input device failed\n");
+		return -ENOMEM;
+	}
+	nvt_ts->wake_input_dev->name = "nvt_wake_key";
+	nvt_ts->wake_input_dev->id.bustype = BUS_SPI;
+	input_set_capability(nvt_ts->wake_input_dev, EV_KEY, KEY_WAKEUP);
+	input_set_capability(nvt_ts->wake_input_dev, EV_KEY, KEY_POWER);
+	ret = input_register_device(nvt_ts->wake_input_dev);
+	if (ret) {
+		dev_err(&client->dev, "NVT-ts: register wake input device failed. ret=%d\n", ret);
+		return ret;
+	}
 
 	/* firmware name by panel vendor */
 	if (gpio_82 == 1)
