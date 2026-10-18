@@ -1329,9 +1329,14 @@ int nvt_ts_pm_resume(struct device *dev)
 	pr_info("NVT-ts: nvt_ts_pm_resume: %s++\n", "nvt_ts_pm_resume");
 	nvt_ts->hw_sleep_check = 0;
 	if (nvt_hall_pm == 1 && nvt_gesture_flag && nvt_hall_pm_status == 0) {
+		/* D68: stock 0x8adcefc does gpio_direction_input(1275) before
+		 * the read, and the frame is {0x50, 0x11} (halfword 0x1150 at
+		 * 0x8adcf18). The previous build read without direction setup
+		 * and sent the inverted {0x11, 0x50}. */
+		gpio_direction_input(1275);
 		hall = gpio_get_value(1275);
 		if (hall == 0) {
-			u8 buf[2] = { 0x11, 0x50 };
+			u8 buf[2] = { 0x50, 0x11 };
 
 			pr_info("NVT-ts: nvt_ts_pm_resume: The keyboard still close!\n");
 			CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
@@ -2488,7 +2493,7 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 	    (u8)(point_data[2] + 3) < 2 && (u8)(point_data[3] + 3) < 2 &&
 	    (u8)(point_data[4] + 3) < 2 && (u8)(point_data[5] + 3) < 2 &&
 	    (u8)(point_data[6] + 3) < 2) {
-		if (nvt_x_error_count > 10) {
+		if (nvt_x_error_count > 11) {
 			nvt_x_error_count = 0;
 			pr_err("NVT-ts: nvt_ts_work_func: Recover for fw reset, %02X\n", point_data[1]);
 			if (point_data[1] == 0xfe) {
@@ -3153,12 +3158,20 @@ static const struct of_device_id nvt_match_table[] = {
 	{ }
 };
 
+/* D68: stock nvt_ts_dev_pm_ops @0x9812ee8 wires pm_suspend/pm_resume;
+ * the previous build left .pm=NULL so the hooks never ran and
+ * hw_sleep_check was never armed for the workfunc gate. */
+const struct dev_pm_ops nvt_ts_dev_pm_ops = {
+	.suspend = nvt_ts_pm_suspend,
+	.resume = nvt_ts_pm_resume,
+};
+
 struct spi_driver nvt_spi_driver = {
 	.driver = {
 		.name = "NVT-ts",
 		.owner = THIS_MODULE,
 		.of_match_table = nvt_match_table,
-		.pm = NULL,
+		.pm = &nvt_ts_dev_pm_ops,
 	},
 	.id_table = nvt_ts_id,
 	.probe = nvt_ts_probe,
