@@ -2942,10 +2942,16 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 					    point_data[0x44];
 				u16 pen_y = ((u16)point_data[0x45] << 8) |
 					    point_data[0x46];
-				u16 pen_pressure = ((u16)point_data[0x49] << 8) |
-						   point_data[0x4a];
-				s8 pen_tilt_x = point_data[0x47];
-				s8 pen_tilt_y = point_data[0x48];
+				/* TASK-081 D95: stock work_func 0x8adbc40-24 maps
+				 * pressure to buf[0x48]<<8|buf[0x47] and the
+				 * signed tilts to buf[0x49]/buf[0x4a] - the
+				 * rebuild had pressure and tilt swapped, so
+				 * the hover tilt stream keyed BTN_TOUCH down
+				 * and the cursor drew while hovering. */
+				u16 pen_pressure = ((u16)point_data[0x48] << 8) |
+						   point_data[0x47];
+				s8 pen_tilt_x = point_data[0x49];
+				s8 pen_tilt_y = point_data[0x4a];
 				u16 pen_distance = ((u16)point_data[0x4b] << 8) |
 						   point_data[0x4c];
 				u8 pen_buttons = point_data[0x4d];
