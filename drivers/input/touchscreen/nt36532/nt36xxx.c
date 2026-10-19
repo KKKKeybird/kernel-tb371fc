@@ -759,42 +759,56 @@ void nvt_support_pen_set_nfc(bool no_pen)
 	}
 }
 
+/* stock nvt_set_pen_inband_mode_1 @0xffffff8008ade4b8 (TASK-081) */
 int nvt_set_pen_inband_mode_1(u8 enable, u8 version)
 {
-	u8 buf[5] = { 0x50, 0x2c, enable, version };
-	u8 rbuf[2];
+	u8 buf[5];
 	int retry;
 
 	nvt_set_page(nvt_ts->mmap[0] | 0x50);
-	CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
+	buf[0] = 0x50;
+	buf[1] = 0xc1;
+	buf[2] = 0x02;
+	buf[3] = enable;
+	buf[4] = version;
+	CTP_SPI_WRITE(nvt_ts->client, buf, 5);
 	for (retry = 0; retry < 5; retry++) {
-		rbuf[0] = 0x50;
-		rbuf[1] = 0xff;
-		if (!CTP_SPI_READ(nvt_ts->client, rbuf, 2) && rbuf[1] == 0)
+		buf[0] = 0x50;
+		buf[1] = 0xff;
+		CTP_SPI_READ(nvt_ts->client, buf, 2);
+		if (buf[1] == 0)
 			return 0;
 		usleep_range(10000, 10000);
 	}
-	pr_err("NVT-ts: nvt_set_pen_inband_mode_1: failed\n");
-	return -EIO;
+	pr_err("3[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
+	       "nvt_set_pen_inband_mode_1", "nvt_set_pen_inband_mode_1",
+	       155, 5, buf[1]);
+	return -1;
 }
 
+/* stock nvt_set_pen_normal_mode @0xffffff8008ade670 (TASK-081) */
 int nvt_set_pen_normal_mode(void)
 {
-	u8 buf[3] = { 0x50, 0x4c };
-	u8 rbuf[2];
+	u8 buf[3];
 	int retry;
 
 	nvt_set_page(nvt_ts->mmap[0] | 0x50);
-	CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
+	buf[0] = 0x50;
+	buf[1] = 0xc1;
+	buf[2] = 0x04;
+	CTP_SPI_WRITE(nvt_ts->client, buf, 3);
 	for (retry = 0; retry < 5; retry++) {
-		rbuf[0] = 0x50;
-		rbuf[1] = 0xff;
-		if (!CTP_SPI_READ(nvt_ts->client, rbuf, 2) && rbuf[1] == 0)
+		buf[0] = 0x50;
+		buf[1] = 0xff;
+		CTP_SPI_READ(nvt_ts->client, buf, 2);
+		if (buf[1] == 0)
 			return 0;
 		usleep_range(10000, 10000);
 	}
-	pr_err("NVT-ts: nvt_set_pen_normal_mode: failed\n");
-	return -EIO;
+	pr_err("3[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
+	       "nvt_set_pen_normal_mode", "nvt_set_pen_normal_mode",
+	       189, 5, buf[1]);
+	return -1;
 }
 
 int nvt_get_fw_pipe(void)
@@ -807,55 +821,51 @@ int nvt_get_fw_pipe(void)
 	return buf[1] & 1;
 }
 
-int nvt_read_mdata(u32 x_addr, u32 y_addr)
+/* ---- nvt_read_mdata / nvt_read_get_num_mdata
+ * (stock @0xffffff8008ade898 / @0xffffff8008adea98, TASK-081) ----
+ * Both helpers fill the shared raw byte buffer with 256-byte SPI page
+ * reads (buf[0]=0, set_page over page bases starting at addr & ~0xff),
+ * re-read the trailing partial page, then convert the wire
+ * little-endian int16 stream into int32 words.  nvt_read_mdata targets
+ * the x_num*y_num grid in nvt_mdata; nvt_read_get_num_mdata writes
+ * `count` words into `buf`.
+ */
+static u8 nvt_mdata_raw[0x1000];
+
+void nvt_read_mdata(u32 addr)
 {
-	u8 *buf;
-	u8 *raw;
-	u32 count = nvt_ts->x_num * nvt_ts->y_num;
+	u8 buf[0x101];
+	u32 x_num = nvt_ts->x_num;
+	u32 y_num = nvt_ts->y_num;
+	u32 count = x_num * y_num;
 	u32 total = count * 2;
-	u32 base = x_addr;
-	u32 offset;
-	u32 remaining;
+	u32 addr_low = addr & 0xff;
+	u32 full = (total + addr_low) >> 8;
+	u32 rem = (total + addr_low) & 0xff;
+	u32 page = addr - addr_low;
+	u32 off = 0;
 	u32 i;
-	u32 j;
-	u16 val;
-	int ret = 0;
 
-	buf = kzalloc(0x101, GFP_KERNEL);
-	raw = kzalloc(32 * 32 * 2, GFP_KERNEL);
-	if (!buf || !raw) {
-		kfree(buf);
-		kfree(raw);
-		return -ENOMEM;
+	memset(buf, 0, sizeof(buf));
+	for (i = 0; i < full; i++) {
+		nvt_set_page(page);
+		buf[0] = 0;
+		CTP_SPI_READ(nvt_ts->client, buf, 0x101);
+		memcpy(nvt_mdata_raw + off, buf + 1, 0x100);
+		page += 0x100;
+		off += 0x100;
 	}
-
-	remaining = total;
-	offset = base;
-	while (remaining > 0) {
-		u32 chunk = min(remaining, (u32)0x100);
-
-		nvt_set_page(offset & ~0xff);
-		buf[0] = offset & 0x7f;
-		if (CTP_SPI_READ(nvt_ts->client, buf, chunk + 1)) {
-			ret = -EIO;
-			goto out;
-		}
-		memcpy(raw + (offset - base), buf + 1, chunk);
-		offset += chunk;
-		remaining -= chunk;
+	if (rem) {
+		nvt_set_page((total + addr) & ~0xff);
+		buf[0] = 0;
+		CTP_SPI_READ(nvt_ts->client, buf, 0x101);
+		memcpy(nvt_mdata_raw + ((total + addr_low) & ~0xff),
+		       buf + 1, 0x100);
 	}
-
-	/* Convert big-endian int16 to int32 */
-	for (i = 0, j = 0; i < count; i++, j += 2) {
-		val = ((u16)raw[j] << 8) | raw[j + 1];
-		nvt_mdata[i] = (s16)val;
-	}
-
+	for (i = 0; i < count; i++)
+		nvt_mdata[i] = (s16)((nvt_mdata_raw[addr_low + 2 * i + 1] << 8) |
+				     nvt_mdata_raw[addr_low + 2 * i]);
 	nvt_set_page(nvt_ts->mmap[0]);
-out:
-	kfree(buf);
-	kfree(raw);
-	return ret;
 }
 
 void nvt_get_mdata(int32_t *buf, u8 *x_num, u8 *y_num)
@@ -865,36 +875,37 @@ void nvt_get_mdata(int32_t *buf, u8 *x_num, u8 *y_num)
 	memcpy(buf, nvt_mdata, nvt_ts->x_num * nvt_ts->y_num * sizeof(int32_t));
 }
 
-int nvt_read_get_num_mdata(u32 addr, int16_t *buf, u32 count)
+void nvt_read_get_num_mdata(u32 addr, int32_t *buf, u32 count)
 {
 	u8 rbuf[0x101];
 	u32 total = count * 2;
-	u32 offset = addr;
-	u32 remaining = total;
+	u32 addr_low = addr & 0xff;
+	u32 full = (total + addr_low) >> 8;
+	u32 rem = (total + addr_low) & 0xff;
+	u32 page = addr - addr_low;
+	u32 off = 0;
 	u32 i;
-	u16 val;
 
 	memset(rbuf, 0, sizeof(rbuf));
-	while (remaining > 0) {
-		u32 chunk = min(remaining, (u32)0x100);
-
-		nvt_set_page(offset & ~0xff);
-		rbuf[0] = offset & 0x7f;
-		if (CTP_SPI_READ(nvt_ts->client, rbuf, chunk + 1))
-			return -EIO;
-		memcpy((u8 *)buf + (offset - addr), rbuf + 1, chunk);
-		offset += chunk;
-		remaining -= chunk;
+	for (i = 0; i < full; i++) {
+		nvt_set_page(page);
+		rbuf[0] = 0;
+		CTP_SPI_READ(nvt_ts->client, rbuf, 0x101);
+		memcpy(nvt_mdata_raw + off, rbuf + 1, 0x100);
+		page += 0x100;
+		off += 0x100;
 	}
-
-	for (i = 0; i < count; i++) {
-		val = ((u16)((u8 *)buf)[i * 2] << 8) |
-		      ((u8 *)buf)[i * 2 + 1];
-		buf[i] = (s16)val;
+	if (rem) {
+		nvt_set_page((total + addr) & ~0xff);
+		rbuf[0] = 0;
+		CTP_SPI_READ(nvt_ts->client, rbuf, 0x101);
+		memcpy(nvt_mdata_raw + ((total + addr_low) & ~0xff),
+		       rbuf + 1, 0x100);
 	}
-
+	for (i = 0; i < count; i++)
+		buf[i] = (s16)((nvt_mdata_raw[addr_low + 2 * i + 1] << 8) |
+			       nvt_mdata_raw[addr_low + 2 * i]);
 	nvt_set_page(nvt_ts->mmap[0]);
-	return 0;
 }
 
 /* ---- nvt_read_fw_history ---- */
@@ -1173,7 +1184,119 @@ struct proc_dir_entry *NVT_proc_entry;
 /* D55: the focaltech driver keeps its own `static` active_panel, so the
  * extern below must bind to the synaptics global definition (the only
  * non-static one in the build). Keep the same symbol name. */
-static const struct file_operations nvt_flash_fops;
+/* ---- nvt_flash_read / open / close / /proc/NVTSPI fops
+ * (stock @0xffffff8008adc9a0 / @0x8adcda0 / @0x8adce18, TASK-081) ----
+ * User frame: buf[0] = addr[14:8] | (0x80 = read), buf[1] = addr[7:0],
+ * buf[2..] = payload; the SPI transfer length equals the 15-bit address
+ * value.  Read path copies the IC data back over buf[2..] and returns
+ * the whole frame; write path sends the payload as-is.
+ */
+static int nvt_flash_open(struct inode *inode, struct file *file)
+{
+	file->private_data = kzalloc(8, GFP_KERNEL);
+	if (!file->private_data) {
+		pr_err("3[%s] %s %d: Failed to allocate memory for nvt flash data\n",
+		       "nvt_flash_open", "nvt_flash_open", 1005);
+		return -ENOMEM;
+	}
+	return 0;
+}
+
+static int nvt_flash_close(struct inode *inode, struct file *file)
+{
+	kfree(file->private_data);
+	return 0;
+}
+
+static ssize_t nvt_flash_read(struct file *file, char __user *buff,
+			      size_t count, loff_t *pos)
+{
+	int ret = 0;
+	u8 *buf;
+	u8 *rbuf;
+	u32 addr;
+	int retry;
+	bool read_ok;
+
+	if (count - 3 > 0xfc00) {
+		pr_err("3[%s] %s %d: invalid transfer len!\n",
+		       "nvt_flash_read", "nvt_flash_read", 899);
+		return -EFAULT;
+	}
+
+	buf = kmalloc(count, GFP_KERNEL);
+	if (!buf) {
+		pr_err("3[%s] %s %d: kzalloc for buf failed!\n",
+		       "nvt_flash_read", "nvt_flash_read", 906);
+		return -ENOMEM;
+	}
+
+	rbuf = kmalloc(count, GFP_KERNEL | __GFP_ZERO);
+	if (!rbuf) {
+		pr_err("3[%s] %s %d: kzalloc for buf failed!\n",
+		       "nvt_flash_read", "nvt_flash_read", 913);
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	if (copy_from_user(buf, buff, count)) {
+		pr_err("3[%s] %s %d: copy from user error\n",
+		       "nvt_flash_read", "nvt_flash_read", 921);
+		ret = -EFAULT;
+		goto out;
+	}
+
+	addr = buf[1] | ((buf[0] & 0x7f) << 8);
+	memcpy(rbuf, buf + 2, addr);
+
+	if (buf[0] & 0x80) {
+		read_ok = false;
+		for (retry = 0; retry < 20; retry++) {
+			ret = CTP_SPI_READ(nvt_ts->client, rbuf, addr);
+			if (ret == 0) {
+				read_ok = true;
+				break;
+			}
+			pr_err("3[%s] %s %d: error, retries=%d, ret=%d\n",
+			       "nvt_flash_read", "nvt_flash_read", 960,
+			       retry, ret);
+		}
+		if (read_ok) {
+			memcpy(buf + 2, rbuf, addr);
+			if (copy_to_user(buff, buf, count))
+				ret = -EFAULT;
+		} else {
+			pr_err("3[%s] %s %d: error, ret = %d\n",
+			       "nvt_flash_read", "nvt_flash_read", 975, ret);
+			ret = -EIO;
+		}
+	} else {
+		for (retry = 0; retry < 20; retry++) {
+			ret = CTP_SPI_WRITE(nvt_ts->client, rbuf, addr);
+			if (ret == 0)
+				break;
+			pr_err("3[%s] %s %d: error, retries=%d, ret=%d\n",
+			       "nvt_flash_read", "nvt_flash_read", 944,
+			       retry, ret);
+		}
+		if (ret) {
+			pr_err("3[%s] %s %d: error, ret = %d\n",
+			       "nvt_flash_read", "nvt_flash_read", 950, ret);
+			ret = -EIO;
+		}
+	}
+
+out:
+	kfree(buf);
+	kfree(rbuf);
+	return ret;
+}
+
+static const struct file_operations nvt_flash_fops = {
+	.read = nvt_flash_read,
+	.open = nvt_flash_open,
+	.release = nvt_flash_close,
+};
 static void nvt_restore_cmd_func(struct work_struct *work)
 {
 	pr_info("NVT-ts: nvt_restore_cmd_func: %s++\n", "nvt_restore_cmd_func");
@@ -1989,22 +2112,27 @@ static void nvt_boot_update_firmware_work(struct work_struct *work)
 	nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
 }
 
-/* ---- nvt_clear_fw_status ---- */
-void nvt_clear_fw_status(void)
+/* ---- nvt_clear_fw_status (stock @0xffffff8008ad8870, TASK-081) ---- */
+int nvt_clear_fw_status(void)
 {
-	u8 buf[2] = { 0x50, 0x00 };
+	u8 buf[3];
 	int retry;
 
-	for (retry = 0; retry < 10; retry++) {
-		CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
-		usleep_range(10000, 10000);
-		nvt_set_page(nvt_ts->mmap[0] | 0x50);
-		buf[0] = 0x50;
-		CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf));
+	for (retry = 0; retry < 20; retry++) {
+		nvt_set_page(nvt_ts->mmap[0]);
+		buf[0] = 0x51;
+		buf[1] = 0x00;
+		CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+		buf[0] = 0x51;
+		buf[1] = 0xff;
+		CTP_SPI_READ(nvt_ts->client, buf, 2);
 		if (buf[1] == 0)
-			return;
+			return 0;
+		usleep_range(10000, 10000);
 	}
-	pr_err("NVT-ts: nvt_clear_fw_status failed\n");
+	pr_err("3[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
+	       "nvt_clear_fw_status", "nvt_clear_fw_status", 711, 20, buf[1]);
+	return -1;
 }
 
 /* D59: stock nvt_irq_enable - tracks ts->irq_enabled and pairs
@@ -2024,22 +2152,25 @@ void nvt_irq_enable(bool enable)
 	}
 }
 
-/* ---- nvt_check_fw_status ---- */
-void nvt_check_fw_status(void)
+/* ---- nvt_check_fw_status (stock @0xffffff8008ad8998, TASK-081) ---- */
+int nvt_check_fw_status(void)
 {
-	u8 buf[2] = { 0x50, 0x51 };
+	u8 buf[2];
 	int retry;
 
-	msleep(20);
+	usleep_range(20000, 20000);
 	for (retry = 0; retry < 50; retry++) {
-		nvt_set_page(nvt_ts->mmap[0] | 0x50);
-		buf[0] = 0x50;
-		CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
+		nvt_set_page(nvt_ts->mmap[0]);
+		buf[0] = 0x51;
+		buf[1] = 0x00;
+		CTP_SPI_READ(nvt_ts->client, buf, 2);
 		if ((buf[1] & 0xf0) == 0xa0)
-			return;
+			return 0;
 		usleep_range(10000, 10000);
 	}
-	pr_err("NVT-ts: nvt_check_fw_status failed status=0x%02x\n", buf[1]);
+	pr_err("3[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
+	       "nvt_check_fw_status", "nvt_check_fw_status", 749, 50, buf[1]);
+	return -1;
 }
 
 /* ---- proc fw_version ---- */
@@ -2324,68 +2455,277 @@ static const struct file_operations nvt_get_fw_pen_state_fops = {
 	.release = single_release,
 };
 
-/* ---- baseline / raw / diff / pen_diff ------------------------------
- * Stock runs a full SPI acquisition sequence in *_open() (mutex,
- * clear/check_fw_status, get_fw_info, nvt_read_mdata over mmap[] and a
- * seq_ops with c_start/c_next/c_stop + a 1-D/2-D diff show; see
- * NOTES-tb371fc-touch-stock-parity.md 7a.2h/1849-1893). That chain is NOT
- * yet reimplemented, but these MUST NOT be registered with a NULL show:
- * fs/seq_file.c calls m->op->show unguarded, so a read would dereference
- * NULL (panic_on_oops=1 on this device). Registering the node with an empty
- * record keeps the /proc contract intact and read-safe; the data path is the
- * remaining work item.
+/* ---- baseline / raw / diff / pen_diff data chains (TASK-081) ----
+ * Stock runs the full SPI acquisition sequence in *_open() and serves the
+ * data through shared seq_ops: nvt_seq_ops @0x9813f48 (c_start/c_stop/
+ * c_next/c_show @0x8adec70..0x8adecd8) for baseline/raw/diff and
+ * nvt_pen_diff_seq_ops @0x9813f68 (c_pen_1d_diff_show @0x8adeda8) for
+ * pen_diff.  fops = {seq_lseek, seq_read, open, seq_release}.
  */
-static int nvt_mdata_show_pending(struct seq_file *s, void *v)
+static int32_t nvt_pen_1d_tip_x[0x100];
+static int32_t nvt_pen_1d_tip_y[0x100];
+static int32_t nvt_pen_1d_ring_x[0x100];
+static int32_t nvt_pen_1d_ring_y[0x100];
+
+static void *nvt_c_start(struct seq_file *m, loff_t *pos)
 {
+	return (void *)(unsigned long)(*pos < 1);
+}
+
+static void nvt_c_stop(struct seq_file *m, void *v)
+{
+}
+
+static void *nvt_c_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	++*pos;
+	return NULL;
+}
+
+/* stock c_show @0xffffff8008adecd8 (shared by baseline/raw/diff) */
+static int nvt_c_show(struct seq_file *m, void *v)
+{
+	u32 i, j;
+
+	seq_printf(m, "fw_ver=%d, x_num=%d, y_num=%d, button_num=%d\n",
+		   nvt_ts->fw_ver, nvt_ts->x_num, nvt_ts->y_num,
+		   nvt_ts->max_button_num);
+	for (i = 0; i < nvt_ts->y_num; i++) {
+		for (j = 0; j < nvt_ts->x_num; j++)
+			seq_printf(m, "%5d, ", nvt_mdata[i * nvt_ts->x_num + j]);
+		seq_puts(m, "\n");
+	}
+	seq_printf(m, "\n\n");
 	return 0;
 }
 
+/* stock c_pen_1d_diff_show @0xffffff8008adeda8 */
+static int nvt_c_pen_1d_diff_show(struct seq_file *m, void *v)
+{
+	u32 i;
+
+	seq_puts(m, "Tip X:\n");
+	for (i = 0; i < nvt_ts->x_num; i++)
+		seq_printf(m, "%5d, ", nvt_pen_1d_tip_x[i]);
+	seq_puts(m, "\n");
+	seq_puts(m, "Tip Y:\n");
+	for (i = 0; i < nvt_ts->y_num; i++)
+		seq_printf(m, "%5d, ", nvt_pen_1d_tip_y[i]);
+	seq_puts(m, "\n");
+	seq_puts(m, "Ring X:\n");
+	for (i = 0; i < nvt_ts->x_num; i++)
+		seq_printf(m, "%5d, ", nvt_pen_1d_ring_x[i]);
+	seq_puts(m, "\n");
+	seq_puts(m, "Ring Y:\n");
+	for (i = 0; i < nvt_ts->y_num; i++)
+		seq_printf(m, "%5d, ", nvt_pen_1d_ring_y[i]);
+	seq_puts(m, "\n");
+	seq_printf(m, "\n\n");
+	return 0;
+}
+
+static const struct seq_operations nvt_seq_ops = {
+	.start = nvt_c_start,
+	.stop = nvt_c_stop,
+	.next = nvt_c_next,
+	.show = nvt_c_show,
+};
+
+static const struct seq_operations nvt_pen_diff_seq_ops = {
+	.start = nvt_c_start,
+	.stop = nvt_c_stop,
+	.next = nvt_c_next,
+	.show = nvt_c_pen_1d_diff_show,
+};
+
 static int nvt_baseline_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, nvt_mdata_show_pending, NULL);
+	u8 buf[2];
+
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+	pr_info("3[%s] %s %d: ++\n", "nvt_baseline_open", "nvt_baseline_open", 639);
+	if (nvt_clear_fw_status() == 0) {
+		buf[0] = 0x50;
+		buf[1] = 0x22;
+		nvt_set_page(nvt_ts->mmap[0] | 0x50);
+		CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+		if (nvt_check_fw_status() == 0 && nvt_get_fw_info() == 0) {
+			nvt_read_mdata(nvt_ts->mmap[3] /* BASELINE_ADDR */);
+			nvt_set_page(nvt_ts->mmap[0] | 0x50);
+			buf[0] = 0x50;
+			buf[1] = 0x00;
+			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+			usleep_range(20000, 20000);
+			buf[0] = 0x51;
+			buf[1] = 0xbb;
+			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+			usleep_range(20000, 20000);
+			mutex_unlock(&nvt_ts->lock);
+			pr_info("3[%s] %s %d: --\n",
+				"nvt_baseline_open", "nvt_baseline_open", 668);
+			return seq_open(file, &nvt_seq_ops);
+		}
+	}
+	mutex_unlock(&nvt_ts->lock);
+	return -EIO;
 }
 
 static int nvt_raw_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, nvt_mdata_show_pending, NULL);
+	u8 buf[2];
+	u8 pipe_buf[2];
+
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+	pr_info("3[%s] %s %d: ++\n", "nvt_raw_open", "nvt_raw_open", 703);
+	if (nvt_clear_fw_status() == 0) {
+		buf[0] = 0x50;
+		buf[1] = 0x22;
+		nvt_set_page(nvt_ts->mmap[0] | 0x50);
+		CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+		if (nvt_check_fw_status() == 0 && nvt_get_fw_info() == 0) {
+			int pipe;
+
+			nvt_set_page(nvt_ts->mmap[0] | 0x51);
+			pipe_buf[0] = 0x51;
+			pipe_buf[1] = 0x00;
+			CTP_SPI_READ(nvt_ts->client, pipe_buf, 2);
+			pipe = pipe_buf[1] & 1;
+			/* RAW_PIPE0_ADDR / RAW_PIPE1_ADDR */
+			nvt_read_mdata(nvt_ts->mmap[pipe ? 2 : 1]);
+			nvt_set_page(nvt_ts->mmap[0] | 0x50);
+			buf[0] = 0x50;
+			buf[1] = 0x00;
+			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+			usleep_range(20000, 20000);
+			buf[0] = 0x51;
+			buf[1] = 0xbb;
+			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+			usleep_range(20000, 20000);
+			mutex_unlock(&nvt_ts->lock);
+			pr_info("3[%s] %s %d: --\n",
+				"nvt_raw_open", "nvt_raw_open", 735);
+			return seq_open(file, &nvt_seq_ops);
+		}
+	}
+	mutex_unlock(&nvt_ts->lock);
+	return -EIO;
 }
 
 static int nvt_diff_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, nvt_mdata_show_pending, NULL);
+	u8 buf[2];
+	u8 pipe_buf[2];
+
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+	pr_info("3[%s] %s %d: ++\n", "nvt_diff_open", "nvt_diff_open", 770);
+	if (nvt_clear_fw_status() == 0) {
+		buf[0] = 0x50;
+		buf[1] = 0x22;
+		nvt_set_page(nvt_ts->mmap[0] | 0x50);
+		CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+		if (nvt_check_fw_status() == 0 && nvt_get_fw_info() == 0) {
+			int pipe;
+
+			nvt_set_page(nvt_ts->mmap[0] | 0x51);
+			pipe_buf[0] = 0x51;
+			pipe_buf[1] = 0x00;
+			CTP_SPI_READ(nvt_ts->client, pipe_buf, 2);
+			pipe = pipe_buf[1] & 1;
+			/* DIFF_PIPE0_ADDR / DIFF_PIPE1_ADDR */
+			nvt_read_mdata(nvt_ts->mmap[pipe ? 6 : 5]);
+			nvt_set_page(nvt_ts->mmap[0] | 0x50);
+			buf[0] = 0x50;
+			buf[1] = 0x00;
+			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+			usleep_range(20000, 20000);
+			buf[0] = 0x51;
+			buf[1] = 0xbb;
+			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+			usleep_range(20000, 20000);
+			mutex_unlock(&nvt_ts->lock);
+			pr_info("3[%s] %s %d: --\n",
+				"nvt_diff_open", "nvt_diff_open", 802);
+			return seq_open(file, &nvt_seq_ops);
+		}
+	}
+	mutex_unlock(&nvt_ts->lock);
+	return -EIO;
 }
 
 static int nvt_pen_diff_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, nvt_mdata_show_pending, NULL);
+	u8 buf[2];
+
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+	pr_info("3[%s] %s %d: ++\n", "nvt_pen_diff_open", "nvt_pen_diff_open", 857);
+	if (nvt_set_pen_inband_mode_1(0xff, 0) == 0 &&
+	    nvt_check_fw_reset_state(0xa3) == 0 &&
+	    nvt_clear_fw_status() == 0) {
+		buf[0] = 0x50;
+		buf[1] = 0x22;
+		nvt_set_page(nvt_ts->mmap[0] | 0x50);
+		CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+		if (nvt_check_fw_status() == 0 && nvt_get_fw_info() == 0) {
+			/* PEN_1D_DIFF_{TIP_X,TIP_Y,RING_X,RING_Y}_ADDR */
+			nvt_read_get_num_mdata(nvt_ts->mmap[23], nvt_pen_1d_tip_x,
+					       nvt_ts->x_num);
+			nvt_read_get_num_mdata(nvt_ts->mmap[24], nvt_pen_1d_tip_y,
+					       nvt_ts->y_num);
+			nvt_read_get_num_mdata(nvt_ts->mmap[25], nvt_pen_1d_ring_x,
+					       nvt_ts->x_num);
+			nvt_read_get_num_mdata(nvt_ts->mmap[26], nvt_pen_1d_ring_y,
+					       nvt_ts->y_num);
+			nvt_set_page(nvt_ts->mmap[0] | 0x50);
+			buf[0] = 0x50;
+			buf[1] = 0x00;
+			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+			usleep_range(20000, 20000);
+			buf[0] = 0x51;
+			buf[1] = 0xbb;
+			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
+			usleep_range(20000, 20000);
+			nvt_set_pen_normal_mode();
+			nvt_check_fw_reset_state(0xa3);
+			mutex_unlock(&nvt_ts->lock);
+			pr_info("3[%s] %s %d: --\n",
+				"nvt_pen_diff_open", "nvt_pen_diff_open", 903);
+			return seq_open(file, &nvt_pen_diff_seq_ops);
+		}
+	}
+	mutex_unlock(&nvt_ts->lock);
+	return -EIO;
 }
 
 static const struct file_operations nvt_baseline_fops = {
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.open = nvt_baseline_open,
-	.release = single_release,
+	.release = seq_release,
 };
 
 static const struct file_operations nvt_raw_fops = {
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.open = nvt_raw_open,
-	.release = single_release,
+	.release = seq_release,
 };
 
 static const struct file_operations nvt_diff_fops = {
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.open = nvt_diff_open,
-	.release = single_release,
+	.release = seq_release,
 };
 
 static const struct file_operations nvt_pen_diff_fops = {
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.open = nvt_pen_diff_open,
-	.release = single_release,
+	.release = seq_release,
 };
 
 int nvt_extra_proc_init(void)
@@ -3145,10 +3485,99 @@ err_extra_proc:
 	return ret;
 }
 
+/* ---- nvt_ts_remove (stock @0xffffff8008adb398, TASK-081) ----
+ * ts/xbuf/rbuf are devm-managed in this rebuild (stock kmalloc + kfree)
+ * and the GPIOs are devm-requested (stock gpio_free), so those teardown
+ * steps are covered by the driver core here.
+ */
+static int nvt_ts_remove(struct spi_device *client)
+{
+	pr_info("3[%s] %s %d: ++\n", "nvt_ts_remove", "nvt_ts_remove", 2907);
+	if (active_panel &&
+	    drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
+		pr_info("3[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
+			"nvt_ts_remove", "nvt_ts_remove", 2912);
+	power_supply_unreg_notifier(&nvt_ts->psy_nb);
+	nvt_mp_proc_deinit();
+	nvt_extra_proc_deinit();
+	if (NVT_proc_entry) {
+		remove_proc_entry("NVTSPI", NULL);
+		NVT_proc_entry = NULL;
+		pr_info("3[%s] %s %d: Removed /proc/%s\n",
+			"nvt_ts_remove", "nvt_ts_remove", 1083, "NVTSPI");
+	}
+	if (nvt_fwu_wq) {
+		cancel_delayed_work_sync(&nvt_ts->nvt_fwu_work);
+		destroy_workqueue(nvt_fwu_wq);
+		nvt_fwu_wq = NULL;
+	}
+	device_init_wakeup(&nvt_ts->input_dev->dev, 0);
+	if (nvt_ts->bTouchIsAwake) {
+		disable_irq(nvt_ts->irq);
+		nvt_ts->bTouchIsAwake = false;
+	}
+	{
+		struct irq_desc *d = irq_to_desc(nvt_ts->irq);
+
+		pr_info("3[%s] %s %d: enable=%d, desc->depth=%d\n",
+			"nvt_irq_enable", "nvt_irq_enable", 230, 0,
+			d ? d->depth : -1);
+	}
+	free_irq(nvt_ts->irq, nvt_ts);
+	if (nvt_ts->pen_support && nvt_ts->pen_dev) {
+		input_unregister_device(nvt_ts->pen_dev);
+		nvt_ts->pen_dev = NULL;
+	}
+	if (nvt_ts->input_dev) {
+		input_unregister_device(nvt_ts->input_dev);
+		nvt_ts->input_dev = NULL;
+	}
+	spi_set_drvdata(client, NULL);
+	nvt_ts = NULL;
+	return 0;
+}
+
+/* ---- nvt_ts_shutdown (stock @0xffffff8008adb5a0, TASK-081) ---- */
+static void nvt_ts_shutdown(struct spi_device *client)
+{
+	pr_info("3[%s] %s %d: Shutdown driver...\n",
+		"nvt_ts_shutdown", "nvt_ts_shutdown", 2994);
+	if (nvt_ts->bTouchIsAwake) {
+		disable_irq(nvt_ts->irq);
+		nvt_ts->bTouchIsAwake = false;
+	}
+	{
+		struct irq_desc *d = irq_to_desc(nvt_ts->irq);
+
+		pr_info("3[%s] %s %d: enable=%d, desc->depth=%d\n",
+			"nvt_irq_enable", "nvt_irq_enable", 230, 0,
+			d ? d->depth : -1);
+	}
+	if (active_panel &&
+	    drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
+		pr_info("3[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
+			"nvt_ts_shutdown", "nvt_ts_shutdown", 3001);
+	nvt_mp_proc_deinit();
+	nvt_extra_proc_deinit();
+	if (NVT_proc_entry) {
+		remove_proc_entry("NVTSPI", NULL);
+		NVT_proc_entry = NULL;
+		pr_info("3[%s] %s %d: Removed /proc/%s\n",
+			"nvt_ts_shutdown", "nvt_ts_shutdown", 1083, "NVTSPI");
+	}
+	if (nvt_fwu_wq) {
+		cancel_delayed_work_sync(&nvt_ts->nvt_fwu_work);
+		destroy_workqueue(nvt_fwu_wq);
+		nvt_fwu_wq = NULL;
+	}
+	device_init_wakeup(&nvt_ts->input_dev->dev, 0);
+}
+
 static const struct spi_device_id nvt_ts_id[] = {
 	{ "NVT-ts-spi", 0 },
 	{ }
 };
+
 MODULE_DEVICE_TABLE(spi, nvt_ts_id);
 
 static const struct of_device_id nvt_match_table[] = {
@@ -3173,6 +3602,8 @@ struct spi_driver nvt_spi_driver = {
 	},
 	.id_table = nvt_ts_id,
 	.probe = nvt_ts_probe,
+	.remove = nvt_ts_remove,
+	.shutdown = nvt_ts_shutdown,
 };
 
 static int nvt_driver_init(void)
