@@ -663,11 +663,19 @@ void nvt_charger_init(void)
 	struct power_supply *psy;
 	int ret;
 
-	/* stock 0x8ad9928: __alloc_workqueue_key("nvt_charger_wq",
-	 * WQ_UNBOUND|WQ_FREEZABLE|__WQ_ORDERED|__WQ_LEGACY|
-	 * __WQ_ORDERED_EXPLICIT, 1) == create_singlethread_workqueue
-	 */
-	nvt_ts->charger_wq = create_singlethread_workqueue("nvt_charger_wq");
+	/* D102 (F6 corrected): stock nvt_lenovo_register 0x8ad98f8-0x8ad9928
+	 * is alloc_workqueue("%s", 0xE0008, 1, "nvt_charger_wq") with
+	 * 0xE0008 = WQ_MEM_RECLAIM(0x8) | __WQ_ORDERED(1<<17) |
+	 * __WQ_LEGACY(1<<18) | __WQ_ORDERED_EXPLICIT(1<<19) - bound
+	 * per-CPU with explicit ordered, NO WQ_UNBOUND. The earlier
+	 * "create_singlethread_workqueue" reading (0xE000A) was wrong:
+	 * that adds WQ_UNBOUND(0x2) which stock does not have. The
+	 * 0x40008 call the review attributed to charger_wq actually
+	 * belongs to nvt_hall_check_wq (0x8adaf90, string verified).
+	 * max_active=1 + __WQ_ORDERED keep the stock ordering semantics. */
+	nvt_ts->charger_wq = alloc_workqueue("nvt_charger_wq",
+			     __WQ_ORDERED | __WQ_ORDERED_EXPLICIT |
+			     __WQ_LEGACY | WQ_MEM_RECLAIM, 1);
 	if (!nvt_ts->charger_wq) {
 		pr_err("NVT-ts: allocate nvt_charger_notify_wq failed\n");
 		return;
@@ -3805,8 +3813,12 @@ static int nvt_ts_probe(struct spi_device *client)
 	/* fwu work (stock order: hall timer+init -> fwu wq -> queue_delayed -> hall wq -> flash proc -> extra -> mp -> panel -> dt2w/enable_irq) */
 	INIT_DELAYED_WORK(&nvt_hall_check_work, nvt_hall_check_func);
 
+	/* D102 (F5): stock probe 0x8adae68-0x8adae80 is alloc_workqueue(
+	 * "nvt_fwu_wq", 0xa, 1) - 0xa = WQ_UNBOUND(0x2) | WQ_MEM_RECLAIM(0x8).
+	 * Our WQ_FREEZABLE(0x4) was wrong (from the old community tree);
+	 * MEM_RECLAIM gives the fwu work a rescue worker under OOM. */
 	nvt_fwu_wq = alloc_workqueue("nvt_fwu_wq",
-					 WQ_UNBOUND | WQ_FREEZABLE, 1);
+					 WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
 	if (!nvt_fwu_wq) {
 		pr_err("3[%s] %s %d: nvt_fwu_wq create workqueue failed\n", "nvt_ts_probe", "nvt_ts_probe", 2673);
 		return -ENOMEM;
