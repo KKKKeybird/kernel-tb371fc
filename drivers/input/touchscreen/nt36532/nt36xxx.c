@@ -1021,8 +1021,11 @@ void nvt_lenovo_report(u8 id, u32 x, u32 y, u8 tilt_x, u8 tilt_y, u32 pressure)
 	 * x/10@0x10(u64), y/10@0x18(u64), pressure@0x20(u64), 0@0x1f.
 	 * The rebuild had a made-up layout (u16=1@2, tilt@6) that
 	 * misaligns every field the HAL reads through /dev/lenovo_penraw. */
-	entry[4] = tilt_x;
-	entry[5] = tilt_y;
+	/* D99: tilt is at +0x0a/+0x0b in the stock ring entry (0x8adbd78
+	 * inline: strb w23,[x24,#0xa] / strb w22,[x24,#0xb]; the D97
+	 * offsets 0x04/0x05 were a base-arithmetic error: 0x980-0x976=0x0a). */
+	entry[0x0a] = tilt_x;
+	entry[0x0b] = tilt_y;
 	*(u16 *)&entry[8] = 1;
 	*(u64 *)&entry[0x10] = x / 10;
 	*(u64 *)&entry[0x18] = y / 10;
