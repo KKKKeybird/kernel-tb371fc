@@ -160,6 +160,11 @@ struct nvt_ts_data {
 	bool psy_online;
 	bool gesture_flag;
 	bool bTouchIsAwake;
+	/* D116: stock ts+1328 - panel-awake flag maintained by the drm
+	 * panel notifier (suspend=0 / resume-tail=1) and consumed by
+	 * cmd_store/ext_cmd_store/work_func/hall_check (stock reads
+	 * 0x8adeff4/0x8adf2d4/0x8adb784/0x8adb9e0/0x8adc120). */
+	u8 panel_awake;
 	bool hw_sleep_check;
 	int32_t fw_ver;
 	int32_t fw_sub_ver;

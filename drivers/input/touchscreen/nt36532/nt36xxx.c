@@ -510,12 +510,11 @@ int nvt_cmd_store(u8 value)
 	 * (995) + return -1. Ours used mutex_lock() and had no gate. */
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	/* D115: gate on the GLOBAL bTouchIsAwake (maintained by
-	 * nvt_ts_resume/suspend, 1422/1464). D113 mistakenly used
-	 * nvt_ts->bTouchIsAwake (struct field, never set true outside
-	 * shutdown) -> the gate blocked every cmd_store forever after
-	 * boot (0xbb gesture cmd observed blocked at 187.47 on d118). */
-	if (!bTouchIsAwake) {
+	/* D116 (corrects D115): stock cmd_store (0x8adeff4) gates on
+	 * ts+1328 - the panel-awake flag maintained ONLY by the drm panel
+	 * notifier (suspend=0 / resume-tail=1), not by the PM suspend/
+	 * resume path. Ours: nvt_ts->panel_awake. */
+	if (!nvt_ts->panel_awake) {
 		pr_err("NVT-ts: nvt_cmd_store: Touch is already suspend, ignore 0x%02x cmd\n",
 		       value);
 		mutex_unlock(&nvt_ts->lock);
@@ -557,8 +556,8 @@ int nvt_ext_cmd_store(u8 mode, u8 value)
 	/* D113 (F8): ext_cmd_store mirrors cmd_store (stock sibling). */
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	/* D115: same global-state fix as cmd_store. */
-	if (!bTouchIsAwake) {
+	/* D116: same panel_awake gate as cmd_store (stock 0x8adf2d4). */
+	if (!nvt_ts->panel_awake) {
 		pr_err("NVT-ts: nvt_ext_cmd_store: Touch is already suspend, ignore cmd\n");
 		mutex_unlock(&nvt_ts->lock);
 		return -1;
@@ -1216,7 +1215,7 @@ static void nvt_hall_check_func(struct work_struct *work)
 	gpio_direction_input(1275);
 	hall = gpio_get_value(1275);
 
-	if (elapsed > 1000 && !bTouchIsAwake && hall != ((~nvt_hall_status) & 1)) {
+	if (elapsed > 1000 && !nvt_ts->panel_awake && hall != ((~nvt_hall_status) & 1)) {
 		if (!nvt_ts->hw_sleep_check) {
 			if (nvt_hall_pm_status == 1) {
 				pr_info("NVT-ts: nvt_hall_check_func: The status of double click has changed\n");
@@ -1426,6 +1425,7 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 		nvt_irq_enable(true);
 		nvt_check_fw_status();
 		bTouchIsAwake = 1;
+		nvt_ts->panel_awake = 1;   /* D116: stock 0x8adc5f4, resume tail */
 		hall = gpio_get_value(1275);
 		if (hall == 0 || !nvt_gesture_flag) {
 			/* D53: stock sends {EVENT_MAP_HOST_CMD, cmd} =
@@ -1468,6 +1468,7 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 		}
 		mutex_lock(&nvt_ts->lock);
 		bTouchIsAwake = 0;
+		nvt_ts->panel_awake = 0;   /* D116: stock 0x8adc4bc, suspend */
 		if (hall == 0 || !nvt_gesture_flag) {
 			u8 buf[2] = { 0x50, 0x11 };
 
@@ -2896,7 +2897,7 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 		pr_err("NVT-ts: nvt_ts_work_func: system(bus) can't finished resuming procedure, skip it\n");
 		return IRQ_HANDLED;
 	}
-	if (!bTouchIsAwake)
+	if (!nvt_ts->panel_awake)
 		pm_wakeup_dev_event(&nvt_ts->client->dev, 5000, 0);
 
 	mutex_lock(&nvt_ts->lock);
@@ -2942,7 +2943,7 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 	}
 
 	if (nvt_check_stylus_state(point_data[1] >> 3, point_data) == 0) {
-		if (!bTouchIsAwake) {
+		if (!nvt_ts->panel_awake) {
 			nvt_ts_wakeup_gesture_report(point_data[1] >> 3, point_data);
 		} else {
 			for (i = 0; i < nvt_ts->max_finger_num; i++) {
