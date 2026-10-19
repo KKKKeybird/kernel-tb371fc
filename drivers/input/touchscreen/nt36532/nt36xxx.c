@@ -2930,6 +2930,12 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 
 			if (nvt_ts->pen_support) {
 				u8 pen_id = point_data[0x42];
+				/* TASK-081 S3 diagnostic: raw pen frame bytes */
+				pr_info("NVT-ts: pen raw 42-4d: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+				       point_data[0x42], point_data[0x43], point_data[0x44],
+				       point_data[0x45], point_data[0x46], point_data[0x47],
+				       point_data[0x48], point_data[0x49], point_data[0x4a],
+				       point_data[0x4b], point_data[0x4c], point_data[0x4d]);
 				/* TASK-081 D94 (pen hover/jitter): stock pen
 				 * fields are BIG-ENDIAN (work_func pseudo
 				 * L242-250 byte-swap). Live capture proved
