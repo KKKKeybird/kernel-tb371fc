@@ -2988,8 +2988,14 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 
 			if (nvt_ts->pen_support) {
 				u8 pen_id = point_data[0x42];
-				/* TASK-081 S3 diagnostic: raw pen frame bytes */
-				pr_info("NVT-ts: pen raw 42-4d: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+				/* TASK-081 S3 diagnostic (D118: demoted from
+				 * pr_info - it fired on every touch IRQ at
+				 * ~250Hz and the console sync cost was
+				 * user-visible as sluggish desktop scroll.
+				 * Data already captured in STATE-084
+				 * sessions 44-46; re-enable via dynamic
+				 * debug if ever needed again.) */
+				pr_debug("NVT-ts: pen raw 42-4d: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
 				       point_data[0x42], point_data[0x43], point_data[0x44],
 				       point_data[0x45], point_data[0x46], point_data[0x47],
 				       point_data[0x48], point_data[0x49], point_data[0x4a],
