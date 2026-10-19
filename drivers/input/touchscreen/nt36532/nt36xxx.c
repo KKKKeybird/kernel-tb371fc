@@ -3560,7 +3560,11 @@ static int nvt_ts_probe(struct spi_device *client)
 	if (!ts->rbuf)
 		return -ENOMEM;
 
-	client->max_speed_hz = 6000000;
+	/* D119: stock never overrides max_speed_hz (spi_setup @0x8ada010
+	 * has no speed constant - the DT spi-max-frequency 46MHz stands,
+	 * verified /proc/device-tree 0x02BEE680). Our 6MHz override made
+	 * every SPI transfer 7.6x slower: firmware download dominated the
+	 * 1.46s resume window -> sluggish scroll after each screen-on. */
 	client->mode = SPI_MODE_0;
 	client->bits_per_word = 8;
 	if (spi_setup(client))
