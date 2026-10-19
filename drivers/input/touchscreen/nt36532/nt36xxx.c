@@ -510,7 +510,12 @@ int nvt_cmd_store(u8 value)
 	 * (995) + return -1. Ours used mutex_lock() and had no gate. */
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	if (!nvt_ts->bTouchIsAwake) {
+	/* D115: gate on the GLOBAL bTouchIsAwake (maintained by
+	 * nvt_ts_resume/suspend, 1422/1464). D113 mistakenly used
+	 * nvt_ts->bTouchIsAwake (struct field, never set true outside
+	 * shutdown) -> the gate blocked every cmd_store forever after
+	 * boot (0xbb gesture cmd observed blocked at 187.47 on d118). */
+	if (!bTouchIsAwake) {
 		pr_err("NVT-ts: nvt_cmd_store: Touch is already suspend, ignore 0x%02x cmd\n",
 		       value);
 		mutex_unlock(&nvt_ts->lock);
@@ -552,7 +557,8 @@ int nvt_ext_cmd_store(u8 mode, u8 value)
 	/* D113 (F8): ext_cmd_store mirrors cmd_store (stock sibling). */
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	if (!nvt_ts->bTouchIsAwake) {
+	/* D115: same global-state fix as cmd_store. */
+	if (!bTouchIsAwake) {
 		pr_err("NVT-ts: nvt_ext_cmd_store: Touch is already suspend, ignore cmd\n");
 		mutex_unlock(&nvt_ts->lock);
 		return -1;
