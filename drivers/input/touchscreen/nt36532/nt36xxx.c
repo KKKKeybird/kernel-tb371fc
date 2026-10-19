@@ -2930,15 +2930,23 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 
 			if (nvt_ts->pen_support) {
 				u8 pen_id = point_data[0x42];
-				u16 pen_x = point_data[0x43] |
-					    ((u16)point_data[0x44] << 8);
-				u16 pen_y = point_data[0x45] |
-					    ((u16)point_data[0x46] << 8);
-				u16 pen_pressure = (point_data[0x49] << 8) |
+				/* TASK-081 D94 (pen hover/jitter): stock pen
+				 * fields are BIG-ENDIAN (work_func pseudo
+				 * L242-250 byte-swap). Live capture proved
+				 * it: pen X reads 0xa833 with the low byte
+				 * pinned at 0x33 while the high byte glides
+				 * a8-98-79-50-30-0f - the true smooth value
+				 * is 0x33a8. Little-endian reading made the
+				 * cursor jump around the screen. */
+				u16 pen_x = ((u16)point_data[0x43] << 8) |
+					    point_data[0x44];
+				u16 pen_y = ((u16)point_data[0x45] << 8) |
+					    point_data[0x46];
+				u16 pen_pressure = ((u16)point_data[0x49] << 8) |
 						   point_data[0x4a];
 				s8 pen_tilt_x = point_data[0x47];
 				s8 pen_tilt_y = point_data[0x48];
-				u16 pen_distance = (point_data[0x4b] << 8) |
+				u16 pen_distance = ((u16)point_data[0x4b] << 8) |
 						   point_data[0x4c];
 				u8 pen_buttons = point_data[0x4d];
 
