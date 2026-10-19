@@ -353,22 +353,17 @@ int nvt_write_addr(u32 addr, u8 value)
 
 int nvt_read_reg(u32 addr, u8 *value)
 {
-	u8 buf[2];
-	int retry;
+	u8 buf[2] = { addr & 0x7f, 0 };
 
+	/* D112 (F9, review REVIEW-VERDICT-F7-F10.md): stock nvt_read_reg
+	 * (0x8ad8190-0x8ad82d8) has NO backward branch - a single SPI
+	 * read, no retry loop and no buf[0]&0x80 ready check (D108 only
+	 * removed the sleep; the loop itself was also old-tree). */
 	nvt_set_page(addr);
-	for (retry = 0; retry < 8; retry++) {
-		buf[0] = addr & 0x7f;
-		if (CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf)))
-			return -EIO;
-		*value = buf[1];
-		if (buf[0] & 0x80)
-			return 0;
-		/* D108: stock nvt_read_reg (0x8ad8190-0x8ad8260) retries
-		 * back-to-back with no delay between reads - the 1ms
-		 * usleep was old-tree behavior. */
-	}
-	return -EBUSY;
+	if (CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf)))
+		return -EIO;
+	*value = buf[1];
+	return 0;
 }
 
 int nvt_get_fw_info(void)
@@ -508,7 +503,19 @@ int nvt_cmd_store(u8 value)
 	int ret = -1;
 	int attempt;
 
-	mutex_lock(&nvt_ts->lock);
+	/* D113 (F8, review REVIEW-VERDICT-F7-F10.md): stock nvt_cmd_store
+	 * (0x8adef78) uses mutex_lock_interruptible (ts+0xf8, returns
+	 * -ERESTARTSYS on signal) and gates on bTouchIsAwake (ts+1328):
+	 * ==0 -> pr_err "Touch is already suspend, ignore 0x%02x cmd"
+	 * (995) + return -1. Ours used mutex_lock() and had no gate. */
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+	if (!nvt_ts->bTouchIsAwake) {
+		pr_err("NVT-ts: nvt_cmd_store: Touch is already suspend, ignore 0x%02x cmd\n",
+		       value);
+		mutex_unlock(&nvt_ts->lock);
+		return -1;
+	}
 	if (nvt_set_page(nvt_ts->mmap[0] | 0x50)) {
 		pr_err("NVT-ts: nvt_cmd_store: set_page error\n");
 		mutex_unlock(&nvt_ts->lock);
@@ -542,7 +549,14 @@ int nvt_ext_cmd_store(u8 mode, u8 value)
 	int ret = -1;
 	int attempt;
 
-	mutex_lock(&nvt_ts->lock);
+	/* D113 (F8): ext_cmd_store mirrors cmd_store (stock sibling). */
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+	if (!nvt_ts->bTouchIsAwake) {
+		pr_err("NVT-ts: nvt_ext_cmd_store: Touch is already suspend, ignore cmd\n");
+		mutex_unlock(&nvt_ts->lock);
+		return -1;
+	}
 	if (nvt_set_page(nvt_ts->mmap[0] | 0x50)) {
 		pr_err("NVT-ts: nvt_ext_cmd_store: set_page error\n");
 		mutex_unlock(&nvt_ts->lock);
@@ -630,10 +644,11 @@ int nvt_set_charger(u8 charger)
 	msleep(20);
 	mutex_lock(&nvt_ts->lock);
 	nvt_set_page(nvt_ts->mmap[0] | 0x50);
-	if (charger == 0) {
-		buf[0] = 0x50;
-		buf[1] = 0x51;
-	} else if (charger == 1) {
+	/* D114 (F7, review REVIEW-VERDICT-F7-F10.md): stock nvt_set_charger
+	 * (0x8adfcb8) accepts ONLY charger==1 (strh 0x5350 = {0x50,0x53});
+	 * charger==0 and anything else fall to pr_info + -EINVAL. The
+	 * charger==0 -> {0x50,0x51} branch was our own extension. */
+	if (charger == 1) {
 		buf[0] = 0x50;
 		buf[1] = 0x53;
 	} else {
@@ -2027,15 +2042,15 @@ int32_t nvt_check_spi_dma_tx_info(void)
 
 void nvt_tx_auto_copy_mode(void)
 {
-	/* D109: stock nvt_tx_auto_copy_mode (0x8ad8408) reads ts+289
-	 * (auto_copy): ==2 -> nvt_write_addr(..., 0x69), ==1 -> 0x56
-	 * (mov w1,#0x69 @0x8ad8434 / #0x56 @0x8ad8440). Our enum had the
-	 * magic values swapped (1->0x69, 2->0x56). With the live trim
-	 * entry auto_copy=2 the bus saw 0x56 instead of stock 0x69. */
+	/* D111 (F10, review REVIEW-VERDICT-F7-F10.md): D109 misread the
+	 * branch targets - 0x8ad8424 b.eq 0x8ad843c means ==2 jumps to the
+	 * 0x56 slot, ==1 falls through to the 0x69 slot. Stock truth:
+	 * ==1(CHECK_SPI_DMA_TX_INFO) -> 0x69, ==2(CHECK_TX_AUTO_COPY_EN)
+	 * -> 0x56. D109 had it backwards; restored. */
 	if (nvt_ts->auto_copy == CHECK_SPI_DMA_TX_INFO) {
-		nvt_write_addr(NVT_MM->TX_AUTO_COPY_EN, 0x56);
-	} else if (nvt_ts->auto_copy == CHECK_TX_AUTO_COPY_EN) {
 		nvt_write_addr(NVT_MM->TX_AUTO_COPY_EN, 0x69);
+	} else if (nvt_ts->auto_copy == CHECK_TX_AUTO_COPY_EN) {
+		nvt_write_addr(NVT_MM->TX_AUTO_COPY_EN, 0x56);
 	}
 
 	pr_info("NVT-ts: tx auto copy mode %d enable\n", nvt_ts->auto_copy);
