@@ -473,6 +473,13 @@ int nvt_change_mode(u8 mode)
 	u8 buf[2] = { 0x50, mode };
 	int ret;
 
+	/* D110: stock nvt_change_mode (0x8ade3e8) sets the page first:
+	 * w0 = *mmap[0] | 0x50 (0x8ade428 orr), bl nvt_set_page
+	 * (0x8ade42c), THEN writes {0x50, mode} (0x8ade448). Session-39
+	 * check started past the function head and missed it. usleep
+	 * (20000, 20000) confirmed by 0x4e20 @0x8ade450. */
+	nvt_set_page(NVT_MM->EVENT_BUF_ADDR | 0x50);
+
 	ret = CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
 	if (ret)
 		return ret;
