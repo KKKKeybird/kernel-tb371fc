@@ -966,7 +966,14 @@ static long penraw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				memset(nvt_lenovo_out, 0, 0x288);
 		nvt_lenovo_out[0] = nvt_lenovo_count;
 		if (nvt_lenovo_count) {
+			/* TASK-081 D98: stock penraw_ioctl (0x8ad9cb0) start-slot
+			 * logic: slot=(index+16)&0x1f, but count<16 reads from 0.
+			 * The rebuild also had an orphan pagefault_enable() with
+			 * no matching disable - preempt-count imbalance on every
+			 * HAL ioctl. */
 			u8 slot = (nvt_lenovo_index + 0x10) & 0x1f;
+			if (nvt_lenovo_count < 0x10)
+				slot = 0;
 			u32 i;
 
 			for (i = 0; i < nvt_lenovo_count; i++) {
@@ -975,7 +982,6 @@ static long penraw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				slot = (slot == 0x1f) ? 0 : slot + 1;
 			}
 		}
-		pagefault_enable();
 
 		ret = -EFAULT;
 		if (access_ok(VERIFY_WRITE, (void __user *)arg, 0x288))
