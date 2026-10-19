@@ -4073,6 +4073,18 @@ static int nvt_driver_init(void)
 		pr_info("NVT-ts: TP is not NVT\n");
 		return 0;
 	}
+	/* TASK-081 D96 (pen regression part 5, external AI review finding):
+	 * stock nvt_driver_init (0x9e4ffe8) registers the lenovo_penraw char
+	 * device at module init - the raw pen data channel the Lenovo HAL
+	 * reads to render pen strokes. Our rebuild defined
+	 * nvt_lenovo_register but never called it, so /dev/lenovo_penraw
+	 * never appeared and the HAL had no pen path (nvt_driver_exit
+	 * already had the unregister side of the pair). */
+	{
+		int lret = nvt_lenovo_register();
+		if (lret)
+			pr_err("NVT-ts: nvt_lenovo_register failed %d\n", lret);
+	}
 	return spi_register_driver(&nvt_spi_driver);
 }
 
