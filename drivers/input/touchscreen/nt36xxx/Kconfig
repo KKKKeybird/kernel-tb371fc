@@ -2,8 +2,15 @@
 #
 # Novatek NT36xxx touchscreen driver configuration
 #
+# TASK-081 D82: this is the legacy community driver (nt36xxx.c + _ext_proc.c
+# + _fw_update.c + _mp_ctrlram.c, Jun 2024 baseline). It was fully replaced by
+# the stock-parity rebuild in nt36532/ (TASK-079/080/081). Enabling both would
+# link two nvt_* symbol sets / two probes / two /proc registrars. The old tree
+# is kept only as cross-reference evidence for stock REA work (see
+# REVIEW-ROUND3-AUDIT.md 1.2.1) - do NOT enable.
 config TOUCHSCREEN_NT36XXX
-	bool "Novatek NT36xxx"
+	bool "Novatek NT36xxx (LEGACY, superseded by NT36532 - do not enable)"
+	depends on !TOUCHSCREEN_NT36532
 	help
 	  Say Y here if you have a Novatek NT36xxx touchscreen connected
 	  to your system.
