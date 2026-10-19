@@ -4,6 +4,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/of_device.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/extcon.h>
@@ -128,6 +129,10 @@ enum channel_mode {
  *      flat_gain[4] - flat_gain[7]: Channel A-D parameter for DP
  * @debug_root: debugfs entry for this context
  */
+enum ssusb_redriver_chip {
+	CHIP_NB7VPQ904M,
+	CHIP_PS5169,
+};
 struct ssusb_redriver {
 	struct device		*dev;
 	enum ssusb_redriver_chip chip;
@@ -801,10 +806,6 @@ static int ssusb_redriver_panic_notifier(struct notifier_block *this,
  * claims hq_redriver,ps5169, and ten config sequence tables live in
  * stock .data). The onnn,NB7VPQ904M DT path below is kept unchanged;
  * PS5169 devices get the stock hard-coded sequences instead. */
-enum ssusb_redriver_chip {
-	CHIP_NB7VPQ904M,
-	CHIP_PS5169,
-};
 /* PS5169 register/config sequences, extracted verbatim from stock
  * Image-b .data (vaddr = 0xffffff8008080000 + file offset). Each entry
  * is {u8 reg, u8 val, u8 delay_ms}; stock applies:
