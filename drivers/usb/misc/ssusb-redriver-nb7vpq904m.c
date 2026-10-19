@@ -130,6 +130,7 @@ enum channel_mode {
  */
 struct ssusb_redriver {
 	struct device		*dev;
+	enum ssusb_redriver_chip chip;
 	struct regmap		*regmap;
 	struct i2c_client	*client;
 
@@ -795,6 +796,149 @@ static int ssusb_redriver_panic_notifier(struct notifier_block *this,
 	return NOTIFY_OK;
 }
 
+/* TASK-081 D85 (Round3 audit 1.13.5): stock ships this same ssusb-redriver
+ * source rebuilt for the HQ PS5169 redriver (stock match_table@0x980c348
+ * claims hq_redriver,ps5169, and ten config sequence tables live in
+ * stock .data). The onnn,NB7VPQ904M DT path below is kept unchanged;
+ * PS5169 devices get the stock hard-coded sequences instead. */
+enum ssusb_redriver_chip {
+	CHIP_NB7VPQ904M,
+	CHIP_PS5169,
+};
+/* PS5169 register/config sequences, extracted verbatim from stock
+ * Image-b .data (vaddr = 0xffffff8008080000 + file offset). Each entry
+ * is {u8 reg, u8 val, u8 delay_ms}; stock applies:
+ *   delay_ms == 0 -> regmap_write(redriver, reg, val)
+ *   delay_ms != 0 -> msleep(delay_ms), no write
+ * (stock probe loop @0xffffff8008a79018-0x8a79010, 28 entries for default). */
+static const u8 ps5169_default_seq[] = {
+	0x9d, 0x80, 0x00,	/* reg 0x9d = 0x80 delay 0 */
+	0x00, 0x00, 0x0a,	/* reg 0x00 = 0x00 delay 10 */
+	0x9d, 0x00, 0x00,	/* reg 0x9d = 0x00 delay 0 */
+	0x40, 0x80, 0x00,	/* reg 0x40 = 0x80 delay 0 */
+	0x04, 0x44, 0x00,	/* reg 0x04 = 0x44 delay 0 */
+	0xa0, 0x02, 0x00,	/* reg 0xa0 = 0x02 delay 0 */
+	0x51, 0x87, 0x00,	/* reg 0x51 = 0x87 delay 0 */
+	0x50, 0x20, 0x00,	/* reg 0x50 = 0x20 delay 0 */
+	0x54, 0x11, 0x00,	/* reg 0x54 = 0x11 delay 0 */
+	0x5d, 0x66, 0x00,	/* reg 0x5d = 0x66 delay 0 */
+	0x52, 0x50, 0x00,	/* reg 0x52 = 0x50 delay 0 */
+	0x55, 0x00, 0x00,	/* reg 0x55 = 0x00 delay 0 */
+	0x56, 0x00, 0x00,	/* reg 0x56 = 0x00 delay 0 */
+	0x57, 0x00, 0x00,	/* reg 0x57 = 0x00 delay 0 */
+	0x58, 0x00, 0x00,	/* reg 0x58 = 0x00 delay 0 */
+	0x59, 0x00, 0x00,	/* reg 0x59 = 0x00 delay 0 */
+	0x5a, 0x00, 0x00,	/* reg 0x5a = 0x00 delay 0 */
+	0x5b, 0x00, 0x00,	/* reg 0x5b = 0x00 delay 0 */
+	0x5e, 0x06, 0x00,	/* reg 0x5e = 0x06 delay 0 */
+	0x5f, 0x00, 0x00,	/* reg 0x5f = 0x00 delay 0 */
+	0x60, 0x00, 0x00,	/* reg 0x60 = 0x00 delay 0 */
+	0x61, 0x03, 0x00,	/* reg 0x61 = 0x03 delay 0 */
+	0x65, 0x40, 0x00,	/* reg 0x65 = 0x40 delay 0 */
+	0x66, 0x00, 0x00,	/* reg 0x66 = 0x00 delay 0 */
+	0x67, 0x03, 0x00,	/* reg 0x67 = 0x03 delay 0 */
+	0x75, 0x0c, 0x00,	/* reg 0x75 = 0x0c delay 0 */
+	0x77, 0x00, 0x00,	/* reg 0x77 = 0x00 delay 0 */
+	0x78, 0x7c, 0x00,	/* reg 0x78 = 0x7c delay 0 */
+};
+#define PS5169_DEFAULT_SEQ_LEN 28
+static const u8 ps5169_USB_seq[] = {
+	0x40, 0xc0, 0x00,	/* reg 0x40 = 0xc0 delay 0 */
+	0x8d, 0x01, 0x00,	/* reg 0x8d = 0x01 delay 0 */
+	0x90, 0x01, 0x00,	/* reg 0x90 = 0x01 delay 0 */
+	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
+};
+#define PS5169_USB_SEQ_LEN 4
+static const u8 ps5169_USB_FLIP_seq[] = {
+	0x40, 0xd0, 0x00,	/* reg 0x40 = 0xd0 delay 0 */
+	0x8d, 0x01, 0x00,	/* reg 0x8d = 0x01 delay 0 */
+	0x90, 0x01, 0x00,	/* reg 0x90 = 0x01 delay 0 */
+	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
+};
+#define PS5169_USB_FLIP_SEQ_LEN 4
+static const u8 ps5169_USB_remove_seq[] = {
+	0x40, 0x80, 0x00,	/* reg 0x40 = 0x80 delay 0 */
+	0x8d, 0x00, 0x00,	/* reg 0x8d = 0x00 delay 0 */
+	0x90, 0x00, 0x00,	/* reg 0x90 = 0x00 delay 0 */
+	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
+};
+#define PS5169_USB_REMOVE_SEQ_LEN 4
+static const u8 ps5169_DP_seq[] = {
+	0x40, 0xa0, 0x00,	/* reg 0x40 = 0xa0 delay 0 */
+	0xa0, 0x00, 0x00,	/* reg 0xa0 = 0x00 delay 0 */
+	0xa1, 0x04, 0x00,	/* reg 0xa1 = 0x04 delay 0 */
+	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
+};
+#define PS5169_DP_SEQ_LEN 4
+static const u8 ps5169_DP_FLIP_seq[] = {
+	0x40, 0xb0, 0x00,	/* reg 0x40 = 0xb0 delay 0 */
+	0xa0, 0x00, 0x00,	/* reg 0xa0 = 0x00 delay 0 */
+	0xa1, 0x04, 0x00,	/* reg 0xa1 = 0x04 delay 0 */
+	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
+};
+#define PS5169_DP_FLIP_SEQ_LEN 4
+static const u8 ps5169_DP_remove_seq[] = {
+	0x40, 0x80, 0x00,	/* reg 0x40 = 0x80 delay 0 */
+	0xa0, 0x02, 0x00,	/* reg 0xa0 = 0x02 delay 0 */
+	0xa1, 0x00, 0x00,	/* reg 0xa1 = 0x00 delay 0 */
+};
+#define PS5169_DP_REMOVE_SEQ_LEN 3
+static const u8 ps5169_USB_AND_DP_seq[] = {
+	0x40, 0xe0, 0x00,	/* reg 0x40 = 0xe0 delay 0 */
+	0x8d, 0x01, 0x00,	/* reg 0x8d = 0x01 delay 0 */
+	0x90, 0x01, 0x00,	/* reg 0x90 = 0x01 delay 0 */
+	0xa0, 0x00, 0x00,	/* reg 0xa0 = 0x00 delay 0 */
+	0xa1, 0x04, 0x00,	/* reg 0xa1 = 0x04 delay 0 */
+	/* tail bytes: 40 */
+};
+#define PS5169_USB_AND_DP_SEQ_LEN 5
+static const u8 ps5169_USB_AND_DP_FLIP_seq[] = {
+	0xf0, 0x00, 0x8d,	/* reg 0xf0 = 0x00 delay 141 */
+	0x01, 0x00, 0x90,	/* reg 0x01 = 0x00 delay 144 */
+	0x01, 0x00, 0xa0,	/* reg 0x01 = 0x00 delay 160 */
+	0x00, 0x00, 0xa1,	/* reg 0x00 = 0x00 delay 161 */
+	0x04, 0x00, 0x40,	/* reg 0x04 = 0x00 delay 64 */
+};
+#define PS5169_USB_AND_DP_FLIP_SEQ_LEN 5
+static const u8 ps5169_USB_AND_DP_remove_seq[] = {
+	0x80, 0x00, 0xa0,	/* reg 0x80 = 0x00 delay 160 */
+	0x02, 0x00, 0x8d,	/* reg 0x02 = 0x00 delay 141 */
+	0x00, 0x00, 0x90,	/* reg 0x00 = 0x00 delay 144 */
+	0x00, 0x00, 0xa1,	/* reg 0x00 = 0x00 delay 161 */
+	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
+	/* tail bytes: 00 */
+};
+#define PS5169_USB_AND_DP_REMOVE_SEQ_LEN 5
+
+/* Apply one stock sequence table. delay_ms != 0 -> msleep(delay), no
+ * register write (stock probe loop 0xffffff8008a79018: ldrb delay; cbnz
+ * -> msleep; else regmap_write(reg,val)). Returns the first regmap error
+ * or 0; a delayed entry cannot fail. */
+static int ps5169_apply_seq(struct ssusb_redriver *redriver,
+			    const u8 *seq, size_t len)
+{
+	size_t i;
+	int ret = 0;
+
+	for (i = 0; i < len; i++) {
+		u8 reg = seq[i * 3 + 0];
+		u8 val = seq[i * 3 + 1];
+		u8 delay = seq[i * 3 + 2];
+
+		if (delay) {
+			msleep(delay);
+			continue;
+		}
+		ret = regmap_write(redriver->regmap, reg, val);
+		if (ret < 0) {
+			dev_err(redriver->dev,
+				"%s: write 0x%02x failed %d\n",
+				__func__, reg, ret);
+			return ret;
+		}
+	}
+	return ret;
+}
 static const struct regmap_config redriver_regmap = {
 	.max_register = REDRIVER_REG_MAX,
 	.reg_bits = 8,
@@ -837,10 +981,43 @@ static int redriver_i2c_probe(struct i2c_client *client,
 	redriver->client = client;
 	i2c_set_clientdata(client, redriver);
 
-	/* Set default parameters for A/B/C/D channels. */
-	ret = ssusb_redriver_default_config(redriver);
-	if (ret < 0)
-		goto destroy_wq;
+	redriver->chip = (enum ssusb_redriver_chip)(uintptr_t)of_device_get_match_data(&client->dev);
+
+	if (redriver->chip == CHIP_PS5169) {
+		/* Stock probe 0xffffff8008a78efc-0x8a78f98: read the four
+		 * config echoes 0xad/0xac/0xae/0xaf and log them (diagnostic
+		 * only - stock prints with _dev_err and never gates on the
+		 * values), then apply the 28-entry ps5169_default_seq. The
+		 * DT eq/flat-gain path below belongs to NB7VPQ904M. */
+		static const u8 echo_regs[4] = { 0xad, 0xac, 0xae, 0xaf };
+		u8 echo[4];
+		unsigned int k;
+
+		for (k = 0; k < 4; k++) {
+			unsigned int val_tmp;
+
+			ret = regmap_read(redriver->regmap, echo_regs[k],
+					  &val_tmp);
+			if (ret < 0)
+				goto destroy_wq;
+			echo[k] = (u8)val_tmp;
+		}
+		dev_err(redriver->dev, "%s: echo %02x %02x %02x %02x\n",
+			__func__, echo[0], echo[1], echo[2], echo[3]);
+
+		redriver->host_active = false;
+		redriver->vbus_active = false;
+
+		ret = ps5169_apply_seq(redriver, ps5169_default_seq,
+				       PS5169_DEFAULT_SEQ_LEN);
+		if (ret < 0)
+			goto destroy_wq;
+	} else {
+		/* Set default parameters for A/B/C/D channels. */
+		ret = ssusb_redriver_default_config(redriver);
+		if (ret < 0)
+			goto destroy_wq;
+	}
 
 	/* Set id_state as float by default*/
 	redriver->host_active = false;
@@ -1225,7 +1402,8 @@ static void redriver_i2c_shutdown(struct i2c_client *client)
 }
 
 static const struct of_device_id redriver_match_table[] = {
-	{ .compatible = "onnn,redriver",},
+	{ .compatible = "onnn,redriver", .data = (void *)CHIP_NB7VPQ904M },
+	{ .compatible = "hq_redriver,ps5169", .data = (void *)CHIP_PS5169 },
 	{ },
 };
 
