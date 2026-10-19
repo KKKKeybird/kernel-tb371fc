@@ -14,6 +14,8 @@
 #include <linux/gpio.h>
 #include <linux/err.h>
 #include <linux/init.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/export.h>
 #include <linux/sysinfo.h>
 #include <linux/file.h>
@@ -921,12 +923,79 @@ static int HardwareInfo_driver_remove(struct platform_device *pdev)
     return 0;
 }
 
+/* TASK-081 D88 (Round3 audit M6/M2): stock hq_harware_init (0x9e48994,
+ * __initcall1) creates two top-level proc nodes:
+ *   /proc/boot_status          0420, reads boot_into_factory as "%d\n";
+ *     boot_into_factory (0xa4df1b8) is set by the __setup handler
+ *     get_boot_rease (0x9e48960) for cmdline "androidboot.boot_reason="
+ *     (sic - huaqin spelling), i.e. the bootloader flags factory mode.
+ *   /proc/sdc_det_gpio_status  0420, reads gpio 343 raw value as "%d\n"
+ *     (sdc_detect_proc_show 0x887ff40: gpio_to_desc + gpiod_get_raw_value).
+ * Stock also proc_mkdir("huaqin") + device_create("interface") for the
+ * hw_info framework; our register_hardware_info framework covers that side.
+ * boot_reason_proc_show format string is "%d\n" (0x9cb5b2e) - integer,
+ * not the string ROUND2 guessed. */
+static int boot_into_factory;
+
+static int __init get_boot_rease(char *s)
+{
+	boot_into_factory = 1;
+	return 0;
+}
+__setup("androidboot.boot_reason=", get_boot_rease);
+
+#define SDC_DETECT_GPIO 343
+
+static int boot_status_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", boot_into_factory);
+	return 0;
+}
+
+static int boot_status_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, boot_status_proc_show, NULL);
+}
+
+static const struct file_operations boot_status_proc_fops = {
+	.owner = THIS_MODULE,
+	.open = boot_status_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int sdc_detect_proc_show(struct seq_file *m, void *v)
+{
+	struct gpio_desc *desc = gpio_to_desc(SDC_DETECT_GPIO);
+	int val = 0;
+
+	if (desc)
+		val = gpiod_get_raw_value(desc);
+	seq_printf(m, "%d\n", val != 0);
+	return 0;
+}
+
+static int sdc_detect_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, sdc_detect_proc_show, NULL);
+}
+
+static const struct file_operations sdc_detect_proc_fops = {
+	.owner = THIS_MODULE,
+	.open = sdc_detect_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static const struct of_device_id hwinfo_dt_match[] = {
     { .compatible = "huaqin,hardware_info", },
     { },
 };
 
 static struct platform_driver HardwareInfo_driver = {
+
     .probe = HardwareInfo_driver_probe,
     .remove = HardwareInfo_driver_remove,
     .driver = {
@@ -938,10 +1007,25 @@ static struct platform_driver HardwareInfo_driver = {
 static int __init HardwareInfo_mod_init(void)
 {
     int ret = -1;
+    struct proc_dir_entry *pe;
+
     ret = platform_driver_register(&HardwareInfo_driver);
     if (ret) {
         hwinfo_debug("[HWINFO] HardwareInfo_driver registed failed! (ret=%d)\n", ret);
     }
+
+    /* stock hq_harware_init: top-level proc nodes, mode 0420. A failed
+     * boot_status skips sdc_det the same way the stock cbz branch does. */
+    pe = proc_create("boot_status", 0420, NULL, &boot_status_proc_fops);
+    if (!pe) {
+        pr_err("[HWINFO] create /proc/boot_status failed\n");
+        return ret;
+    }
+    pe = proc_create("sdc_det_gpio_status", 0420, NULL,
+                     &sdc_detect_proc_fops);
+    if (!pe)
+        pr_err("[HWINFO] create /proc/sdc_det_gpio_status failed\n");
+
     return ret;
 }
 
