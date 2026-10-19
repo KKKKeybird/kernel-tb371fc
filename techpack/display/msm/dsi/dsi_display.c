@@ -8229,5 +8229,60 @@ module_param_string(dsi_display1, dsi_display_secondary, MAX_CMDLINE_PARAM_LEN,
 								0600);
 MODULE_PARM_DESC(dsi_display1,
 	"msm_drm.dsi_display1=<display node>:<configX> where <display node> is 'secondary dsi display node name' and <configX> where x represents index in the topology list");
+/* TASK-081 D104: stock dsi_display.c exports dsi_display_mipi_reg_read/write
+ * (kallsyms 0x8f8acd0/0x8f8ac70): thin wrappers from the drm_sysfs connector
+ * device down to dsi_panel_mipi_reg_{read,write}, with the stock null-check
+ * chain and its verbatim error strings (stock typo "Invalid invalid" kept).
+ * Stock chain: connector -> panel -> display/panel -> inner func; ours uses
+ * the equivalent connector->panel (drm_panel) -> container_of(dsi_panel). */
+ssize_t dsi_display_mipi_reg_read(struct device *dev, char *buf)
+{
+	struct drm_connector *connector;
+	struct drm_panel *drm_p;
+	struct dsi_panel *panel;
+
+	if (!dev || !dev_get_drvdata(dev)) {
+		DSI_ERR("Invalid invalid connector/encoder/bridge ptr\n");
+		return -EINVAL;
+	}
+	connector = (struct drm_connector *)dev_get_drvdata(dev);
+	drm_p = connector->panel;
+	if (!drm_p) {
+		DSI_ERR("Invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+	panel = container_of(drm_p, struct dsi_panel, drm_panel);
+	if (!panel) {
+		DSI_ERR("Invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+	return dsi_panel_read_mipi_reg(panel, buf);
+}
+
+int dsi_display_mipi_reg_write(struct device *dev,
+			       const char *buf, size_t count)
+{
+	struct drm_connector *connector;
+	struct drm_panel *drm_p;
+	struct dsi_panel *panel;
+
+	if (!dev || !dev_get_drvdata(dev)) {
+		DSI_ERR("Invalid invalid connector/encoder/bridge ptr\n");
+		return -EINVAL;
+	}
+	connector = (struct drm_connector *)dev_get_drvdata(dev);
+	drm_p = connector->panel;
+	if (!drm_p) {
+		DSI_ERR("Invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+	panel = container_of(drm_p, struct dsi_panel, drm_panel);
+	if (!panel) {
+		DSI_ERR("Invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+	return dsi_panel_write_mipi_reg(panel, (char *)buf);
+}
+
 module_init(dsi_display_register);
 module_exit(dsi_display_unregister);
