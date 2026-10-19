@@ -18,7 +18,10 @@ s64 nvt_hall_timer0;
 u32 nvt_x_error_count;
 char *BOOT_UPDATE_FIRMWARE_NAME = "novatek_ts_fw_boe_6.bin";
 char *MP_UPDATE_FIRMWARE_NAME = "novatek_ts_mp_boe_6.bin";
-static int32_t nvt_mdata[32 * 32];
+/* TASK-081 D90b: stock MP grid is 60x80 (4800 points); the 32x32/4K
+ * arrays from D81a overflowed on the first self_test run (boot panic,
+ * uptime 33s, panic_on_oops=1). Size for the largest shipping grid. */
+static int32_t nvt_mdata[64 * 128];
 
 struct workqueue_struct *nvt_fwu_wq;
 
@@ -830,7 +833,7 @@ int nvt_get_fw_pipe(void)
  * the x_num*y_num grid in nvt_mdata; nvt_read_get_num_mdata writes
  * `count` words into `buf`.
  */
-static u8 nvt_mdata_raw[0x1000];
+static u8 nvt_mdata_raw[0x2800];
 
 void nvt_read_mdata(u32 addr)
 {
@@ -872,7 +875,10 @@ void nvt_get_mdata(int32_t *buf, u8 *x_num, u8 *y_num)
 {
 	*x_num = nvt_ts->x_num;
 	*y_num = nvt_ts->y_num;
-	memcpy(buf, nvt_mdata, nvt_ts->x_num * nvt_ts->y_num * sizeof(int32_t));
+	/* D90b: clamp to the array capacity - the grid can exceed 32x32. */
+	memcpy(buf, nvt_mdata,
+	       min_t(size_t, (size_t)nvt_ts->x_num * nvt_ts->y_num,
+		     ARRAY_SIZE(nvt_mdata)) * sizeof(int32_t));
 }
 
 void nvt_read_get_num_mdata(u32 addr, int32_t *buf, u32 count)
@@ -2977,9 +2983,401 @@ unlock:
 
 
 
+/* ---- TASK-081 D90: /proc/android_touch/self_test, phase 1 ----
+ * Stock nvt_selftest_open (0x8ae4060, 11744 bytes) runs the full factory
+ * sequence: lock, update_firmware, nvt_mp_parse_dt (child node
+ * novatek-mp-criteria-*: geometry + Short/Open/CC/Raw/Diff/Pen limits),
+ * check_fw_reset_state(0xa1), clear_fw_status, change_mode(0x41),
+ * check_fw_status, then per-test raw acquisitions each dumped through
+ * nvt_save_rawdata_to_csv to /sdcard/Download/*.csv (7 files), finishing
+ * with another update_firmware to restore the normal image.
+ * Phase 1 implements parse_dt + hand-shake + CSV writer + the FW rawdata
+ * main chain; the Short/Open/CC/Noise/Pen segments (stock pseudo lines
+ * L300-L2134) are translated incrementally in later phases. */
+
+/* MP criteria parsed from the novatek-mp-criteria-* DT child (stock
+ * globals 0xa316890..0xa316924). */
+#define NVT_MP_AIN_MAX 128
+#define NVT_MP_LIMIT_MAX 512
+static u32 nvt_mp_ic_x_cfg_size;
+static u32 nvt_mp_ic_y_cfg_size;
+static u32 nvt_mp_ic_key_cfg_size;
+static u32 nvt_mp_x_channel;
+static u32 nvt_mp_y_channel;
+static u32 nvt_mp_ain_x[NVT_MP_AIN_MAX];
+static u32 nvt_mp_ain_y[NVT_MP_AIN_MAX];
+static u32 nvt_mp_ain_key[NVT_MP_AIN_MAX];
+static s32 nvt_mp_limit_short_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_short_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_open_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_open_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_fw_raw_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_fw_raw_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_fw_cc_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_fw_cc_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_fw_diff_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_fw_diff_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_tipx_raw_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_tipx_raw_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_tipy_raw_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_tipy_raw_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_ringx_raw_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_ringx_raw_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_ringy_raw_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_ringy_raw_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_tipx_diff_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_tipx_diff_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_tipy_diff_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_tipy_diff_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_ringx_diff_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_ringx_diff_n[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_ringy_diff_p[NVT_MP_LIMIT_MAX];
+static s32 nvt_mp_limit_pen_ringy_diff_n[NVT_MP_LIMIT_MAX];
+static u32 nvt_mp_diff_test_frame;
+
+/* stock nvt_mp_parse_u32 (0x8ae28d8): of_property_read_u32 wrapper. */
+static int nvt_mp_parse_u32(struct device_node *child, const char *name,
+			    u32 *out)
+{
+	int ret = of_property_read_u32(child, name, out);
+
+	if (ret < 0)
+		pr_err("NVT-ts: nvt_mp_parse_u32: %s miss, ret=%d\n", name, ret);
+	else
+		pr_info("NVT-ts: nvt_mp_parse_u32: %s=%d\n", name, *out);
+	return ret < 0 ? -1 : 0;
+}
+
+/* stock nvt_mp_parse_ain (0x8ae2768): u32 array of `count` entries into
+ * the AIN mapping buffer. */
+static int nvt_mp_parse_ain(struct device_node *child, const char *name,
+			    u32 *out, u32 count)
+{
+	int ret = of_property_read_u32_array(child, name, out, count);
+
+	if (ret < 0) {
+		pr_err("NVT-ts: nvt_mp_parse_ain: %s miss, ret=%d\n", name, ret);
+		return -1;
+	}
+	pr_info("NVT-ts: nvt_mp_parse_ain: %s ok\n", name);
+	return 0;
+}
+
+/* stock nvt_mp_parse_array (0x8ae2968): s32 limit array of x*y entries,
+ * each logged through nvt_print_data_log_in_one_line. */
+static int nvt_mp_parse_array(struct device_node *child, const char *name,
+			      s32 *out, u32 count)
+{
+	int ret = of_property_read_u32_array(child, name, (u32 *)out, count);
+
+	if (ret < 0) {
+		pr_err("NVT-ts: nvt_mp_parse_array: %s miss, ret=%d\n", name, ret);
+		return -1;
+	}
+	pr_info("NVT-ts: nvt_mp_parse_array: %s ok (%u entries)\n", name, count);
+	return 0;
+}
+
+/* stock nvt_mp_parse_dt (0x8ae2c90): find the novatek-mp-criteria-*
+ * child and pull the 4 geometry u32s + AIN maps + all limit arrays.
+ * Any miss aborts the whole parse with -1 like stock. */
+static int nvt_mp_parse_dt(struct device_node *parent, const char *name)
+{
+	struct device_node *child;
+	u32 x_cfg, y_cfg;
+	int ret;
+
+	pr_info("NVT-ts: nvt_mp_parse_dt: looking for %s\n", name);
+	for_each_child_of_node(parent, child) {
+		if (of_node_name_eq(child, name))
+			break;
+	}
+	if (!child) {
+		pr_err("NVT-ts: nvt_mp_parse_dt: %s not found\n", name);
+		return -1;
+	}
+	pr_info("NVT-ts: nvt_mp_parse_dt: found %s\n", name);
+
+	if (nvt_mp_parse_u32(child, "IC_X_CFG_SIZE", &x_cfg) ||
+	    nvt_mp_parse_u32(child, "IC_Y_CFG_SIZE", &y_cfg) ||
+	    nvt_mp_parse_u32(child, "X_Channel", &nvt_mp_x_channel) ||
+	    nvt_mp_parse_u32(child, "Y_Channel", &nvt_mp_y_channel))
+		return -1;
+	nvt_mp_ic_x_cfg_size = x_cfg;
+	nvt_mp_ic_y_cfg_size = y_cfg;
+
+	if (nvt_mp_parse_ain(child, "AIN_X", nvt_mp_ain_x,
+			     min_t(u32, x_cfg, NVT_MP_AIN_MAX)) ||
+	    nvt_mp_parse_ain(child, "AIN_Y", nvt_mp_ain_y,
+			     min_t(u32, y_cfg, NVT_MP_AIN_MAX)))
+		return -1;
+
+	if (nvt_mp_parse_array(child, "PS_Config_Lmt_Short_Rawdata_P",
+			       nvt_mp_limit_short_p,
+			       min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel,
+				     NVT_MP_LIMIT_MAX)) ||
+	    	nvt_mp_parse_array(child, "PS_Config_Lmt_Short_Rawdata_N",
+				nvt_mp_limit_short_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_Open_Rawdata_P",
+				nvt_mp_limit_open_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_Open_Rawdata_N",
+				nvt_mp_limit_open_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_Rawdata_P",
+				nvt_mp_limit_fw_raw_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_Rawdata_N",
+				nvt_mp_limit_fw_raw_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_CC_P",
+				nvt_mp_limit_fw_cc_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_CC_N",
+				nvt_mp_limit_fw_cc_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_Diff_P",
+				nvt_mp_limit_fw_diff_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_Diff_N",
+				nvt_mp_limit_fw_diff_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipX_FW_Raw_P",
+				nvt_mp_limit_pen_tipx_raw_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipX_FW_Raw_N",
+				nvt_mp_limit_pen_tipx_raw_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipY_FW_Raw_P",
+				nvt_mp_limit_pen_tipy_raw_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipY_FW_Raw_N",
+				nvt_mp_limit_pen_tipy_raw_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingX_FW_Raw_P",
+				nvt_mp_limit_pen_ringx_raw_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingX_FW_Raw_N",
+				nvt_mp_limit_pen_ringx_raw_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingY_FW_Raw_P",
+				nvt_mp_limit_pen_ringy_raw_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingY_FW_Raw_N",
+				nvt_mp_limit_pen_ringy_raw_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipX_FW_Diff_P",
+				nvt_mp_limit_pen_tipx_diff_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipX_FW_Diff_N",
+				nvt_mp_limit_pen_tipx_diff_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipY_FW_Diff_P",
+				nvt_mp_limit_pen_tipy_diff_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipY_FW_Diff_N",
+				nvt_mp_limit_pen_tipy_diff_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingX_FW_Diff_P",
+				nvt_mp_limit_pen_ringx_diff_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingX_FW_Diff_N",
+				nvt_mp_limit_pen_ringx_diff_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingY_FW_Diff_P",
+				nvt_mp_limit_pen_ringy_diff_p,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingY_FW_Diff_N",
+				nvt_mp_limit_pen_ringy_diff_n,
+				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
+						NVT_MP_LIMIT_MAX)))
+		return -1;
+
+	nvt_mp_parse_u32(child, "PS_Config_Diff_Test_Frame",
+			  &nvt_mp_diff_test_frame);
+
+	return 0;
+}
+
+/* stock nvt_polling_hand_shake_status (0x8ae71f0): sleep 20ms then poll
+ * event buf handshake 250 times (10ms apart) for the 0xa0-completion,
+ * logging fw history on timeout. */
+static int nvt_polling_hand_shake_status(void)
+{
+	u8 buf[4] = { 0 };
+	int i;
+
+	usleep_range(20000, 20000);
+	for (i = 0; i < 250; i++) {
+		nvt_set_page(0x51);
+		buf[0] = 0x00;
+		CTP_SPI_READ(nvt_ts->client, buf, 2);
+		if ((buf[1] & 0xfe) == 0xa0)
+			return 0;
+		usleep_range(10000, 10000);
+	}
+	pr_err("NVT-ts: nvt_polling_hand_shake_status: handshake timeout 0x%02x\n",
+	       buf[1]);
+	return -1;
+}
+
 /* ---- nvt_selftest fops placeholder (stock nvt_selftest_fops@0x9814d48) ---- */
+/* stock nvt_save_rawdata_to_csv (0x8ae6e40): build a comma-separated grid
+ * (x_num columns of %7d, CRLF rows) into a kmalloc buffer, then write it
+ * to the stock path via filp_open/O_CREAT/O_TRUNC + kernel_write. */
+static int nvt_save_rawdata_to_csv(const s32 *data, u8 x_num, u8 y_num,
+				   const char *path, u32 flags)
+{
+	struct file *fp;
+	char *buf;
+	u32 total = (u32)x_num * y_num;
+	u32 row_cap = (u32)x_num * 7 + 2;
+	u32 cap = row_cap * y_num + 1;
+	u32 off = 0, i, x;
+	loff_t pos = 0;
+	int ret;
+
+	pr_info("NVT-ts: nvt_save_rawdata_to_csv: %s++\n", __func__);
+	buf = kmalloc(cap, GFP_KERNEL);
+	if (!buf) {
+		pr_err("NVT-ts: nvt_save_rawdata_to_csv: kmalloc failed\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < total; i++) {
+		int n = scnprintf(buf + off, cap - off, "%7d,", data[i]);
+		off += n;
+		if ((i % x_num) == x_num - 1) {
+			buf[off++] = 0x0d;
+			buf[off++] = 0x0a;
+		}
+	}
+	buf[off] = 0;
+
+	fp = filp_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (IS_ERR(fp)) {
+		ret = PTR_ERR(fp);
+		pr_err("NVT-ts: nvt_save_rawdata_to_csv: open %s failed %d\n",
+		       path, ret);
+		kfree(buf);
+		return ret;
+	}
+	ret = kernel_write(fp, buf, off, &pos);
+	if (ret < 0)
+		pr_err("NVT-ts: nvt_save_rawdata_to_csv: write failed %d\n", ret);
+	filp_close(fp, NULL);
+	kfree(buf);
+	pr_info("NVT-ts: nvt_save_rawdata_to_csv: %s--\n", __func__);
+	return ret < 0 ? ret : 0;
+}
+
+#define NVT_CSV_FW_RAWDATA "/sdcard/Download/FWRawdataTest.csv"
+
+/* stock nvt_selftest_open (0x8ae4060) phase-1 main chain: lock, probe,
+ * refresh firmware, parse MP criteria, reset(0xa1), clear+mode 0x41,
+ * read the FW rawdata grid, dump FWRawdataTest.csv, restore firmware.
+ * Short/Open/CC/Noise/Pen segments (stock pseudo L300-L2134) follow in
+ * phase 2. */
+
+static int nvt_selftest_run(void)
+{
+	int ret;
+	s32 *md = NULL;
+	u8 x_num, y_num;
+
+	pr_info("NVT-ts: nvt_selftest_run: ++\n");
+
+	mutex_lock(&nvt_ts->lock);
+
+	ret = nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
+	if (ret < 0) {
+		pr_err("NVT-ts: nvt_selftest_run: update_firmware failed %d\n", ret);
+		goto out_lock;
+	}
+
+	ret = nvt_get_fw_info();
+	if (ret < 0)
+		goto out_lock;
+
+	ret = nvt_mp_parse_dt(nvt_ts->client->dev.of_node,
+			      "novatek-mp-criteria-6067");
+	if (ret != 0) {
+		pr_err("NVT-ts: nvt_selftest_run: mp_parse_dt failed\n");
+		nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
+		goto out_lock;
+	}
+
+	if (nvt_check_fw_reset_state(NVT_FW_INIT_RESET_STATE))
+		goto out_lock;
+
+	if (nvt_clear_fw_status())
+		goto out_lock;
+
+	ret = nvt_change_mode(0x41 /* stock selftest rawdata mode */);
+	if (ret < 0)
+		goto out_lock;
+
+	if (nvt_check_fw_status())
+		goto out_lock;
+
+	x_num = nvt_ts->x_num;
+	y_num = nvt_ts->y_num;
+	md = kcalloc((u32)x_num * y_num, sizeof(s32), GFP_KERNEL);
+	if (!md) {
+		ret = -ENOMEM;
+		goto out_lock;
+	}
+
+	nvt_read_mdata(NVT_MM->BASELINE_ADDR); /* stock: mmap[0]+0xc */
+	nvt_get_mdata(md, &x_num, &y_num);
+
+	ret = nvt_save_rawdata_to_csv(md, x_num, y_num,
+				      NVT_CSV_FW_RAWDATA, 0);
+	if (ret < 0)
+		pr_err("NVT-ts: nvt_selftest_run: save csv failed %d\n", ret);
+
+	/* phase 2 (stock pseudo L300-L2134): Short/Open/CC/Noise/Pen
+	 * segments with their own change_mode/hand-shake rounds. */
+
+	nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
+
+out_lock:
+	kfree(md);
+	mutex_unlock(&nvt_ts->lock);
+	pr_info("NVT-ts: nvt_selftest_run: -- ret=%d\n", ret);
+	return ret;
+}
+
 static int nvt_selftest_show(struct seq_file *m, void *v)
 {
+	int ret = nvt_selftest_run();
+
+	seq_printf(m, "%d\n", ret);
 	return 0;
 }
 
