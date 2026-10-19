@@ -2939,11 +2939,16 @@ ssize_t dsi_panel_read_mipi_reg(struct dsi_panel *panel, char *buf)
 
 	if (g_dsi_read_cfg.is_read) {
 		for (i = 0; i < g_dsi_read_cfg.cmds_rlen; i++) {
+			/* D107 (G2 read format): stock dsi_panel_mipi_reg_read
+			 * (0x8f93fb0) prints lowercase hex with a SPACE
+			 * separator (fmt "0x%02x " @0x9cb2f1e, last-elt
+			 * "0x%02x\n" @0x9aae4a8) - the community layer used
+			 * uppercase + comma. */
 			if (i == g_dsi_read_cfg.cmds_rlen - 1) {
-				count += snprintf(buf + count, PAGE_SIZE - count, "0x%02X\n",
+				count += snprintf(buf + count, PAGE_SIZE - count, "0x%02x\n",
 				     g_dsi_read_cfg.rbuf[i]);
 			} else {
-				count += snprintf(buf + count, PAGE_SIZE - count, "0x%02X,",
+				count += snprintf(buf + count, PAGE_SIZE - count, "0x%02x ",
 				     g_dsi_read_cfg.rbuf[i]);
 			}
 		}
