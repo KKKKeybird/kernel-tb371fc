@@ -188,6 +188,7 @@ struct nvt_ts_data {
 	uint8_t x_gang_num;
 	uint8_t y_gang_num;
 	uint32_t pen_support;
+	uint32_t stylus_resol_double;
 	uint32_t pen_enable;
 	uint32_t pen_version;
 	uint32_t pen_suppress;

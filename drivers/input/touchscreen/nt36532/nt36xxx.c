@@ -3509,6 +3509,21 @@ static int nvt_ts_probe(struct spi_device *client)
 	 */
 	ts->int_trigger_type = IRQ_TYPE_EDGE_RISING;
 
+	/* TASK-081 D92 (pen regression root cause): stock probe 0x8ada120-38
+	 * sets ts->pen_support (struct+0x159) via of_find_property on
+	 * novatek,pen-support (shipping DT carries it as a boolean) and
+	 * ts+0x15a via novatek,stylus-resol-double. Our rebuild never
+	 * assigned pen_support, so devm-kzalloc left it 0 and the
+	 * NVTCapacitivePen input device was never registered - pen tip
+	 * sliding had no input path while the pen buttons kept working over
+	 * the pen bluetooth HID. */
+	ts->pen_support = of_property_read_bool(client->dev.of_node,
+			"novatek,pen-support");
+	ts->stylus_resol_double = of_property_read_bool(client->dev.of_node,
+			"novatek,stylus-resol-double");
+	pr_info("NVT-ts: pen_support=%d stylus_resol_double=%d\n",
+	       ts->pen_support, ts->stylus_resol_double);
+
 	mutex_init(&ts->lock);
 	mutex_init(&ts->xbuf_lock);
 	/* stock probe 0xffffff8008ad9fc4: __init_waitqueue_head(ts+0x1a0) and
