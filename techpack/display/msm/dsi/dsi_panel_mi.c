@@ -2833,9 +2833,12 @@ int dsi_panel_write_mipi_reg(struct dsi_panel *panel,
 			pr_err("input buffer conversion failed\n");
 			goto exit_free0;
 		}
-		if (tmp_data > sizeof(g_dsi_read_cfg.rbuf)) {
-			pr_err("read size exceeding the limit %d\n",
-					sizeof(g_dsi_read_cfg.rbuf));
+		/* D106 (G2 format alignment): stock dsi_panel_mipi_reg_write
+		 * (0x8f93ca8-0x8f93cbc) rejects len >= 0x41 with
+		 * "read size exceeding the limit 64" - the community-tree
+		 * sizeof(rbuf[256]) cap accepted 4x longer reads. */
+		if (tmp_data > 64) {
+			pr_err("read size exceeding the limit %d\n", 64);
 			goto exit_free0;
 		}
 		g_dsi_read_cfg.cmds_rlen = tmp_data;
