@@ -3963,6 +3963,12 @@ static int nvt_ts_probe(struct spi_device *client)
 	/* stock success tail */
 	ts->nfc_state = 0;
 	bTouchIsAwake = 1;
+	/* D117: stock probe tail sets ts+1328 = 1 alongside ts+344
+	 * (0x8adb290 mov w19,#1 / 0x8adb2a8 strb [x9,#1328] /
+	 * 0x8adb30c strb [x8,#344]) - touch is born awake. D116 missed
+	 * the probe-side init, leaving panel_awake=0 until the first
+	 * screen-off/on cycle (touch dead at boot, user-confirmed). */
+	nvt_ts->panel_awake = 1;
 	ts->edge_reject = 0;
 	INIT_DELAYED_WORK(&nvt_restore_cmd_work, nvt_restore_cmd_func);
 	ts->restore_pending = 0;
