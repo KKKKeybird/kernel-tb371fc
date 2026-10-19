@@ -26,16 +26,10 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl);
 int dsi_panel_update_backlight(struct dsi_panel *panel, u32 bl_lvl);
 
 /*
- * Build-time switch: define this to force the legacy CLO operations. The
- * runtime default remains the factory-aligned unit.
+ * TASK-081 D84: the CONFIG_TB371FC_PANEL_UNIT_LEGACY fallback switch was
+ * removed (Round3 audit P1-B). It had no Kconfig entry, inverted guards,
+ * and a LEGACY=on build failed to link three ways. The factory-aligned
+ * unit is now the only path, matching stock.
  */
-#ifndef CONFIG_TB371FC_PANEL_UNIT_LEGACY
-#define tb371fc_panel_unit_active()	(true)
-#else
-static inline bool tb371fc_panel_unit_active(void)
-{
-	return false;
-}
-#endif
 
 #endif

@@ -27,13 +27,6 @@ extern void lcd_bl_set_reg(void);
 extern int lcd_set_bias(bool enable);
 extern bool dc_skip_set_backlight(struct dsi_panel *panel, u32 bl_lvl);
 
-#ifdef CONFIG_TB371FC_PANEL_UNIT_LEGACY
-#define dsi_panel_unit_update_backlight dsi_panel_legacy_update_backlight
-#define dsi_panel_unit_update_pwm_backlight dsi_panel_legacy_update_pwm_backlight
-#else
-#define dsi_panel_unit_update_backlight dsi_panel_update_backlight
-#define dsi_panel_unit_update_pwm_backlight dsi_panel_update_pwm_backlight
-#endif
 
 static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
 {
@@ -583,9 +576,9 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 				mi_cfg->thermal_hbm_disabled, bl_lvl);
 		} else if (mi_cfg->thermal_hbm_disabled && bl_lvl > 2047 &&
 			   mi_cfg->last_bl_level == 0) {
-			rc = dsi_panel_unit_update_backlight(panel, 2047);
+			rc = dsi_panel_update_backlight(panel, 2047);
 		} else {
-			rc = dsi_panel_unit_update_backlight(panel, bl_lvl);
+			rc = dsi_panel_update_backlight(panel, bl_lvl);
 		}
 		break;
 	case DSI_BACKLIGHT_EXTERNAL:
@@ -594,7 +587,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 			DSI_ERR("lcd_bl_set_led_brightness failed, rc=%d\n", rc);
 		break;
 	case DSI_BACKLIGHT_PWM:
-		rc = dsi_panel_unit_update_pwm_backlight(panel, bl_lvl);
+		rc = dsi_panel_update_pwm_backlight(panel, bl_lvl);
 		break;
 	default:
 		DSI_ERR("Backlight type(%d) not supported\n", bl->type);
