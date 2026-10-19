@@ -1441,6 +1441,9 @@ int nvt_ts_pm_suspend(struct device *dev)
 {
 	pr_info("NVT-ts: nvt_ts_pm_suspend: %s++\n", "nvt_ts_pm_suspend");
 	nvt_ts->hw_sleep_check = 1;
+	/* stock 0xffffff8008adce78: str wzr, [x8, #0x198] - clear done so the
+	 * next resume complete() re-signals from a clean state. */
+	reinit_completion(&nvt_ts->pm_completion);
 	pr_info("NVT-ts: nvt_ts_pm_suspend: %s--\n", "nvt_ts_pm_suspend");
 	return 0;
 }
@@ -1451,6 +1454,9 @@ int nvt_ts_pm_resume(struct device *dev)
 
 	pr_info("NVT-ts: nvt_ts_pm_resume: %s++\n", "nvt_ts_pm_resume");
 	nvt_ts->hw_sleep_check = 0;
+	/* stock 0xffffff8008adcec8-d0: complete(ts+0x198) right after clearing
+	 * hw_sleep_check - wakes any PM waiter blocked since suspend re-armed. */
+	complete(&nvt_ts->pm_completion);
 	if (nvt_hall_pm == 1 && nvt_gesture_flag && nvt_hall_pm_status == 0) {
 		/* D68: stock 0x8adcefc does gpio_direction_input(1275) before
 		 * the read, and the frame is {0x50, 0x11} (halfword 0x1150 at
@@ -3107,6 +3113,10 @@ static int nvt_ts_probe(struct spi_device *client)
 
 	mutex_init(&ts->lock);
 	mutex_init(&ts->xbuf_lock);
+	/* stock probe 0xffffff8008ad9fc4: __init_waitqueue_head(ts+0x1a0) and
+	 * done=0 at ts+0x198. Our pm_wq existed but was never initialized. */
+	init_waitqueue_head(&ts->pm_wq);
+	init_completion(&ts->pm_completion);
 
 	/* eng reset, reset high, sleep 10ms, identify */
 	nvt_eng_reset();

@@ -150,6 +150,11 @@ struct nvt_ts_data {
 	struct mutex xbuf_lock;
 	struct mutex lock;
 	struct wait_queue_head pm_wq;
+	/* stock ts+0x198: suspend writes 0 (re-arm), resume calls complete()
+	 * (0xffffff8008adcec8 add x0,x8,#0x198; bl complete). Paired with the
+	 * waitqueue head stock inits at ts+0x1a0 (__init_waitqueue_head in
+	 * probe 0xffffff8008ad9fc4). D83/TASK-081. */
+	struct completion pm_completion;
 	struct notifier_block drm_nb;
 	struct power_supply *psy;
 	bool psy_online;
