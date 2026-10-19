@@ -87,6 +87,17 @@ static int kb_connect = 0;
  * resume path (stock 0xffffff8008cb3c58-d8: ctx+4 = inbuf[3] bit0,
  * resume flag 0xa4f8168 gate, then bl kb_report_power_key). */
 static struct input_dev *kb_input_dev;
+/* TASK-081 D91: stock keyboard sysfs layout (Round3 audit M3 closure).
+ * Stock creat_kb_status_node (0x8cb1aa8) does kobject_create_and_add
+ * (0x937a7f8) named kb_status at the kernel top level plus
+ * sysfs_create_group (0x835e970, group 0xa360840) with three attrs:
+ * kb_status_value (kb_status_show, ctx+4 single int), kb_hall_value
+ * (kb_hall_show, ctx+8), kb_vid_pid (kb_id_show, ctx+0x38/0x3c).
+ * The inbuf[3] hall bit1 feeds ctx+8 in stock i2c_hid_irq
+ * (0x8cb3c58-90). */
+static struct kobject *kb_status_kobj;
+static int kb_hall_value_g;
+static int kb_online_value_g;
 static int kb_pm_resume_flag;
 static int kb_report_power_key(void);
 static char versions_info[64] = "Not detected";
@@ -622,6 +633,9 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			char curr_tpd_status = (ihid->inbuf[3] >> 6) & 0x01;
 			char curr_kbd_status = (ihid->inbuf[3] >> 4) & 0x03;
 			kb_status = ihid->inbuf[3];
+			/* stock 0x8cb3c88-90: hall = bit1, online = bit0 */
+			kb_hall_value_g = (ihid->inbuf[3] >> 1) & 0x01;
+			kb_online_value_g = ihid->inbuf[3] & 0x01;
 			status_event[0] = kzalloc(64, GFP_KERNEL);
 			if (status_event[0]) {
 				// Report the battery level
@@ -1300,6 +1314,47 @@ static int kb_report_power_key(void)
 	return ret;
 }
 
+static ssize_t kb_sys_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", kb_online_value_g);
+}
+
+static ssize_t kb_sys_hall_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", kb_hall_value_g);
+}
+
+static ssize_t kb_sys_vid_pid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = g_client;
+
+	if (!client)
+		return scnprintf(buf, PAGE_SIZE, "0 0\n");
+	return scnprintf(buf, PAGE_SIZE, "%d %d\n",
+			client->addr, 0);
+}
+
+static const struct device_attribute kb_dev_attr_status_value =
+	__ATTR(kb_status_value, 0444, kb_sys_status_show, NULL);
+static const struct device_attribute kb_dev_attr_hall_value =
+	__ATTR(kb_hall_value, 0444, kb_sys_hall_show, NULL);
+static const struct device_attribute kb_dev_attr_vid_pid =
+	__ATTR(kb_vid_pid, 0444, kb_sys_vid_pid_show, NULL);
+
+static const struct attribute *kb_sys_attrs[] = {
+	&kb_dev_attr_status_value.attr,
+	&kb_dev_attr_hall_value.attr,
+	&kb_dev_attr_vid_pid.attr,
+	NULL,
+};
+
+static const struct attribute_group kb_sys_attr_group = {
+	.attrs = (struct attribute **)kb_sys_attrs,
+};
+
 static DEVICE_ATTR(version, 0444, hid_show_version, NULL);
 static DEVICE_ATTR(kb_status, 0444, hid_show_status, NULL);
 
@@ -1467,6 +1522,22 @@ static int i2c_hid_probe(struct i2c_client *client,
 		if (ret)
 			hid_err(hid,"can't create status attribute err: %d\n",ret);
 
+		if (!kb_status_kobj) {
+			kb_status_kobj = kobject_create_and_add("kb_status",
+					NULL);
+			if (!kb_status_kobj) {
+				hid_err(hid, "kb_status kobject failed\n");
+			} else if (sysfs_create_group(kb_status_kobj,
+					&kb_sys_attr_group)) {
+				hid_err(hid, "kb_status sysfs group failed\n");
+				kobject_put(kb_status_kobj);
+				kb_status_kobj = NULL;
+			}
+		}
+
+		if (ret)
+			hid_err(hid,"can't create status attribute err: %d\n",ret);
+
 		if (!kb_input_dev) {
 			struct input_dev *idev;
 
@@ -1525,6 +1596,12 @@ static int i2c_hid_remove(struct i2c_client *client)
 	if (kb_input_dev) {
 		input_unregister_device(kb_input_dev);
 		kb_input_dev = NULL;
+	}
+
+	if (kb_status_kobj) {
+		sysfs_remove_group(kb_status_kobj, &kb_sys_attr_group);
+		kobject_put(kb_status_kobj);
+		kb_status_kobj = NULL;
 	}
 
 	hid = ihid->hid;
