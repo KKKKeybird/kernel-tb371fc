@@ -729,17 +729,27 @@ int nvt_support_pen_set(u8 enable, u8 version)
 		mutex_unlock(&nvt_ts->lock);
 		return -EPERM;
 	}
+	/* TASK-081 D93 (pen regression part 2): stock nvt_support_pen_set
+	 * (0x8adf9e8) writes a 4-byte frame {0x50, 0x7b, enable, version}
+	 * after nvt_set_page(mmap[0]) - NOT the old community protocol
+	 * {0x7b, 0x50, ...} with page mmap[0]|0x50 that our rebuild copied.
+	 * With the old frame the IC never executed the pen enable, which is
+	 * why the tip stayed dead even with pen_support fixed. Read back is
+	 * 4 bytes of {0x50, 0xff, 0xff, 0xff} requiring byte[1] == 0, five
+	 * retries. */
 	for (retry = 0; retry < 5; retry++) {
-		nvt_set_page(nvt_ts->mmap[0] | 0x50);
-		buf[0] = 0x7b;
-		buf[1] = 0x50;
+		nvt_set_page(nvt_ts->mmap[0]);
+		buf[0] = 0x50;
+		buf[1] = 0x7b;
 		buf[2] = enable;
 		buf[3] = version;
 		CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
 		msleep(20);
 		buf[0] = 0x50;
 		buf[1] = 0xff;
-		if (!CTP_SPI_READ(nvt_ts->client, buf, 2) && buf[1] == 0) {
+		buf[2] = 0xff;
+		buf[3] = 0xff;
+		if (!CTP_SPI_READ(nvt_ts->client, buf, 4) && buf[1] == 0) {
 			mutex_unlock(&nvt_ts->lock);
 			return 0;
 		}
