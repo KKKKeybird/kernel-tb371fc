@@ -663,19 +663,18 @@ void nvt_charger_init(void)
 	struct power_supply *psy;
 	int ret;
 
-	/* D102 (F6 corrected): stock nvt_lenovo_register 0x8ad98f8-0x8ad9928
-	 * is alloc_workqueue("%s", 0xE0008, 1, "nvt_charger_wq") with
-	 * 0xE0008 = WQ_MEM_RECLAIM(0x8) | __WQ_ORDERED(1<<17) |
-	 * __WQ_LEGACY(1<<18) | __WQ_ORDERED_EXPLICIT(1<<19) - bound
-	 * per-CPU with explicit ordered, NO WQ_UNBOUND. The earlier
-	 * "create_singlethread_workqueue" reading (0xE000A) was wrong:
-	 * that adds WQ_UNBOUND(0x2) which stock does not have. The
-	 * 0x40008 call the review attributed to charger_wq actually
-	 * belongs to nvt_hall_check_wq (0x8adaf90, string verified).
-	 * max_active=1 + __WQ_ORDERED keep the stock ordering semantics. */
-	nvt_ts->charger_wq = alloc_workqueue("nvt_charger_wq",
-			     __WQ_ORDERED | __WQ_ORDERED_EXPLICIT |
-			     __WQ_LEGACY | WQ_MEM_RECLAIM, 1);
+	/* D103 (F6 final): review side was right, D102 was wrong. Stock
+	 * nvt_lenovo_register 0x8ad9900-0x8ad9928 is
+	 * alloc_workqueue("%s", 0xE000A, 1, "nvt_charger_wq"):
+	 *   mov w1,#0xa (0x8ad9900, encoding 0x52800141, imm16=0xa)
+	 *   movk w1,#0xe,lsl #16 (0x8ad990c)
+	 * 0xE000A = WQ_UNBOUND(0x2) | WQ_MEM_RECLAIM(0x8) | __WQ_ORDERED
+	 * (1<<17) | __WQ_LEGACY(1<<18) | __WQ_ORDERED_EXPLICIT(1<<19)
+	 * = exactly create_singlethread_workqueue() in this tree. D102
+	 * misread the movz imm16 as #0x8 (that encoding belongs to
+	 * nvt_hall_check_wq, 0x8adaf70 movk #0x4) and dropped
+	 * WQ_UNBOUND. Roll back to the macro (review option B). */
+	nvt_ts->charger_wq = create_singlethread_workqueue("nvt_charger_wq");
 	if (!nvt_ts->charger_wq) {
 		pr_err("NVT-ts: allocate nvt_charger_notify_wq failed\n");
 		return;
