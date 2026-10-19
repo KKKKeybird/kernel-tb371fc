@@ -81,6 +81,14 @@ do {									  \
 } while (0)
 
 static int kb_connect = 0;
+/* TASK-081 D86 (Round3 audit M3): stock keyboard soft power key.
+ * Stock keeps a dedicated input_dev at 0xa4f8118 and injects KEY_POWER from
+ * i2c_hid_irq when a 0x06 status frame reports online==1 outside of the
+ * resume path (stock 0xffffff8008cb3c58-d8: ctx+4 = inbuf[3] bit0,
+ * resume flag 0xa4f8168 gate, then bl kb_report_power_key). */
+static struct input_dev *kb_input_dev;
+static int kb_pm_resume_flag;
+static int kb_report_power_key(void);
 static char versions_info[64] = "Not detected";
 static char kb_status = 0;
 static char KB_BT_MAC_info[64] = "00:00:00:00:00:00";
@@ -670,6 +678,14 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 		}
 		register_hardware_info("KB_INFO", versions_info);
 		hw_info_registed = true;
+		/* stock i2c_hid_irq 0xffffff8008cb3cdc-d8: inject the soft power
+		 * key when the frame reports online==1 and we did not just come
+		 * out of the resume path (resume flag gate). */
+		if (kb_connect == 1 && !kb_pm_resume_flag) {
+			dev_err(&ihid->client->dev,
+				"hid-keyboard,%s,kb_report_power_key\n", __func__);
+			kb_report_power_key();
+		}
 		return;
 	}
 	
@@ -1265,6 +1281,25 @@ static ssize_t hid_show_status(struct device *dev,
 	}
 }
 
+/* stock kb_report_power_key @0xffffff8008cb1828: log; if the input device
+ * is not registered log and return -1; otherwise report KEY_POWER press +
+ * sync + release + sync and return 0. */
+static int kb_report_power_key(void)
+{
+	int ret;
+
+	if (!kb_input_dev) {
+		pr_err("hid-keyboard: kb_report_power_key: input dev is NULL\n");
+		return -1;
+	}
+	input_report_key(kb_input_dev, KEY_POWER, 1);
+	input_sync(kb_input_dev);
+	input_report_key(kb_input_dev, KEY_POWER, 0);
+	input_sync(kb_input_dev);
+	ret = 0;
+	return ret;
+}
+
 static DEVICE_ATTR(version, 0444, hid_show_version, NULL);
 static DEVICE_ATTR(kb_status, 0444, hid_show_status, NULL);
 
@@ -1432,6 +1467,23 @@ static int i2c_hid_probe(struct i2c_client *client,
 		if (ret)
 			hid_err(hid,"can't create status attribute err: %d\n",ret);
 
+		if (!kb_input_dev) {
+			struct input_dev *idev;
+
+			idev = input_allocate_device();
+			if (idev) {
+				idev->name = "kb-power-key";
+				idev->id.bustype = BUS_I2C;
+				input_set_capability(idev, EV_KEY, KEY_POWER);
+				if (input_register_device(idev)) {
+					hid_err(hid, "kb power key input dev register failed\n");
+					input_free_device(idev);
+				} else {
+					kb_input_dev = idev;
+				}
+			}
+		}
+
 		if (lenovo_i2c_kb_registed) {
 			hidinput_disconnect(hid);
 		}
@@ -1469,6 +1521,11 @@ static int i2c_hid_remove(struct i2c_client *client)
 	pm_runtime_put_noidle(&client->dev);
 	device_remove_file(&hid->dev, &dev_attr_version);
 	device_remove_file(&hid->dev, &dev_attr_kb_status);
+
+	if (kb_input_dev) {
+		input_unregister_device(kb_input_dev);
+		kb_input_dev = NULL;
+	}
 
 	hid = ihid->hid;
 	hid_destroy_device(hid);
@@ -1726,6 +1783,9 @@ void kb_hid_resume(void)
 		printk("%s:report screen on cmd failed\n");
 	else
 		g_screen_on = 1;
+	/* stock kb resume path sets the 0xa4f8168 flag so the next 0x06
+	 * frame does not double-inject the power key (TASK-081 D86). */
+	kb_pm_resume_flag = 1;
 	/* Spruce code for OSPURCET-780 by sunft3 at 2023/01/18 end */
 	return;
 }
