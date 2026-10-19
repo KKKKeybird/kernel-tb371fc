@@ -1010,10 +1010,14 @@ void nvt_lenovo_report(u8 id, u32 x, u32 y, u8 tilt_x, u8 tilt_y, u32 pressure)
 	entry = nvt_lenovo_buf[nvt_lenovo_index];
 	memset(entry, 0, 0x28);
 	entry[0] = nvt_lenovo_seq;
-	entry[1] = 0;
-	*(u16 *)&entry[2] = 1;
-	entry[6] = tilt_x;
-	entry[7] = tilt_y;
+	/* TASK-081 D97 (external AI review): stock ring entry layout
+	 * (0x8ad9638 L265-273): seq@0, tilt_x@4, tilt_y@5, u16=1@8,
+	 * x/10@0x10(u64), y/10@0x18(u64), pressure@0x20(u64), 0@0x1f.
+	 * The rebuild had a made-up layout (u16=1@2, tilt@6) that
+	 * misaligns every field the HAL reads through /dev/lenovo_penraw. */
+	entry[4] = tilt_x;
+	entry[5] = tilt_y;
+	*(u16 *)&entry[8] = 1;
 	*(u64 *)&entry[0x10] = x / 10;
 	*(u64 *)&entry[0x18] = y / 10;
 	*(u64 *)&entry[0x20] = pressure;
