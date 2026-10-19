@@ -2020,10 +2020,15 @@ int32_t nvt_check_spi_dma_tx_info(void)
 
 void nvt_tx_auto_copy_mode(void)
 {
+	/* D109: stock nvt_tx_auto_copy_mode (0x8ad8408) reads ts+289
+	 * (auto_copy): ==2 -> nvt_write_addr(..., 0x69), ==1 -> 0x56
+	 * (mov w1,#0x69 @0x8ad8434 / #0x56 @0x8ad8440). Our enum had the
+	 * magic values swapped (1->0x69, 2->0x56). With the live trim
+	 * entry auto_copy=2 the bus saw 0x56 instead of stock 0x69. */
 	if (nvt_ts->auto_copy == CHECK_SPI_DMA_TX_INFO) {
-		nvt_write_addr(NVT_MM->TX_AUTO_COPY_EN, 0x69);
-	} else if (nvt_ts->auto_copy == CHECK_TX_AUTO_COPY_EN) {
 		nvt_write_addr(NVT_MM->TX_AUTO_COPY_EN, 0x56);
+	} else if (nvt_ts->auto_copy == CHECK_TX_AUTO_COPY_EN) {
+		nvt_write_addr(NVT_MM->TX_AUTO_COPY_EN, 0x69);
 	}
 
 	pr_info("NVT-ts: tx auto copy mode %d enable\n", nvt_ts->auto_copy);
