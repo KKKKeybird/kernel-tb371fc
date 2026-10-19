@@ -364,7 +364,9 @@ int nvt_read_reg(u32 addr, u8 *value)
 		*value = buf[1];
 		if (buf[0] & 0x80)
 			return 0;
-		usleep_range(1000, 1000);
+		/* D108: stock nvt_read_reg (0x8ad8190-0x8ad8260) retries
+		 * back-to-back with no delay between reads - the 1ms
+		 * usleep was old-tree behavior. */
 	}
 	return -EBUSY;
 }
