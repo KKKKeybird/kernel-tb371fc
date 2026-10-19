@@ -1329,12 +1329,22 @@ static ssize_t kb_sys_hall_show(struct device *dev,
 static ssize_t kb_sys_vid_pid_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	/* D105 (G4): stock kb_id_show (0x8cb2908) reads ctx+0x38/0x3c,
+	 * filled in i2c_hid_probe (0x8cb34b4/0x8cb34c4) from the embedded
+	 * HID descriptor wVendorID (ihid+36) / wProductID (ihid+38) - the
+	 * same source as hid->vendor/product. Replace the D91 i2c-addr
+	 * placeholder. */
 	struct i2c_client *client = g_client;
+	struct i2c_hid *ihid;
 
 	if (!client)
 		return scnprintf(buf, PAGE_SIZE, "0 0\n");
+	ihid = i2c_get_clientdata(client);
+	if (!ihid)
+		return scnprintf(buf, PAGE_SIZE, "0 0\n");
 	return scnprintf(buf, PAGE_SIZE, "%d %d\n",
-			client->addr, 0);
+			le16_to_cpu(ihid->hdesc.wVendorID),
+			le16_to_cpu(ihid->hdesc.wProductID));
 }
 
 static const struct device_attribute kb_dev_attr_status_value =
