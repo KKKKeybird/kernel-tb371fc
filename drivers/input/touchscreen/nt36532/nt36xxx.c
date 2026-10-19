@@ -3490,7 +3490,6 @@ static int nvt_ts_probe(struct spi_device *client)
 	struct nvt_ts_data *ts;
 	int ret;
 	int i, j;
-	u32 val;
 
 	if (nvt_ts) {
 		dev_err(&client->dev, "NVT-ts: already probed\n");
@@ -3724,8 +3723,14 @@ static int nvt_ts_probe(struct spi_device *client)
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y,
 			     0, ts->abs_y_max * 10, 0, 0);
 	input_set_capability(ts->input_dev, EV_KEY, 0x25e);
-	for (val = 0; val < 14; val++)
-		input_set_capability(ts->input_dev, EV_KEY, 0x74 + val);
+	/* D101 (F4): stock probe (0x8ada894-0x8ada994) issues 12 consecutive
+	 * input_set_capability calls with w2 = w20 = 0x74 (KEY_POWER) - the
+	 * SAME key 12 times (idempotent), not 14 distinct keys 0x74..0x82.
+	 * Unique finger_dev caps: 0x25e + KEY_POWER + 0x20b. Registering the
+	 * 13 extra keys skewed the InputReader device class. No reporter
+	 * depends on 0x75..0x82: gesture wake reports KEY_POWER on
+	 * wake_input_dev (D67), stylus press reports 0x25e on finger_dev. */
+	input_set_capability(ts->input_dev, EV_KEY, KEY_POWER);
 	input_set_capability(ts->input_dev, EV_KEY, 0x20b);
 
 	ret = input_register_device(ts->input_dev);
