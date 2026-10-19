@@ -291,6 +291,7 @@ struct nvt_ts_data {
 	uint8_t *xbuf;
 	uint8_t *rbuf;
 	char phys[32];
+	char pen_phys[32];
 	uint8_t hw_reg_addr_info[128];
 	uint8_t gesture_key_array[13];
 	uint8_t gesture_key_buffer[6];

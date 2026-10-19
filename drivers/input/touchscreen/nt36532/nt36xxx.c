@@ -1017,8 +1017,10 @@ void nvt_lenovo_report(u8 id, u32 x, u32 y, u8 tilt_x, u8 tilt_y, u32 pressure)
 	memset(entry, 0, 0x28);
 	entry[0] = nvt_lenovo_seq;
 	/* TASK-081 D97 (external AI review): stock ring entry layout
-	 * (0x8ad9638 L265-273): seq@0, tilt_x@4, tilt_y@5, u16=1@8,
-	 * x/10@0x10(u64), y/10@0x18(u64), pressure@0x20(u64), 0@0x1f.
+	 * (0x8ad9638 L265-273): seq@0, u16=1@8, x/10@0x10(u64),
+	 * y/10@0x18(u64), pressure@0x20(u64), 0@0x1f. D97 originally
+	 * wrote "tilt_x@4, tilt_y@5" here - that was a base-arithmetic
+	 * error; the real tilt offsets are 0x0a/0x0b, see D99 below.
 	 * The rebuild had a made-up layout (u16=1@2, tilt@6) that
 	 * misaligns every field the HAL reads through /dev/lenovo_penraw. */
 	/* D99: tilt is at +0x0a/+0x0b in the stock ring entry (0x8adbd78
@@ -3737,6 +3739,14 @@ static int nvt_ts_probe(struct spi_device *client)
 			return -ENOMEM;
 		ts->pen_dev->name = "NVTCapacitivePen";
 		ts->pen_dev->id.bustype = BUS_SPI;
+		/* D100 (F1): stock probe (0x8adaa2c-0x8adad78) sets
+		 * pen_dev->phys = "input/pen" (inline str/strh into ts+0x168)
+		 * and propbit word = 2 (bit1 = INPUT_PROP_DIRECT). Without
+		 * DIRECT, EventHub classifies the pen as a POINTER device
+		 * (mouse semantics) - hover lost, motion scrambled. */
+		sprintf(nvt_ts->pen_phys, "input/pen");
+		ts->pen_dev->phys = nvt_ts->pen_phys;
+		__set_bit(INPUT_PROP_DIRECT, ts->pen_dev->propbit);
 		input_set_drvdata(ts->pen_dev, ts);
 		input_set_abs_params(ts->pen_dev, ABS_X, 0,
 				     ts->abs_x_max * 10, 0, 0);
@@ -3750,9 +3760,10 @@ static int nvt_ts_probe(struct spi_device *client)
 		input_set_capability(ts->pen_dev, EV_KEY, BTN_TOOL_PEN);
 		input_set_capability(ts->pen_dev, EV_KEY, BTN_STYLUS);
 		input_set_capability(ts->pen_dev, EV_KEY, BTN_STYLUS2);
-		input_set_capability(ts->pen_dev, EV_KEY, BTN_TOOL_RUBBER);
-		input_set_capability(ts->pen_dev, EV_KEY, 0x25e);
-		input_set_capability(ts->pen_dev, EV_KEY, 0x20b);
+		/* D100 (F1): stock pen_dev keybit[5] = 0x400|0x1|0x800|0x1000
+		 * = BTN_TOUCH/BTN_TOOL_PEN/BTN_STYLUS/BTN_STYLUS2, and that is
+		 * the complete set. No BTN_TOOL_RUBBER, no 0x25e (stylus press
+		 * is reported only through finger_dev), no 0x20b. */
 		ret = input_register_device(ts->pen_dev);
 		if (ret)
 			return ret;
