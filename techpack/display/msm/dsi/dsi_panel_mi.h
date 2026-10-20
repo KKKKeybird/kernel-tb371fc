@@ -115,11 +115,6 @@ enum fingerprint_status {
 	HEART_RATE_STOP = 6,
 };
 
-struct lockdowninfo_cfg {
-	u8 lockdowninfo[16];
-	bool lockdowninfo_read_done;
-};
-
 struct greenish_gamma_cfg {
 	u32 index_1st_param;
 	u32 index_2nd_param;
@@ -266,7 +261,6 @@ struct dsi_panel_mi_cfg {
 	bool bl_wait_frame;
 	bool bl_enable;
 	bool is_tddi_flag;
-	bool tddi_doubleclick_flag;
 	bool panel_dead_flag;
 
 	bool fod_dimlayer_enabled;
@@ -277,8 +271,6 @@ struct dsi_panel_mi_cfg {
 	bool delay_after_fod_hbm_off;
 	uint32_t brightnes_alpha_lut_item_count;
 	brightness_alpha *brightness_alpha_lut;
-
-	struct lockdowninfo_cfg lockdowninfo_read;
 
 	bool dither_enabled;
 	u32 cabc_current_status;
@@ -362,7 +354,5 @@ int dsi_panel_set_doze_brightness(struct dsi_panel *panel,
 
 int dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,
 				struct dsi_display_mode *adj_mode);
-
-int dsi_panel_lockdowninfo_param_read(struct dsi_panel *panel);
 
 #endif /* _DSI_PANEL_MI_H_ */

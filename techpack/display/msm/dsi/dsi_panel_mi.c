@@ -741,7 +741,6 @@ skip_dimlayer_parse:
 	mi_cfg->dc_enable = false;
 	mi_cfg->bl_enable = true;
 	mi_cfg->panel_dead_flag = false;
-	mi_cfg->tddi_doubleclick_flag = false;
 
 	mi_cfg->dither_enabled = false;
 	mi_cfg->local_hbm_cur_status = false;
@@ -1364,122 +1363,6 @@ exit:
 	return rc;
 }
 
-int dsi_panel_lockdowninfo_param_read(struct dsi_panel *panel)
-{
-	int rc = 0;
-	int i = 0;
-	struct dsi_panel_mi_cfg *mi_cfg;
-	struct dsi_panel_cmd_set *cmd_sets;
-	struct dsi_read_config ld_read_config;
-	struct dsi_panel_cmd_set read_cmd_set = {0};
-
-	if (!panel || !panel->cur_mode || !panel->cur_mode->priv_info) {
-		pr_err("invalid params\n");
-		return -EINVAL;
-	}
-
-	if (!panel->panel_initialized) {
-		pr_err("panel not initialized\n");
-		return -EINVAL;
-	}
-
-	mutex_lock(&panel->panel_lock);
-
-	mi_cfg = &panel->mi_cfg;
-	cmd_sets = &panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_MI_READ_LOCKDOWN_INFO];
-	if (cmd_sets->cmds) {
-		read_cmd_set.cmds = cmd_sets->cmds;
-		read_cmd_set.count = 1;
-		read_cmd_set.state = cmd_sets->state;
-		rc = dsi_panel_write_cmd_set(panel, &read_cmd_set);
-		if (rc) {
-			pr_err("[%s] failed to send cmds, rc=%d\n", panel->name, rc);
-			rc = -EIO;
-			goto done;
-		}
-
-		pr_info("[%s]", panel->name);
-		if (strcmp(panel->name,"xiaomi 42 02 0a video mode dual dsi cphy panel") &&
-			strcmp(panel->name,"xiaomi 35 02 0b video mode dual dsi cphy panel")) {
-
-			ld_read_config.is_read = 1;
-			ld_read_config.cmds_rlen = 8;
-			ld_read_config.read_cmd = read_cmd_set;
-			ld_read_config.read_cmd.cmds = &read_cmd_set.cmds[1];
-			rc = dsi_panel_read_cmd_set(panel, &ld_read_config);
-			if (rc <= 0) {
-				pr_err("[%s] failed to read cmds, rc=%d\n", panel->name, rc);
-				rc = -EIO;
-				goto done;
-			}
-
-			for(i = 0; i < 8; i++) {
-				pr_info("0x%x", ld_read_config.rbuf[i]);
-				mi_cfg->lockdowninfo_read.lockdowninfo[i] = ld_read_config.rbuf[i];
-			}
-
-			if (!strcmp(panel->name,"xiaomi 37 02 0b video mode dsc dsi panel")) {
-				mi_cfg->lockdowninfo_read.lockdowninfo[7] = 0x01;
-				pr_info("plockdowninfo[7] = 0x%d \n",
-					mi_cfg->lockdowninfo_read.lockdowninfo[7]);
-			}
-			mi_cfg->lockdowninfo_read.lockdowninfo_read_done = 1;
-		} else {
-			for(i = 0; i < 8; i++) {
-				ld_read_config.is_read = 1;
-				ld_read_config.cmds_rlen = 1;
-				ld_read_config.read_cmd = read_cmd_set;
-				ld_read_config.read_cmd.cmds = &read_cmd_set.cmds[i+1];
-				rc = dsi_panel_read_cmd_set(panel, &ld_read_config);
-				if (rc <= 0) {
-					pr_err("[%s] failed to read, rc=%d\n", panel->name, rc);
-					rc = -EIO;
-					goto done;
-				}
-
-				pr_info("0x%x", ld_read_config.rbuf[0]);
-				mi_cfg->lockdowninfo_read.lockdowninfo[i] = ld_read_config.rbuf[0];
-			}
-			mi_cfg->lockdowninfo_read.lockdowninfo_read_done = 1;
-
-			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_LCD_HBM_L3_ON);
-
-		}
-	}
-
-done:
-	mutex_unlock(&panel->panel_lock);
-	return rc;
-
-}
-
-ssize_t dsi_panel_lockdown_info_read(unsigned char *plockdowninfo)
-{
-	int rc = 0;
-	int i = 0;
-	static int count = 0;
-
-	if (!g_panel || !plockdowninfo) {
-		pr_err("invalid params\n");
-		return -EINVAL;
-	}
-
-	while(!g_panel->mi_cfg.lockdowninfo_read.lockdowninfo_read_done  && count < 500) {
-		pr_debug("[%s][%s] waitting for panel priv_info initialized!\n", __func__, g_panel->name);
-		msleep_interruptible(1000);
-		count++;
-	}
-
-	for(i = 0; i < 8; i++) {
-		pr_info("0x%x",  g_panel->mi_cfg.lockdowninfo_read.lockdowninfo[i]);
-		plockdowninfo[i] = g_panel->mi_cfg.lockdowninfo_read.lockdowninfo[i];
-	}
-
-	rc = plockdowninfo[0];
-
-	return rc;
-}
-EXPORT_SYMBOL(dsi_panel_lockdown_info_read);
 
 int mi_mipi_dsi_dcs_set_pwm_value(u16 dbv_value)
 {
@@ -1498,37 +1381,8 @@ int mi_mipi_dsi_dcs_set_pwm_value(u16 dbv_value)
 }
 EXPORT_SYMBOL(mi_mipi_dsi_dcs_set_pwm_value);
 
-ssize_t dsi_panel_vendor_info_read(unsigned char *plockdowninfo)
-{
-	int rc = 0;
-
-	if (!g_panel || !plockdowninfo) {
-		pr_err("invalid params\n");
-		return -EINVAL;
-	}
-	pr_info("[%s]", g_panel->name);
-
-	if (!strcmp(g_panel->name,"xiaomi 42 02 0a video mode dual dsi cphy panel")) {
-		plockdowninfo[0] = 0x53;
-		plockdowninfo[1] = 0x42;
-	} else if (!strcmp(g_panel->name,"xiaomi 35 02 0b video mode dual dsi cphy panel")){
-		plockdowninfo[0] = 0x44;
-		plockdowninfo[1] = 0x35;
-	} else {
-		plockdowninfo[0] = 0xFF;
-		plockdowninfo[1] = 0xFF;
-	}
-
-	return rc;
-}
-EXPORT_SYMBOL(dsi_panel_vendor_info_read);
 
 
-void dsi_panel_doubleclick_enable(bool on)
-{
-	g_panel->mi_cfg.tddi_doubleclick_flag = on;
-}
-EXPORT_SYMBOL(dsi_panel_doubleclick_enable);
 
 static int mi_dsi_update_lhbm_cmd_87reg(struct dsi_panel *panel,
 			enum dsi_cmd_set_type type, int bl_lvl)
