@@ -791,7 +791,6 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 					bool te_check_override)
 {
 	struct dsi_display *dsi_display = display;
-	struct drm_panel_esd_config *config;
 	struct dsi_panel *panel;
 	u32 status_mode;
 	int rc = 0x1, ret;
@@ -843,11 +842,6 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 	dsi_display_mask_ctrl_error_interrupts(dsi_display, mask, true);
 
 	if (status_mode == ESD_MODE_REG_READ) {
-		config = &(panel->esd_config);
-		if (config->offset_cmd.count != 0) {
-			rc = dsi_panel_write_cmd_set(panel, &config->offset_cmd);
-		}
-
 		rc = dsi_display_status_reg_read(dsi_display);
 	} else if (status_mode == ESD_MODE_SW_BTA) {
 		rc = dsi_display_status_bta_request(dsi_display);
