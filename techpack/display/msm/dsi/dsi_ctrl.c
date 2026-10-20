@@ -325,32 +325,21 @@ static void dsi_ctrl_dma_cmd_wait_for_done(struct work_struct *work)
 	if (atomic_read(&dsi_ctrl->dma_irq_trig))
 		goto done;
 
-	/* TB371FC p96: dsi_ctrl DMA-done IRQ is not delivered after the
-	 * first screen cycle on this self-built kernel (verified via
-	 * /proc/interrupts: count frozen at 2 while parent msm_drm IRQ
-	 * is healthy). Poll the done status at 1ms granularity instead of
-	 * blocking the full 200ms TX timeout per DCS command, which used
-	 * to stretch panel wake sequences and race the composer into a
-	 * backlight-on/black-panel state. */
-	{int i;
-
-		for (i = 0; i < 20; i++) {
-			ret = wait_for_completion_timeout(
-					&dsi_ctrl->irq_info.cmd_dma_done,
-					msecs_to_jiffies(1));
-			if (ret > 0 || atomic_read(&dsi_ctrl->dma_irq_trig))
-					goto done;
-			status = dsi_hw_ops.get_interrupt_status(&dsi_ctrl->hw);
-			if (status & mask) {
-				status |= (DSI_CMD_MODE_DMA_DONE | DSI_BTA_DONE);
-				dsi_hw_ops.clear_interrupt_status(&dsi_ctrl->hw,
-						status);
-				DSI_CTRL_DEBUG(dsi_ctrl,
-						"dma_tx done via poll\n");
-				goto done;
-			}
+	ret = wait_for_completion_timeout(
+			&dsi_ctrl->irq_info.cmd_dma_done,
+			msecs_to_jiffies(DSI_CTRL_TX_TO_MS));
+	if (ret == 0 && !atomic_read(&dsi_ctrl->dma_irq_trig)) {
+		status = dsi_hw_ops.get_interrupt_status(&dsi_ctrl->hw);
+		if (status & mask) {
+			status |= (DSI_CMD_MODE_DMA_DONE | DSI_BTA_DONE);
+			dsi_hw_ops.clear_interrupt_status(&dsi_ctrl->hw,
+					status);
+			DSI_CTRL_WARN(dsi_ctrl,
+					"dma_tx done but irq not triggered\n");
+		} else {
+			DSI_CTRL_ERR(dsi_ctrl,
+					"Command transfer failed\n");
 		}
-		DSI_CTRL_ERR(dsi_ctrl, "Command transfer failed\n");
 		dsi_ctrl_disable_status_interrupt(dsi_ctrl,
 					DSI_SINT_CMD_MODE_DMA_DONE);
 	}
