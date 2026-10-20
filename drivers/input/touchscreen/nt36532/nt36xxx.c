@@ -2530,6 +2530,8 @@ static ssize_t gesture_control_write(struct file *file,
 {
 	u8 value;
 
+	if (!count)
+		return 0;
 	if (copy_from_user(&value, buf, 1))
 		return -EFAULT;
 	nvt_gesture_flag = (value == '1') ? 1 : 0;
