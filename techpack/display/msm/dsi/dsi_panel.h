@@ -204,7 +204,6 @@ struct dsi_panel {
 
 	struct dsi_regulator_info power_info;
 	struct dsi_backlight_config bl_config;
-	struct dsi_backlight_config bl_slaver_config;
 	struct dsi_panel_reset_config reset_config;
 	struct dsi_pinctrl_info pinctrl;
 	struct drm_panel_hdr_properties hdr_props;

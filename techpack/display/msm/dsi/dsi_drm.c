@@ -324,7 +324,6 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 	SDE_ATRACE_END("dsi_bridge_post_disable");
 }
 
- // git
 
 static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 				struct drm_display_mode *mode,
