@@ -2476,23 +2476,21 @@ static ssize_t nvt_support_pen_store(struct file *file, const char __user *buf,
 				     size_t count, loff_t *pos)
 {
 	char data[33] = { 0 };
-	int enable, version;
+	int enable = 0, version = 0;
 
-	/* stock nvt_support_pen_store @0x8ae18c0: __check_object_size ->
-	 * copy_from_user into a kernel stack buffer -> sscanf. Passing the
-	 * __user pointer straight to sscanf faults under PAN and, with
-	 * panic_on_oops=1, panics the box when the Lenovo touchscreen HAL
-	 * writes /proc/support_pen during boot (root cause of the #360/#364
-	 * boot loop, confirmed from the kmsg_tb371_log flight recorder).
+	/* stock nvt_support_pen_store @0x8ae18c0: copy_from_user into a
+	 * zeroed stack buffer, parse with sscanf, then store the two bytes.
+	 * Keep the local buffer bound as a safety boundary; stock itself
+	 * relies on object-size checking here.
 	 */
 	if (count > sizeof(data) - 1)
 		count = sizeof(data) - 1;
 	if (copy_from_user(data, buf, count))
-		return -EFAULT;
+		return -EINVAL;
 	data[count] = '\0';
 
-	if (sscanf(data, "%d,%d", &enable, &version) != 2)
-		return -EINVAL;
+	sscanf(data, "%d,%d", &enable, &version);
+	pr_info("NVT-ts: support pen state %d, %d!\n", enable, version);
 	nvt_ts->pen_enable = enable;
 	nvt_ts->pen_version = version;
 	if (!nvt_ts->pen_suppress)
@@ -2568,16 +2566,15 @@ static ssize_t nvt_edge_grid_zone_store(struct file *file,
 					loff_t *pos)
 {
 	char data[33] = { 0 };
-	int x1, y1, x2, y2;
+	int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
 
 	if (count > sizeof(data) - 1)
 		count = sizeof(data) - 1;
 	if (copy_from_user(data, buf, count))
-		return -EFAULT;
+		return -EINVAL;
 	data[count] = '\0';
 
-	if (sscanf(data, "%d,%d,%d,%d", &x1, &y1, &x2, &y2) != 4)
-		return -EINVAL;
+	sscanf(data, "%d,%d,%d,%d", &x1, &y1, &x2, &y2);
 
 	mutex_lock(&nvt_ts->lock);
 	nvt_ts->edge_grid_x1 = x1;
