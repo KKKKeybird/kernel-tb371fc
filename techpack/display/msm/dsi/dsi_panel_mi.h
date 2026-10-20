@@ -322,9 +322,6 @@ static inline const char *get_doze_brightness_name(__u32 doze_brightness)
 	}
 }
 
-int dsi_panel_parse_mi_config(struct dsi_panel *panel,
-				struct device_node *of_node);
-
 int dsi_panel_write_cmd_set(struct dsi_panel *panel,
 				struct dsi_panel_cmd_set *cmd_sets);
 

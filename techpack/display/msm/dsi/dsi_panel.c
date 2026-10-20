@@ -476,41 +476,6 @@ static int dsi_panel_wled_register(struct dsi_panel *panel,
 	return 0;
 }
 
-static int dsi_panel_wled_register_a(struct dsi_panel *panel,
-		struct dsi_backlight_config *bl)
-{
-	struct backlight_device *bd;
-
-	bd = backlight_device_get_by_type_a(BACKLIGHT_RAW);
-	if (!bd) {
-		DSI_ERR("[%s] fail raw backlight register\n", panel->name);
-		return -EPROBE_DEFER;
-	}
-
-	bl->raw_bd = bd;
-	return 0;
-}
-
-static int dsi_panel_wled_register_b(struct dsi_panel *panel,
-		struct dsi_backlight_config *bl)
-{
-	struct backlight_device *bd;
-
-	bd = backlight_device_get_by_type_b(BACKLIGHT_RAW);
-	if (!bd) {
-		DSI_ERR("[%s] fail raw backlight register\n", panel->name);
-		return -EPROBE_DEFER;
-	}
-
-	bl->raw_bd = bd;
-	return 0;
-}
-
-
-
-
-
-
 static u32 dsi_panel_get_brightness(struct dsi_backlight_config *bl)
 {
 	u32 cur_bl_level;
@@ -567,20 +532,13 @@ static int dsi_panel_bl_register(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
-	struct dsi_backlight_config *bl_slaver = &panel->bl_slaver_config;
 
 	if (panel->host_config.ext_bridge_mode)
 		return 0;
 
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
-		if (panel->mi_cfg.panel_id == 0x4C38314100420400){
-			// L81A dual backlight
-			rc = dsi_panel_wled_register_a(panel, bl);
-			rc = dsi_panel_wled_register_b(panel, bl_slaver);
-		}else{
-			rc = dsi_panel_wled_register(panel, bl);
-		}
+		rc = dsi_panel_wled_register(panel, bl);
 		break;
 	case DSI_BACKLIGHT_DCS:
 		break;
@@ -3463,10 +3421,6 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		DSI_DEBUG("failed to parse esd config, rc=%d\n", rc);
 
-	rc = dsi_panel_parse_mi_config(panel, of_node);
-	if (rc)
-		DSI_DEBUG("failed to parse mi config, rc=%d\n", rc);
-
 	panel->power_mode = SDE_MODE_DPMS_OFF;
 	drm_panel_init(&panel->drm_panel);
 	panel->drm_panel.dev = &panel->mipi_device.dev;
@@ -3493,8 +3447,6 @@ void dsi_panel_put(struct dsi_panel *panel)
 	/* free resources allocated for ESD check */
 	dsi_panel_esd_config_deinit(&panel->esd_config);
 
-	wakeup_source_remove(panel->mi_cfg.aod_wakelock);
-	wakeup_source_destroy(panel->mi_cfg.aod_wakelock);
 
 	kfree(panel);
 }
