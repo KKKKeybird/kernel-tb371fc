@@ -389,22 +389,6 @@ struct sde_connector_dyn_hdr_metadata {
 	bool dynamic_hdr_update;
 };
 
-enum mi_dimlayer_type {
-	MI_DIMLAYER_NULL = 0x0,
-	MI_DIMLAYER_FOD_HBM_OVERLAY = 0x1,
-	MI_DIMLAYER_FOD_ICON = 0x2,
-	MI_DIMLAYER_AOD = 0x4,
-	MI_LAYER_FOD_ANIM = 0x8,
-	MI_FOD_UNLOCK_SUCCESS = 0x10,
-	MI_DIMLAYER_MAX,
-};
-
-struct mi_dimlayer_state
-{
-	enum mi_dimlayer_type mi_dimlayer_type;
-	uint32_t current_backlight;
-};
-
 /**
  * struct sde_connector - local sde connector structure
  * @base: Base drm connector structure
@@ -503,7 +487,6 @@ struct sde_connector {
 	bool last_cmd_tx_sts;
 	bool hdr_capable;
 
-	struct mi_dimlayer_state mi_dimlayer_state;
 	u32 fod_frame_count;
 };
 

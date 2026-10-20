@@ -417,17 +417,6 @@ typedef struct sde_crtc_mi_layer
 } sde_crtc_mi_layer;
 
 /**
- * sde_crtc_mi_state - mi crtc state
- * @mi_dim_layer: dim layer added by Mi
- */
-struct sde_crtc_mi_state {
-	struct sde_hw_dim_layer *mi_dim_layer;
-	struct sde_crtc_mi_layer mi_layer;
-	uint32_t dimlayer_backlight_stash;
-	uint8_t  dimlayer_alpha_stash;
-};
-
-/**
  * struct sde_crtc_state - sde container for atomic crtc state
  * @base: Base drm crtc state structure
  * @connectors    : Currently associated drm connectors
@@ -485,7 +474,6 @@ struct sde_crtc_state {
 
 	struct sde_core_perf_params new_perf;
     /* Mi crtc state */
-	struct sde_crtc_mi_state mi_state;
 	uint32_t num_dim_layers_bank;
   
 	int secure_session;
