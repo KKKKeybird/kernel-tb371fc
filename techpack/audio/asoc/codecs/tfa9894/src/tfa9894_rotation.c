@@ -59,7 +59,7 @@ int tfa9894_get_target_chan_sel(int sel, int dev_idx, int *spks, int *dcs)
 {
 	if ((sel < TFA9894_CHAN_SEL_MIN) || (sel > TFA9894_CHAN_SEL_MAX) ||
 	    (dev_idx < 0) || (dev_idx > 3))
-		return -EINVAL;
+		return 2;
 
 	*spks = tfa9894_chan_sel_map[sel][dev_idx][0];
 	*dcs = tfa9894_chan_sel_map[sel][dev_idx][1];
