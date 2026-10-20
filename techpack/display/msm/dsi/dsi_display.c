@@ -238,24 +238,7 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 		goto error;
 	}
 
-		/* TB371FC: prevent SF hang if panel backlight path blocks. If
-	 * panel is not ready (bl_enable false or not initialized), skip
-	 * actual write and just record the level to avoid SF hang.
-	 */
-	/* TB371FC p97: mi_cfg.bl_enable stays false from parse on this panel
-	 * (mi,feature-enabled DT prop absent) and only flips true after the
-	 * first LP1 exit (p89), so a fresh boot swallowed every brightness
-	 * write here and froze the slider. Hang protection only needs the
-	 * panel-initialized check. */
-	if (!dsi_panel_initialized(panel)) {
-		panel->bl_config.bl_level = (u32)bl_temp;
-		DSI_DEBUG("skip backlight write: panel not ready, lvl=%u",
-			(u32)bl_temp);
-		rc = 0;
-		goto error;
-	}
-
-rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
+	rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
 	if (rc)
 		DSI_ERR("unable to set backlight\n");
 
