@@ -179,7 +179,7 @@ struct dsi_read_config {
 	bool is_read;
 	struct dsi_panel_cmd_set read_cmd;
 	u32 cmds_rlen;
-	u8 rbuf[256];
+	u8 rbuf[64];
 };
 
 struct dsi_panel {
