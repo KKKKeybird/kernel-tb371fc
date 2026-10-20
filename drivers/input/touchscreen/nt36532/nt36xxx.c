@@ -2388,13 +2388,25 @@ static ssize_t nvt_edge_reject_store(struct file *file, const char __user *buf,
 {
 	u8 value;
 
-	if (kstrtou8_from_user(buf, count, 10, &value))
+	if (kstrtou8_from_user(buf, count, 16, &value))
 		return -EINVAL;
 	nvt_ts->edge_reject = value;
 	/* D62: stock nvt_edge_reject_store @0x8ae1328: value <= 3 ->
-	 * nvt_cmd_store(jump-table byte 0xba/0xbb/0xbc/0xbd), 2-byte frame. */
-	if (value < 4)
-		nvt_cmd_store((0xbcbdbbba >> (value * 8)) & 0xff);
+	 * nvt_cmd_store(jump-table byte 0xba/0xbb/0xbd/0xbc), 2-byte frame. */
+	switch (value) {
+	case 0:
+		nvt_cmd_store(0xba);
+		break;
+	case 1:
+		nvt_cmd_store(0xbb);
+		break;
+	case 2:
+		nvt_cmd_store(0xbd);
+		break;
+	case 3:
+		nvt_cmd_store(0xbc);
+		break;
+	}
 	return count;
 }
 
@@ -2423,7 +2435,7 @@ static ssize_t nvt_game_mode_store(struct file *file, const char __user *buf,
 {
 	u8 value;
 
-	if (kstrtou8_from_user(buf, count, 10, &value))
+	if (kstrtou8_from_user(buf, count, 16, &value))
 		return -EINVAL;
 	nvt_ts->game_mode = value;
 	if (value == 0)
