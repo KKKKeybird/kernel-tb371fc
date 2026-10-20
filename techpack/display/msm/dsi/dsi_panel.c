@@ -513,22 +513,6 @@ static int dsi_panel_wled_register_b(struct dsi_panel *panel,
 
 
 
-bool dc_skip_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
-{
-	struct dsi_panel_mi_cfg *mi_cfg = &panel->mi_cfg;
-/* 1. dc enable is 1;
- * 2. bl lvl should less than dc theshold;
- * 3. bl lvl not 0, we should not skip set 0;
- * 4. dc type is 1 means need backlight control here, 0 means IC can switch automatically.
- * When meet all the 4 conditions at the same time, skip set this bl.
- */
-	if (mi_cfg->dc_enable && bl_lvl < mi_cfg->dc_threshold && bl_lvl != 0 && mi_cfg->dc_type) {
-		return true;
-	} else {
-		return false;
-	}
-}
-
 static u32 dsi_panel_get_backlight(struct dsi_panel *panel)
 {
 	return panel->bl_config.bl_level;

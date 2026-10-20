@@ -29,7 +29,6 @@ extern bool nvt_gesture_flag;
 extern int lcd_bl_set_led_brightness(int value);
 extern void lcd_bl_set_reg(void);
 extern int lcd_set_bias(bool enable);
-extern bool dc_skip_set_backlight(struct dsi_panel *panel, u32 bl_lvl);
 
 
 static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
@@ -504,7 +503,6 @@ error:
 int dsi_panel_update_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	struct mipi_dsi_device *dsi;
-	struct dsi_panel_mi_cfg *mi_cfg;
 	int rc = 0;
 
 	if (!panel || bl_lvl > 0xffff) {
@@ -513,41 +511,37 @@ int dsi_panel_update_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	}
 
 	dsi = &panel->mipi_device;
-	mi_cfg = &panel->mi_cfg;
 
 	if (panel->bl_config.bl_inverted_dbv)
 		bl_lvl = ((bl_lvl & 0xff) << 8) | (bl_lvl >> 8);
 
-	if (panel->bl_config.bl_dcs_subtype == 0xc2)
+	if (panel->bl_config.bl_dcs_subtype == 0xc2) {
+		u8 dbv[8];
+		u8 msb = bl_lvl >> 8;
+		u8 lsb = bl_lvl & 0xff;
+
+		dbv[0] = msb;
+		dbv[1] = lsb;
+		dbv[2] = msb;
+		dbv[3] = lsb;
+		dbv[4] = msb;
+		dbv[5] = lsb;
+		dbv[6] = msb;
+		dbv[7] = lsb;
+		rc = mipi_dsi_dcs_write(dsi, 0xc2, dbv, sizeof(dbv));
+	} else {
 		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
-	else
-		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
+	}
 
 	if (rc < 0)
 		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
 
-	if (mi_cfg->local_hbm_enabled) {
-		if (bl_lvl > 2047 && mi_cfg->dim_fp_dbv_max_in_hbm_flag == false) {
-			dsi_panel_tx_cmd_set(panel,
-				DSI_CMD_SET_MI_DIM_FP_DBV_MAX_IN_HBM);
-			mi_cfg->dim_fp_dbv_max_in_hbm_flag = true;
-		} else if (bl_lvl <= 2047 &&
-			   mi_cfg->dim_fp_dbv_max_in_hbm_flag == true) {
-			dsi_panel_tx_cmd_set(panel,
-				DSI_CMD_SET_MI_DIM_FP_DBV_MAX_IN_NORMAL);
-			mi_cfg->dim_fp_dbv_max_in_hbm_flag = false;
-		}
-		if (panel->mi_cfg.local_hbm_cur_status)
-			mi_dsi_panel_set_fod_brightness(dsi, bl_lvl);
-	}
 	return rc;
 }
 
 int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	struct dsi_backlight_config *bl = &panel->bl_config;
-	struct dsi_backlight_config *bl_slaver = &panel->bl_slaver_config;
-	struct dsi_panel_mi_cfg *mi_cfg = &panel->mi_cfg;
 	int rc = 0;
 
 	if (panel->host_config.ext_bridge_mode)
@@ -555,53 +549,15 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 
 	DSI_DEBUG("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
 
-	if (mi_cfg->dc_type == 2 && mi_cfg->last_bl_level != bl_lvl) {
-		mi_cfg->last_bl_level = bl_lvl;
-		if (bl_lvl)
-			mi_cfg->last_nonzero_bl_level = bl_lvl;
-	}
-
-	if (dc_skip_set_backlight(panel, bl_lvl))
-		return rc;
-
-	if (0 == bl_lvl && (panel->host_config.phy_type == DSI_PHY_TYPE_CPHY ||
-			     panel->mi_cfg.panel_id == 0x4C38314100420400)) {
-		dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_INSERT_BLACK);
-		usleep_range(6 * 1000, 6 * 1000 + 10);
-	}
-
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
-		if (panel->mi_cfg.panel_id == 0x4C38314100420400) {
-			rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
-			rc = backlight_device_set_brightness(bl_slaver->raw_bd, bl_lvl);
-		} else {
-			rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
-		}
+		rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
 		break;
 	case DSI_BACKLIGHT_DCS:
-		if (mi_cfg->fod_backlight_flag) {
-			DSI_INFO("fod_backlight_flag set, skip set backlight %d\n", bl_lvl);
-		} else if (mi_cfg->hbm_51_ctrl_flag &&
-			   (mi_cfg->fod_hbm_enabled ||
-			    (mi_cfg->thermal_hbm_disabled && bl_lvl > 2047 &&
-			     mi_cfg->last_bl_level > 0) ||
-			    (mi_cfg->hbm_enabled && !mi_cfg->hbm_brightness &&
-			     !mi_cfg->thermal_hbm_disabled))) {
-			DSI_INFO("fod_hbm_enabled(%d), hbm_enabled(%d), thermal_hbm_disabled(%d), skip set backlight %d\n",
-				mi_cfg->fod_hbm_enabled, mi_cfg->hbm_enabled,
-				mi_cfg->thermal_hbm_disabled, bl_lvl);
-		} else if (mi_cfg->thermal_hbm_disabled && bl_lvl > 2047 &&
-			   mi_cfg->last_bl_level == 0) {
-			rc = dsi_panel_update_backlight(panel, 2047);
-		} else {
-			rc = dsi_panel_update_backlight(panel, bl_lvl);
-		}
+		rc = dsi_panel_update_backlight(panel, bl_lvl);
 		break;
 	case DSI_BACKLIGHT_EXTERNAL:
 		rc = lcd_bl_set_led_brightness((int)bl_lvl);
-		if (rc)
-			DSI_ERR("lcd_bl_set_led_brightness failed, rc=%d\n", rc);
 		break;
 	case DSI_BACKLIGHT_PWM:
 		rc = dsi_panel_update_pwm_backlight(panel, bl_lvl);
@@ -611,28 +567,5 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		rc = -ENOTSUPP;
 	}
 
-	if ((mi_cfg->last_bl_level == 0 ||
-	     mi_cfg->dimming_state == STATE_DIM_RESTORE) && bl_lvl) {
-		if (mi_cfg->panel_on_dimming_delay)
-			schedule_delayed_work(&mi_cfg->dimming_enable_delayed_work,
-				msecs_to_jiffies(mi_cfg->panel_on_dimming_delay));
-		if (mi_cfg->dimming_state == STATE_DIM_RESTORE)
-			mi_cfg->dimming_state = STATE_NONE;
-	}
-
-	if (mi_cfg->last_bl_level == 0 && bl_lvl &&
-	    (panel->host_config.phy_type == DSI_PHY_TYPE_CPHY ||
-	     panel->mi_cfg.panel_id == 0x4C38314100420400))
-		dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISABLE_INSERT_BLACK);
-
-	if (bl_lvl > 0 && mi_cfg->last_bl_level == 0 && mi_cfg->dc_type)
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_CRC_OFF);
-
-	if (bl_lvl == 0 && mi_cfg->dc_type)
-		mi_cfg->dc_enable = false;
-
-	mi_cfg->last_bl_level = bl_lvl;
-	if (bl_lvl)
-		mi_cfg->last_nonzero_bl_level = bl_lvl;
 	return rc;
 }

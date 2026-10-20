@@ -228,8 +228,6 @@ struct dsi_panel_mi_cfg {
 	u32 update_hbm_fod_off_index;
 
 	u32 dimming_state;
-	u32 panel_on_dimming_delay;
-	struct delayed_work dimming_enable_delayed_work;
 
 	struct delayed_work enter_aod_delayed_work;
 
@@ -369,7 +367,5 @@ int dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,
 				struct dsi_display_mode *adj_mode);
 
 int dsi_panel_lockdowninfo_param_read(struct dsi_panel *panel);
-
-int mi_dsi_panel_set_fod_brightness(struct mipi_dsi_device *dsi, u16 brightness);
 
 #endif /* _DSI_PANEL_MI_H_ */

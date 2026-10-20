@@ -36,21 +36,6 @@
 static struct dsi_read_config g_dsi_read_cfg;
 struct dsi_panel *g_panel;
 
-static void panelon_dimming_enable_delayed_work(struct work_struct *work)
-{
-	struct dsi_panel_mi_cfg *mi_cfg = container_of(work,
-				struct dsi_panel_mi_cfg, dimming_enable_delayed_work.work);
-	struct dsi_panel *dsi_panel = mi_cfg->dsi_panel;
-
-	if (dsi_panel && !mi_cfg->hbm_enabled)
-		dsi_panel_set_disp_param(dsi_panel, DISPPARAM_DIMMING);
-        else {
-		DSI_INFO("hbm_enabled(%d), delay of dimming on\n", mi_cfg->hbm_enabled);
-		schedule_delayed_work(&mi_cfg->dimming_enable_delayed_work,
-			msecs_to_jiffies(mi_cfg->panel_on_dimming_delay));
-	}
-}
-
 static void panelon_cabc_delayed_work(struct work_struct *work)
 {
 	struct dsi_panel_mi_cfg *mi_cfg = container_of(work,
@@ -567,18 +552,6 @@ skip_dimlayer_parse:
 	} else {
 		pr_info("panel disp_rate gpio not specified\n");
 	}
-
-	rc = utils->read_u32(of_node,
-		"mi,mdss-panel-on-dimming-delay", &mi_cfg->panel_on_dimming_delay);
-	if (rc) {
-		mi_cfg->panel_on_dimming_delay = 0;
-		pr_info("panel on dimming delay disabled\n");
-	} else {
-		pr_info("panel on dimming delay %d ms\n", mi_cfg->panel_on_dimming_delay);
-	}
-
-	if (mi_cfg->panel_on_dimming_delay)
-		INIT_DELAYED_WORK(&mi_cfg->dimming_enable_delayed_work, panelon_dimming_enable_delayed_work);
 
 	if (panel->host_config.phy_type == DSI_PHY_TYPE_CPHY)
 		INIT_DELAYED_WORK(&mi_cfg->cabc_delayed_work, panelon_cabc_delayed_work);
@@ -1583,19 +1556,6 @@ void dsi_panel_doubleclick_enable(bool on)
 	g_panel->mi_cfg.tddi_doubleclick_flag = on;
 }
 EXPORT_SYMBOL(dsi_panel_doubleclick_enable);
-
-int mi_dsi_panel_set_fod_brightness(struct mipi_dsi_device *dsi, u16 brightness)
-{
-	u8 payload[2] = {(fpr_alpha_set[brightness] >> 8) & 0x0f, fpr_alpha_set[brightness] & 0xff};
-	ssize_t err;
-
-	err = mipi_dsi_dcs_write(dsi, 0x87,
-				 payload, sizeof(payload));
-	if (err < 0)
-		return err;
-
-	return 0;
-}
 
 static int mi_dsi_update_lhbm_cmd_87reg(struct dsi_panel *panel,
 			enum dsi_cmd_set_type type, int bl_lvl)
