@@ -345,31 +345,48 @@ int nvt_set_page(u32 addr)
 int nvt_write_addr(u32 addr, u8 value)
 {
 	u8 buf[2] = { addr & 0x7f, value };
+	int ret;
 
-	nvt_set_page(addr);
+	ret = nvt_set_page(addr);
+	if (ret)
+		return ret;
+
 	return CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
 }
 
-int nvt_read_reg(u32 addr, u8 *value)
+int nvt_read_reg(u64 addr_mask, u8 *value)
 {
-	u8 buf[2];
-	int retry;
+	u32 addr = (u32)addr_mask;
+	u32 mask = addr_mask >> 32;
+	u8 buf[2] = { addr & 0x7f, 0 };
+	u8 page[3] = { 0xff, addr >> 15, addr >> 7 };
+	int shift = 0;
+	int ret;
 
-	/*
-	 * REVERT-D112: E2 proved that the single-read form breaks the boot
-	 * firmware auto-copy handshake (buf[1]=0x69, CRC results all zero).
-	 * Keep the ready-bit retry protocol; it is required by this device.
-	 */
-	nvt_set_page(addr);
-	for (retry = 0; retry < 8; retry++) {
-		buf[0] = addr & 0x7f;
-		if (CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf)))
-			return -EIO;
-		*value = buf[1];
-		if (buf[0] & 0x80)
-			return 0;
+	if (!(mask & 1)) {
+		int i;
+
+		for (i = 0; i < 8; i++) {
+			if ((mask >> i) & 0x2) {
+				shift = i + 1;
+				break;
+			}
+		}
+		if (i == 8) {
+			pr_err("NVT-ts: invalid read mask=0x%08x\n", mask);
+			shift = 8;
+		}
 	}
-	return -EBUSY;
+
+	CTP_SPI_WRITE(nvt_ts->client, page, sizeof(page));
+	ret = CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf));
+	if (ret < 0) {
+		pr_err("NVT-ts: read reg 0x%06x failed, ret=%d\n", addr, ret);
+		return ret;
+	}
+
+	*value = (buf[1] & mask) >> shift;
+	return ret;
 }
 
 int nvt_get_fw_info(void)
@@ -3733,8 +3750,9 @@ static int nvt_ts_probe(struct spi_device *client)
 			    mmap_ptr[27] != 0) {
 				u8 casc = 0;
 
-				ret = nvt_read_reg(mmap_ptr[27], &casc);
-				if (ret == 0 && (casc & mmap_ptr[28])) {
+				ret = nvt_read_reg(((u64)mmap_ptr[28] << 32) |
+						   mmap_ptr[27], &casc);
+				if (ret == 0 && casc) {
 					pr_info("NVT-ts: nvt_ts_check_chip_ver_trim: Single Chip\n");
 					ts->mmap = mmap_ptr;
 				} else {
