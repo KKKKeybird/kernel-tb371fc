@@ -224,10 +224,6 @@ struct dsi_panel_mi_cfg {
 
 	u32 dimming_state;
 
-	struct delayed_work enter_aod_delayed_work;
-
-	struct delayed_work cabc_delayed_work;
-
 	bool hbm_enabled;
 	bool thermal_hbm_disabled;
 	bool fod_hbm_enabled;
@@ -342,15 +338,6 @@ int dsi_panel_read_cmd_set(struct dsi_panel *panel,
 int dsi_panel_write_mipi_reg(struct dsi_panel *panel, char *buf, size_t count);
 
 ssize_t dsi_panel_read_mipi_reg(struct dsi_panel *panel, char *buf);
-
-bool dsi_panel_is_need_tx_cmd(u32 param);
-
-int dsi_panel_set_disp_param(struct dsi_panel *panel, u32 param);
-
-int mi_dsi_panel_update_lhbm_white_param(struct dsi_panel *panel, int fod_lhbm_white_state, int cmd_index);
-
-int dsi_panel_set_doze_brightness(struct dsi_panel *panel,
-				int doze_brightness, bool need_panel_lock);
 
 int dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,
 				struct dsi_display_mode *adj_mode);
