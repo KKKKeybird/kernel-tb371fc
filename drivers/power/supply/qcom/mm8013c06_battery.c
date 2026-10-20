@@ -83,6 +83,8 @@ static char battery_manufacturer[HQ_BATTERY_UNKNOW + 1][BATTERY_STRING_MAX] = {
 struct mm8013_chip {
     struct i2c_client *client;
     struct power_supply *mm8013_psy;
+    struct delayed_work soc_updata_work;
+    int soc_updata_last;
 /*Linden code for JLINDEN-11308 by huyh10 at 20230711 start*/
     struct mutex suspend_lock;
     bool suspended;
@@ -857,6 +859,37 @@ static const struct of_device_id match_table[] = {
 	{ },
 };
 
+static void mm8013_soc_updata_work(struct work_struct *work)
+{
+    struct mm8013_chip *chip = container_of(work, struct mm8013_chip,
+                                            soc_updata_work.work);
+    union power_supply_propval val = { 0 };
+    int ret;
+
+    if (!chip)
+        return;
+
+    if (!chip->mm8013_psy) {
+        pr_err("mm8013 soc work: power supply is not ready\n");
+        goto requeue;
+    }
+
+    ret = power_supply_get_property(chip->mm8013_psy,
+                                    POWER_SUPPLY_PROP_CAPACITY, &val);
+    if (ret < 0) {
+        pr_err("mm8013 soc work: get capacity failed: %d\n", ret);
+        goto requeue;
+    }
+
+    if (val.intval != chip->soc_updata_last) {
+        power_supply_changed(chip->mm8013_psy);
+        chip->soc_updata_last = val.intval;
+    }
+
+requeue:
+    queue_delayed_work(system_wq, &chip->soc_updata_work, 2500);
+}
+
 static int mm8013_probe(struct i2c_client *client,
                  const struct i2c_device_id *id)
 {
@@ -877,6 +910,7 @@ static int mm8013_probe(struct i2c_client *client,
     if (!chip)
         return -ENOMEM;
     chip->client = client;
+    chip->soc_updata_last = -1;
 
 /*Linden code for JLINDEN-11308 by huyh10 at 20230711 start*/
     chip->bat_soc = MM8013_DEFAULT_SOC;
@@ -923,6 +957,9 @@ static int mm8013_probe(struct i2c_client *client,
         return ret;
     }
 
+    INIT_DELAYED_WORK(&chip->soc_updata_work, mm8013_soc_updata_work);
+    queue_delayed_work(system_wq, &chip->soc_updata_work, 2500);
+
     pr_err("mm8013_probe success!\n");
 
     return 0;
@@ -932,6 +969,7 @@ static int mm8013_remove(struct i2c_client *client)
 {
     chip = i2c_get_clientdata(client);
 
+    cancel_delayed_work_sync(&chip->soc_updata_work);
     power_supply_unregister(chip->mm8013_psy);
     i2c_set_clientdata(client, NULL);
     kfree(chip);
