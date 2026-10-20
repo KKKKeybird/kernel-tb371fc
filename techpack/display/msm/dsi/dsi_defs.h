@@ -620,8 +620,6 @@ struct dsi_host_common_cfg {
 	u32 byte_intf_clk_div;
 	u32 clk_strength;
 	bool cphy_strength;
-	u32 dma_sched_line;
-	u32 dma_sched_window;
 };
 
 /**
