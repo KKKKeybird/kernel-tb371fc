@@ -7792,22 +7792,6 @@ int dsi_display_enable(struct dsi_display *display)
 			goto error;
 		}
 
-		if ((display->panel->mi_cfg.panel_id >> 8) == 0x4A3153004202) {
-
-			rc = dsi_panel_dc_switch(display->panel);
-			if (rc) {
-				DSI_ERR("[%s] failed to set dc command, rc=%d\n",
-					display->name, rc);
-				goto error;
-			}
-		}
-
-		rc = dsi_panel_switch_disp_rate_gpio(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to set disp_rate gpio, rc=%d\n",
-				   display->name, rc);
-			goto error;
-		}
 		goto error;
 	}
 

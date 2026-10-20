@@ -357,9 +357,6 @@ int dsi_panel_set_disp_param(struct dsi_panel *panel, u32 param);
 
 int mi_dsi_panel_update_lhbm_white_param(struct dsi_panel *panel, int fod_lhbm_white_state, int cmd_index);
 
-int dsi_panel_switch_disp_rate_gpio(struct dsi_panel *panel);
-
-
 int dsi_panel_set_doze_brightness(struct dsi_panel *panel,
 				int doze_brightness, bool need_panel_lock);
 

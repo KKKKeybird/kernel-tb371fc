@@ -4438,37 +4438,3 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 	return rc;
 }
 
-int dsi_panel_dc_switch(struct dsi_panel *panel)
-{
-	int rc = 0;
-
-	if (!panel) {
-		DSI_ERR("Invalid params\n");
-		return -EINVAL;
-	}
-
-	mutex_lock(&panel->panel_lock);
-
-	if (panel->mi_cfg.dc_enable) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_DC_ON);
-		if (rc)
-			DSI_ERR("[%s] failed to send DSI_CMD_SET_MI_DC_ON cmd, rc=%d\n",
-					panel->name, rc);
-	} else {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_DC_OFF);
-		if (rc)
-			DSI_ERR("[%s] failed to send DSI_CMD_SET_MI_DC_OFF cmd, rc=%d\n",
-				panel->name, rc);
-	}
-	pr_debug("[%s] tx dc success, dc status %d",
-		panel->name, panel->mi_cfg.dc_enable);
-
-	mutex_unlock(&panel->panel_lock);
-	return rc;
-}
-
-
-
-
-
-

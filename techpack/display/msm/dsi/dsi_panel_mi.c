@@ -924,29 +924,6 @@ error:
 	return retval;
 }
 
-int dsi_panel_switch_disp_rate_gpio(struct dsi_panel *panel)
-{
-	struct dsi_panel_mi_cfg *mi_cfg;
-	struct dsi_display_mode *mode;
-
-	if (!panel || !panel->cur_mode)
-		return -EINVAL;
-
-	mi_cfg = &panel->mi_cfg;
-	mode = panel->cur_mode;
-
-	if (gpio_is_valid(mi_cfg->disp_rate_gpio)) {
-		if (60 == mode->timing.refresh_rate) {
-			gpio_set_value(mi_cfg->disp_rate_gpio, 1);
-		} else if (90 == mode->timing.refresh_rate) {
-			gpio_set_value(mi_cfg->disp_rate_gpio, 1);
-		} else {
-			pr_info("disp_rate gpio not change\n");
-		}
-	}
-	return 0;
-}
-
 int dsi_panel_write_cmd_set(struct dsi_panel *panel,
 				struct dsi_panel_cmd_set *cmd_sets)
 {
