@@ -2208,14 +2208,6 @@ static void sde_crtc_frame_event_cb(void *data, u32 event)
 	kthread_queue_work(&priv->event_thread[crtc_id].worker, &fevent->work);
 }
 
-static void _sde_crtc_mi_update_state(struct sde_crtc_state *cstate, enum mi_dimlayer_type dimlayer_state)
-{
-	int i = 0;
-
-	for (i = 0; i < cstate->num_connectors; i++)
-		sde_connector_mi_update_dimlayer_state(cstate->connectors[i], dimlayer_state);
-}
-
 void sde_crtc_prepare_commit(struct drm_crtc *crtc,
 		struct drm_crtc_state *old_state)
 {
@@ -3608,7 +3600,6 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 	unsigned long flags;
 	enum sde_crtc_idle_pc_state idle_pc_state;
 	struct sde_encoder_kickoff_params params = { 0 };
-	uint32_t fod_sync_info;
 
 	if (!crtc) {
 		SDE_ERROR("invalid argument\n");
@@ -3637,9 +3628,6 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 	SDE_ATRACE_BEGIN("crtc_commit");
 
 	idle_pc_state = sde_crtc_get_property(cstate, CRTC_PROP_IDLE_PC_STATE);
-
-	fod_sync_info = sde_crtc_get_mi_fod_sync_info(cstate);
-	_sde_crtc_mi_update_state(cstate, fod_sync_info);
 
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
 		if (encoder->crtc != crtc)

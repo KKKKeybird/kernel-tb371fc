@@ -122,7 +122,6 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		rc = c_conn->ops.set_backlight(&c_conn->base,
 				c_conn->display, bl_lvl);
 		c_conn->unset_bl_level = 0;
-		c_conn->mi_dimlayer_state.current_backlight = bl_lvl;
 	}
 
 	return rc;
@@ -2832,10 +2831,3 @@ int sde_connector_event_notify(struct drm_connector *connector, uint32_t type,
 }
 
 #define to_dsi_bridge(x)     container_of((x), struct dsi_bridge, base)
-
-void sde_connector_mi_update_dimlayer_state(struct drm_connector *connector,
-	enum mi_dimlayer_type mi_dimlayer_type)
-{
-	struct sde_connector *c_conn = to_sde_connector(connector);
-	c_conn->mi_dimlayer_state.mi_dimlayer_type = mi_dimlayer_type;
-}
