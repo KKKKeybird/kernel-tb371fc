@@ -5,6 +5,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
@@ -30,6 +31,7 @@
 #define MAX_TOPOLOGY 5
 
 #define DSI_PANEL_DEFAULT_LABEL  "Default dsi panel"
+#define to_dsi_display(x) container_of(x, struct dsi_display, host)
 
 #define DEFAULT_PANEL_JITTER_NUMERATOR		2
 #define DEFAULT_PANEL_JITTER_DENOMINATOR	1
@@ -4275,3 +4277,938 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 	return rc;
 }
 
+/* TASK-084 D164: stock panel lifecycle/backlight operations. */
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+extern bool nvt_gesture_flag;
+#endif
+
+extern int lcd_bl_set_led_brightness(int value);
+extern void lcd_bl_set_reg(void);
+extern int lcd_set_bias(bool enable);
+
+
+static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
+{
+	struct pinctrl_state *state;
+	int rc;
+
+	if (panel->host_config.ext_bridge_mode)
+		return 0;
+
+	state = enable ? panel->pinctrl.active : panel->pinctrl.suspend;
+	rc = pinctrl_select_state(panel->pinctrl.pinctrl, state);
+	if (rc)
+		DSI_ERR("[%s] failed to set pin state, rc=%d\n", panel->name, rc);
+
+	return rc;
+}
+
+static int dsi_panel_power_on(struct dsi_panel *panel)
+{
+	struct dsi_panel_reset_config *r_config = &panel->reset_config;
+	struct gpio_desc *desc;
+	int rc;
+	int i;
+
+	DSI_WARN("lcm dsi_panel_power_on start\n");
+
+	rc = dsi_pwr_enable_regulator(&panel->power_info, true);
+	if (rc) {
+		DSI_ERR("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
+		return rc;
+	}
+
+	rc = dsi_panel_set_pinctrl_state(panel, true);
+	if (rc) {
+		DSI_ERR("[%s] failed to set pinctrl, rc=%d\n", panel->name, rc);
+		goto error_disable_vregs;
+	}
+
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	if (!nvt_gesture_flag)
+#endif
+		lcd_set_bias(true);
+	lcd_bl_set_reg();
+	usleep_range(10000, 10010);
+
+	if (gpio_is_valid(r_config->disp_en_gpio)) {
+		rc = gpiod_direction_output_raw(gpio_to_desc(
+						r_config->disp_en_gpio), 1);
+		if (rc) {
+			DSI_ERR("unable to set dir for disp gpio rc=%d\n", rc);
+			goto error_disable_gpio;
+		}
+	}
+
+	if (r_config->count) {
+		rc = gpiod_direction_output_raw(gpio_to_desc(
+						r_config->reset_gpio),
+						r_config->sequence[0].level);
+		if (rc) {
+			DSI_ERR("unable to set dir for rst gpio rc=%d\n", rc);
+			goto error_disable_gpio;
+		}
+	}
+
+	for (i = 0; i < r_config->count; i++) {
+		desc = gpio_to_desc(r_config->reset_gpio);
+		gpiod_set_raw_value(desc, r_config->sequence[i].level);
+		if (r_config->sequence[i].sleep_ms)
+			usleep_range(r_config->sequence[i].sleep_ms * 1000,
+				     r_config->sequence[i].sleep_ms * 1000 + 100);
+	}
+
+	if (gpio_is_valid(panel->bl_config.en_gpio)) {
+		rc = gpiod_direction_output_raw(gpio_to_desc(
+						panel->bl_config.en_gpio), 1);
+		if (rc)
+			DSI_ERR("unable to set dir for bklt gpio rc=%d\n", rc);
+	}
+
+	if (gpio_is_valid(r_config->lcd_mode_sel_gpio)) {
+		bool out;
+
+		if (r_config->mode_sel_state == MODE_SEL_DUAL_PORT ||
+		    r_config->mode_sel_state == MODE_GPIO_LOW)
+			out = false;
+		else
+			out = true;
+
+		rc = gpiod_direction_output_raw(gpio_to_desc(
+						r_config->lcd_mode_sel_gpio),
+						out);
+		if (rc)
+			DSI_ERR("unable to set dir for mode gpio rc=%d\n", rc);
+	}
+
+	if (gpio_is_valid(panel->panel_test_gpio)) {
+		rc = gpiod_direction_input(gpio_to_desc(panel->panel_test_gpio));
+		if (rc)
+			DSI_WARN("unable to set dir for panel test gpio rc=%d\n", rc);
+	}
+
+	if (rc)
+		goto error_disable_gpio;
+
+	return 0;
+
+error_disable_gpio:
+	if (gpio_is_valid(r_config->disp_en_gpio))
+		gpiod_set_raw_value(gpio_to_desc(r_config->disp_en_gpio), 0);
+
+	if (gpio_is_valid(panel->bl_config.en_gpio))
+		gpiod_set_raw_value(gpio_to_desc(panel->bl_config.en_gpio), 0);
+
+	(void)dsi_panel_set_pinctrl_state(panel, false);
+
+error_disable_vregs:
+	(void)dsi_pwr_enable_regulator(&panel->power_info, false);
+	return rc;
+}
+
+static int dsi_panel_power_off(struct dsi_panel *panel)
+{
+	struct dsi_panel_reset_config *r_config = &panel->reset_config;
+	int rc = 0;
+
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	if (!nvt_gesture_flag) {
+#endif
+		if (gpio_is_valid(r_config->disp_en_gpio))
+			gpiod_set_raw_value(gpio_to_desc(r_config->disp_en_gpio), 0);
+
+		if (gpio_is_valid(r_config->reset_gpio) &&
+		    !panel->reset_gpio_always_on)
+			gpiod_set_raw_value(gpio_to_desc(r_config->reset_gpio), 0);
+
+		if (gpio_is_valid(r_config->lcd_mode_sel_gpio))
+			gpiod_set_raw_value(gpio_to_desc(r_config->lcd_mode_sel_gpio), 0);
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	}
+#endif
+
+	if (gpio_is_valid(panel->panel_test_gpio)) {
+		rc = gpiod_direction_input(gpio_to_desc(panel->panel_test_gpio));
+		if (rc)
+			DSI_WARN("set dir for panel test gpio failed rc=%d\n", rc);
+	}
+
+#ifdef CONFIG_BACKLIGHT_KTZ8866A
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	if (!nvt_gesture_flag)
+#endif
+		lcd_set_bias(false);
+#endif
+
+	usleep_range(100000, 101000);
+
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	if (!nvt_gesture_flag && !panel->host_config.ext_bridge_mode)
+#else
+	if (!panel->host_config.ext_bridge_mode)
+#endif
+	{
+		rc = pinctrl_select_state(panel->pinctrl.pinctrl,
+					  panel->pinctrl.suspend);
+		if (rc)
+			DSI_ERR("[%s] failed set pinctrl state, rc=%d\n",
+				panel->name, rc);
+	}
+
+	rc = dsi_pwr_enable_regulator(&panel->power_info, false);
+	if (rc)
+		DSI_ERR("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
+
+	return rc;
+}
+
+int dsi_panel_pre_prepare(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel->lp11_init) {
+		rc = dsi_panel_power_on(panel);
+		if (rc)
+			DSI_ERR("[%s] panel power on failed, rc=%d\n",
+				panel->name, rc);
+	}
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_prepare(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	if (panel->lp11_init) {
+		rc = dsi_panel_power_on(panel);
+		if (rc) {
+			DSI_ERR("[%s] panel power on failed, rc=%d\n",
+				panel->name, rc);
+			mutex_unlock(&panel->panel_lock);
+			return rc;
+		}
+	}
+
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PRE_ON);
+	if (rc)
+		DSI_ERR("[%s] failed to send DSI_CMD_SET_PRE_ON cmds, rc=%d\n",
+			panel->name, rc);
+
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_enable(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
+	if (rc)
+		DSI_ERR("[%s] failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
+			panel->name, rc);
+	else
+		panel->panel_initialized = true;
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_post_enable(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_ON);
+	if (rc)
+		DSI_ERR("[%s] failed to send DSI_CMD_SET_POST_ON cmds, rc=%d\n",
+			panel->name, rc);
+
+	if (strstr(saved_command_line, "mdss_dsi_panel_spinel_boe_nt36532_dsc_3k_video") ||
+	    strstr(saved_command_line, "mdss_dsi_panel_spinel_tianma_nt36532_dsc_3k_video")) {
+		rc = dsi_panel_match_fps_pen_setting(panel, panel->cur_mode);
+		if (rc)
+			DSI_ERR("[%s] failed to update TP fps code setting, rc=%d\n",
+				panel->name, rc);
+	}
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_pre_disable(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PRE_OFF);
+	if (rc)
+		DSI_ERR("[%s] failed to send DSI_CMD_SET_PRE_OFF cmds, rc=%d\n",
+			panel->name, rc);
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_disable(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	if (!atomic_read(&panel->esd_recovery_pending)) {
+		if (dsi_panel_is_type_oled(panel) &&
+		    (panel->power_mode == SDE_MODE_DPMS_LP1 ||
+		     panel->power_mode == SDE_MODE_DPMS_LP2))
+			dsi_pwr_panel_regulator_mode_set(&panel->power_info,
+					"ibb", REGULATOR_MODE_STANDBY);
+
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
+		if (rc) {
+			pr_warn_ratelimited("[%s] failed to send DSI_CMD_SET_OFF cmds, rc=%d\n",
+				panel->name, rc);
+			rc = 0;
+		}
+	}
+
+	panel->panel_initialized = false;
+	panel->power_mode = SDE_MODE_DPMS_OFF;
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_unprepare(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_OFF);
+	if (rc)
+		DSI_ERR("[%s] failed to send DSI_CMD_SET_POST_OFF cmds, rc=%d\n",
+			panel->name, rc);
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_post_unprepare(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_power_off(panel);
+	if (rc)
+		DSI_ERR("[%s] panel power_Off failed, rc=%d\n", panel->name, rc);
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_set_lp1(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel->panel_initialized) {
+		rc = 0;
+	} else {
+		if (dsi_panel_is_type_oled(panel) &&
+		    panel->power_mode != SDE_MODE_DPMS_LP2)
+			dsi_pwr_panel_regulator_mode_set(&panel->power_info,
+					"ibb", REGULATOR_MODE_IDLE);
+
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1);
+		if (rc)
+			DSI_ERR("[%s] failed to send DSI_CMD_SET_LP1 cmds, rc=%d\n",
+				panel->name, rc);
+	}
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_set_lp2(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel->panel_initialized) {
+		rc = 0;
+	} else {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP2);
+		if (rc)
+			DSI_ERR("[%s] failed to send DSI_CMD_SET_LP2 cmds, rc=%d\n",
+				panel->name, rc);
+	}
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_set_nolp(struct dsi_panel *panel)
+{
+	int rc;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel->panel_initialized) {
+		rc = 0;
+	} else {
+		if (dsi_panel_is_type_oled(panel) &&
+		    (panel->power_mode == SDE_MODE_DPMS_LP1 ||
+		     panel->power_mode == SDE_MODE_DPMS_LP2))
+			dsi_pwr_panel_regulator_mode_set(&panel->power_info,
+					"ibb", REGULATOR_MODE_NORMAL);
+
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+		if (rc)
+			DSI_ERR("[%s] failed to send DSI_CMD_SET_NOLP cmds, rc=%d\n",
+				panel->name, rc);
+	}
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+static int dsi_panel_update_pwm_backlight(struct dsi_panel *panel, u32 bl_lvl)
+{
+	u32 duty = 0;
+	u32 period_ns = 0;
+	struct dsi_backlight_config *bl;
+	struct pwm_state pstate;
+	int rc = 0;
+
+	if (!panel) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	bl = &panel->bl_config;
+	if (!bl->pwm_bl) {
+		DSI_ERR("pwm device not found\n");
+		return -EINVAL;
+	}
+
+	period_ns = bl->pwm_period_usecs * NSEC_PER_USEC;
+	duty = bl_lvl * period_ns;
+	duty /= bl->bl_max_level;
+
+	pwm_init_state(bl->pwm_bl, &pstate);
+	pstate.period = period_ns;
+	pstate.duty_cycle = duty;
+	rc = pwm_apply_state(bl->pwm_bl, &pstate);
+	if (rc) {
+		DSI_ERR("[%s] failed to apply pwm config, rc=%d\n",
+			panel->name, rc);
+		return rc;
+	}
+
+	if (bl_lvl == 0 && bl->pwm_enabled) {
+		pwm_init_state(bl->pwm_bl, &pstate);
+		pstate.enabled = false;
+		rc = pwm_apply_state(bl->pwm_bl, &pstate);
+		if (rc) {
+			DSI_ERR("[%s] failed to disable pwm, rc=%d\n",
+				panel->name, rc);
+			return rc;
+		}
+		bl->pwm_enabled = false;
+		return 0;
+	}
+
+	if (!bl->pwm_enabled) {
+		pwm_init_state(bl->pwm_bl, &pstate);
+		pstate.enabled = true;
+		rc = pwm_apply_state(bl->pwm_bl, &pstate);
+		if (rc) {
+			DSI_ERR("[%s] failed to enable pwm, rc=%d\n",
+				panel->name, rc);
+			return rc;
+		}
+		bl->pwm_enabled = true;
+	}
+
+	return rc;
+}
+
+int dsi_panel_update_backlight(struct dsi_panel *panel, u32 bl_lvl)
+{
+	struct mipi_dsi_device *dsi;
+	int rc = 0;
+
+	if (!panel || bl_lvl > 0xffff) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	dsi = &panel->mipi_device;
+
+	if (panel->bl_config.bl_inverted_dbv)
+		bl_lvl = ((bl_lvl & 0xff) << 8) | (bl_lvl >> 8);
+
+	if (panel->bl_config.bl_dcs_subtype == 0xc2) {
+		u8 dbv[8];
+		u8 msb = bl_lvl >> 8;
+		u8 lsb = bl_lvl & 0xff;
+
+		dbv[0] = msb;
+		dbv[1] = lsb;
+		dbv[2] = msb;
+		dbv[3] = lsb;
+		dbv[4] = msb;
+		dbv[5] = lsb;
+		dbv[6] = msb;
+		dbv[7] = lsb;
+		rc = mipi_dsi_dcs_write(dsi, 0xc2, dbv, sizeof(dbv));
+	} else {
+		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
+	}
+
+	if (rc < 0)
+		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
+
+	return rc;
+}
+
+int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
+{
+	struct dsi_backlight_config *bl = &panel->bl_config;
+	int rc = 0;
+
+	if (panel->host_config.ext_bridge_mode)
+		return 0;
+
+	DSI_DEBUG("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
+
+	switch (bl->type) {
+	case DSI_BACKLIGHT_WLED:
+		rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
+		break;
+	case DSI_BACKLIGHT_DCS:
+		rc = dsi_panel_update_backlight(panel, bl_lvl);
+		break;
+	case DSI_BACKLIGHT_EXTERNAL:
+		rc = lcd_bl_set_led_brightness((int)bl_lvl);
+		break;
+	case DSI_BACKLIGHT_PWM:
+		rc = dsi_panel_update_pwm_backlight(panel, bl_lvl);
+		break;
+	default:
+		DSI_ERR("Backlight type(%d) not supported\n", bl->type);
+		rc = -ENOTSUPP;
+	}
+
+	return rc;
+}
+
+/* TASK-084 D164: stock mipi_reg and pen command-set helpers. */
+static struct dsi_read_config g_dsi_read_cfg;
+
+int dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,
+				struct dsi_display_mode *adj_mode)
+{
+	int rc =0;
+	int retval = 0;
+	struct dsi_display_mode_priv_info *priv_info;
+
+	if (!panel || !panel->cur_mode || !panel->cur_mode->priv_info || !adj_mode) {
+		pr_err("invalid params\n");
+		return -EAGAIN;
+	}
+
+	priv_info = panel->cur_mode->priv_info;
+
+	if (!priv_info->cmd_sets[DSI_CMD_SET_DISP_PEN_120HZ].count) {
+		pr_debug("DSI_CMD_SET_DISP_PEN_120HZ not defined, return\n");
+		return 0;
+	}
+
+	/* match fps(120/144/60/30Hz) pen seeting cmd */
+	if (adj_mode->timing.refresh_rate == 144)
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_PEN_144HZ);
+	else if (adj_mode->timing.refresh_rate == 120)
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_PEN_120HZ);
+	else if (adj_mode->timing.refresh_rate == 60)
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_PEN_60HZ);
+	else if (adj_mode->timing.refresh_rate == 30)
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_PEN_30HZ);
+
+	if (rc) {
+		pr_err("Failed to send DSI_CMD_SET_DISP_PEN_120HZ command\n");
+		retval = -EAGAIN;
+		goto error;
+	}else
+		pr_info("%s: refresh_rate[%d]\n", __func__, adj_mode->timing.refresh_rate);
+
+error:
+	return retval;
+}
+
+int dsi_panel_write_cmd_set(struct dsi_panel *panel,
+				struct dsi_panel_cmd_set *cmd_sets)
+{
+	int rc = 0, i = 0;
+	ssize_t len;
+	struct dsi_cmd_desc *cmds;
+	u32 count;
+	enum dsi_cmd_set_state state;
+	struct dsi_display_mode *mode;
+	const struct mipi_dsi_host_ops *ops = panel->host->ops;
+
+	if (!panel || !panel->cur_mode)
+		return -EINVAL;
+
+	mode = panel->cur_mode;
+
+	cmds = cmd_sets->cmds;
+	count = cmd_sets->count;
+	state = cmd_sets->state;
+
+	if (count == 0) {
+		pr_debug("[%s] No commands to be sent for state\n", panel->name);
+		goto error;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (state == DSI_CMD_SET_STATE_LP)
+			cmds->msg.flags |= MIPI_DSI_MSG_USE_LPM;
+
+		if (cmds->last_command)
+			cmds->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+
+		len = ops->transfer(panel->host, &cmds->msg);
+		if (len < 0) {
+			rc = len;
+			pr_err("failed to set cmds, rc=%d\n", rc);
+			goto error;
+		}
+		if (cmds->post_wait_ms)
+			usleep_range(cmds->post_wait_ms * 1000,
+					((cmds->post_wait_ms * 1000) + 10));
+		cmds++;
+	}
+error:
+	return rc;
+}
+
+int dsi_panel_read_cmd_set(struct dsi_panel *panel,
+				struct dsi_read_config *read_config)
+{
+	struct mipi_dsi_host *host;
+	struct dsi_display *display;
+	struct dsi_display_ctrl *ctrl;
+	struct dsi_cmd_desc *cmds;
+	int i, rc = 0, count = 0;
+	u32 flags = 0;
+
+	if (panel == NULL || read_config == NULL)
+		return -EINVAL;
+
+	host = panel->host;
+	if (host) {
+		display = to_dsi_display(host);
+		if (display == NULL)
+			return -EINVAL;
+	} else
+		return -EINVAL;
+
+	if (!panel->panel_initialized) {
+		pr_info("Panel not initialized\n");
+		return -EINVAL;
+	}
+
+	if (!read_config->is_read) {
+		pr_info("read operation was not permitted\n");
+		return -EPERM;
+	}
+
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+		DSI_ALL_CLKS, DSI_CLK_ON);
+
+	ctrl = &display->ctrl[display->cmd_master_idx];
+
+	rc = dsi_display_cmd_engine_enable(display);
+	if (rc) {
+		pr_err("cmd engine enable failed\n");
+		rc = -EPERM;
+		goto exit_ctrl;
+	}
+
+	if (display->tx_cmd_buf == NULL) {
+		rc = dsi_host_alloc_cmd_tx_buffer(display);
+		if (rc) {
+			pr_err("failed to allocate cmd tx buffer memory\n");
+			goto exit;
+		}
+	}
+
+	count = read_config->read_cmd.count;
+	cmds = read_config->read_cmd.cmds;
+	if (count == 0) {
+		pr_err("No commands to be sent\n");
+		goto exit;
+	}
+	if (cmds->last_command) {
+		cmds->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+		flags |= DSI_CTRL_CMD_LAST_COMMAND;
+	}
+	flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ |
+		  DSI_CTRL_CMD_CUSTOM_DMA_SCHED);
+
+	memset(read_config->rbuf, 0x0, sizeof(read_config->rbuf));
+	cmds->msg.rx_buf = read_config->rbuf;
+	cmds->msg.rx_len = read_config->cmds_rlen;
+
+	rc = dsi_ctrl_cmd_transfer(ctrl->ctrl, &(cmds->msg), &flags);
+	if (rc <= 0) {
+		pr_err("rx cmd transfer failed rc=%d\n", rc);
+		goto exit;
+	}
+
+	/* for debug log */
+	for (i = 0; i < read_config->cmds_rlen; i++)
+		pr_debug("[%d] = 0x%02X\n", i, read_config->rbuf[i]);
+
+exit:
+	dsi_display_cmd_engine_disable(display);
+exit_ctrl:
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+		DSI_ALL_CLKS, DSI_CLK_OFF);
+
+	return rc;
+}
+
+int dsi_panel_write_mipi_reg(struct dsi_panel *panel,
+				char *buf, size_t count)
+{
+	struct dsi_panel_cmd_set cmd_sets = {0};
+	int retval = 0, dlen = 0;
+	u32 packet_count = 0;
+	char *token, *input_copy, *input_dup = NULL;
+	const char *delim = " ";
+	char *buffer = NULL;
+	u32 buf_size = 0;
+	u32 tmp_data = 0;
+
+	mutex_lock(&panel->panel_lock);
+
+	if (!panel || !panel->panel_initialized) {
+		pr_err("Panel not initialized!\n");
+		retval = -EAGAIN;
+		goto exit_unlock;
+	}
+
+	pr_debug("input buffer:{%s}\n", buf);
+
+	input_copy = kstrdup(buf, GFP_KERNEL);
+	if (!input_copy) {
+		retval = -ENOMEM;
+		goto exit_unlock;
+	}
+
+	input_dup = input_copy;
+	/* removes leading and trailing whitespace from input_copy */
+	input_copy = strim(input_copy);
+
+	/* Split a string into token */
+	token = strsep(&input_copy, delim);
+	if (token) {
+		retval = kstrtoint(token, 10, &tmp_data);
+		if (retval) {
+			pr_err("input buffer conversion failed\n");
+			goto exit_free0;
+		}
+		g_dsi_read_cfg.is_read= !!tmp_data;
+	}
+
+	/* Removes leading whitespace from input_copy */
+	if (input_copy)
+		input_copy = skip_spaces(input_copy);
+	else
+		goto exit_free0;
+
+	token = strsep(&input_copy, delim);
+	if (token) {
+		retval = kstrtoint(token, 10, &tmp_data);
+		if (retval) {
+			pr_err("input buffer conversion failed\n");
+			goto exit_free0;
+		}
+		/* D106 (G2 format alignment): stock dsi_panel_mipi_reg_write
+		 * (0x8f93ca8-0x8f93cbc) rejects len >= 0x41 with
+		 * "read size exceeding the limit 64" - the community-tree
+		 * sizeof(rbuf[256]) cap accepted 4x longer reads. */
+		if (tmp_data > 64) {
+			pr_err("read size exceeding the limit %d\n", 64);
+			retval = -EINVAL;
+			goto exit_free0;
+		}
+		g_dsi_read_cfg.cmds_rlen = tmp_data;
+	}
+
+	/* Removes leading whitespace from input_copy */
+	if (input_copy)
+		input_copy = skip_spaces(input_copy);
+	else
+		goto exit_free0;
+
+	buffer = kzalloc(strlen(input_copy), GFP_KERNEL);
+	if (!buffer) {
+		retval = -ENOMEM;
+		goto exit_free0;
+	}
+
+	token = strsep(&input_copy, delim);
+	while (token) {
+		retval = kstrtoint(token, 16, &tmp_data);
+		if (retval) {
+			pr_err("input buffer conversion failed\n");
+			goto exit_free1;
+		}
+		pr_debug("buffer[%d] = 0x%02x\n", buf_size, tmp_data);
+		buffer[buf_size++] = (tmp_data & 0xff);
+		/* Removes leading whitespace from input_copy */
+		if (input_copy) {
+			input_copy = skip_spaces(input_copy);
+			token = strsep(&input_copy, delim);
+		} else {
+			token = NULL;
+		}
+	}
+
+	retval = dsi_panel_get_cmd_pkt_count(buffer, buf_size, &packet_count);
+	if (!packet_count) {
+		pr_err("get pkt count failed!\n");
+		if (!retval)
+			retval = -EINVAL;
+		goto exit_free1;
+	}
+
+	retval = dsi_panel_alloc_cmd_packets(&cmd_sets, packet_count);
+	if (retval) {
+		pr_err("failed to allocate cmd packets, ret=%d\n", retval);
+		goto exit_free1;
+	}
+
+	retval = dsi_panel_create_cmd_packets(buffer, dlen, packet_count,
+						  cmd_sets.cmds);
+	if (retval) {
+		pr_err("failed to create cmd packets, ret=%d\n", retval);
+		goto exit_free2;
+	}
+
+	if (g_dsi_read_cfg.is_read) {
+		g_dsi_read_cfg.read_cmd = cmd_sets;
+		retval = dsi_panel_read_cmd_set(panel, &g_dsi_read_cfg);
+		if (retval <= 0) {
+			pr_err("[%s]failed to read cmds, rc=%d\n", panel->name, retval);
+			goto exit_free3;
+		}
+	} else {
+		g_dsi_read_cfg.read_cmd = cmd_sets;
+		retval = dsi_panel_write_cmd_set(panel, &cmd_sets);
+		if (retval) {
+			pr_err("[%s] failed to send cmds, rc=%d\n", panel->name, retval);
+			goto exit_free3;
+		}
+	}
+
+	pr_debug("[%s]: done!\n", panel->name);
+	retval = count;
+
+exit_free3:
+	dsi_panel_destroy_cmd_packets(&cmd_sets);
+exit_free2:
+	dsi_panel_dealloc_cmd_packets(&cmd_sets);
+exit_free1:
+	kfree(buffer);
+exit_free0:
+	kfree(input_dup);
+exit_unlock:
+	mutex_unlock(&panel->panel_lock);
+	if (!retval)
+		retval = -EINVAL;
+	return retval;
+}
+
+ssize_t dsi_panel_read_mipi_reg(struct dsi_panel *panel, char *buf)
+{
+	int i = 0;
+	ssize_t count = 0;
+
+	if (!panel) {
+		pr_err("invalid params\n");
+		return -EAGAIN;
+	}
+
+	mutex_lock(&panel->panel_lock);
+
+	if (g_dsi_read_cfg.is_read) {
+		for (i = 0; i < g_dsi_read_cfg.cmds_rlen; i++) {
+			/* D107 (G2 read format): stock dsi_panel_mipi_reg_read
+			 * (0x8f93fb0) prints lowercase hex with a SPACE
+			 * separator (fmt "0x%02x " @0x9cb2f1e, last-elt
+			 * "0x%02x\n" @0x9aae4a8) - the community layer used
+			 * uppercase + comma. */
+			if (i == g_dsi_read_cfg.cmds_rlen - 1) {
+				count += snprintf(buf + count, PAGE_SIZE - count, "0x%02x\n",
+				     g_dsi_read_cfg.rbuf[i]);
+			} else {
+				count += snprintf(buf + count, PAGE_SIZE - count, "0x%02x ",
+				     g_dsi_read_cfg.rbuf[i]);
+			}
+		}
+	}
+
+	mutex_unlock(&panel->panel_lock);
+
+	return count;
+}

@@ -21,7 +21,6 @@
 #include "sde_trace.h"
 #include "dsi_mi_feature.h"
 #include "dsi_display.h"
-#include "dsi_panel_mi.h"
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81

@@ -20,7 +20,6 @@
 #include "dsi_pwr.h"
 #include "dsi_parser.h"
 #include "msm_drv.h"
-#include "dsi_panel_mi.h"
 
 #define MAX_BL_LEVEL 4096
 #define MAX_BL_SCALE_LEVEL 1024
@@ -175,6 +174,13 @@ struct drm_panel_esd_config {
 	u8 *return_buf;
 	u8 *status_buf;
 	u32 groups;
+};
+
+struct dsi_read_config {
+	bool is_read;
+	struct dsi_panel_cmd_set read_cmd;
+	u32 cmds_rlen;
+	u8 rbuf[256];
 };
 
 struct dsi_panel {
@@ -353,6 +359,15 @@ void dsi_panel_calc_dsi_transfer_time(struct dsi_host_common_cfg *config,
 
 int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 				enum dsi_cmd_set_type type);
+int dsi_panel_write_cmd_set(struct dsi_panel *panel,
+				struct dsi_panel_cmd_set *cmd_sets);
+int dsi_panel_read_cmd_set(struct dsi_panel *panel,
+				struct dsi_read_config *read_config);
+int dsi_panel_write_mipi_reg(struct dsi_panel *panel, char *buf, size_t count);
+ssize_t dsi_panel_read_mipi_reg(struct dsi_panel *panel, char *buf);
+int dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,
+				struct dsi_display_mode *adj_mode);
+
 int dsi_panel_update_backlight(struct dsi_panel *panel,
 				u32 bl_lvl);
 int dsi_panel_get_cmd_pkt_count(const char *data, u32 length, u32 *cnt);

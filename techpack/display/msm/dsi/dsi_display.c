@@ -14,7 +14,6 @@
 #include "dsi_display.h"
 #include <drm/drm_panel.h>
 #include "dsi_panel.h"
-#include "dsi_panel_mi.h"
 #include "dsi_ctrl.h"
 #include "dsi_ctrl_hw.h"
 #include "dsi_drm.h"

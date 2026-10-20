@@ -51,7 +51,6 @@
 #include "msm_mmu.h"
 #include "sde_wb.h"
 #include "sde_dbg.h"
-#include "dsi/dsi_panel_mi.h"
 
 /*
  * MSM driver version:

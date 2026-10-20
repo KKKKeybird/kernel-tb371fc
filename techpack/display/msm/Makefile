@@ -101,9 +101,7 @@ msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 	dsi/dsi_panel.o \
 	dsi/dsi_clk_manager.o \
 	dsi/dsi_display_test.o \
-	dsi/dsi_panel_mi.o \
 	dsi/tb371fc_panel_seq.o \
-	dsi/tb371fc_panel_unit.o \
 
 msm_drm-$(CONFIG_DSI_PARSER) += dsi/dsi_parser.o \
 

@@ -41,7 +41,7 @@
 #include "sde_hw_top.h"
 #include "sde_hw_qdss.h"
 #include "dsi_display.h"
-#include "dsi_panel_mi.h"
+#include "dsi_panel.h"
 #include "dsi_drm.h"
 
 #define SDE_DEBUG_ENC(e, fmt, ...) SDE_DEBUG("enc%d " fmt,\
