@@ -193,19 +193,20 @@ struct nvt_ts_data {
 	uint8_t y_gang_num;
 	uint32_t pen_support;
 	uint32_t stylus_resol_double;
-	uint32_t pen_enable;
-	uint32_t pen_version;
-	uint32_t pen_suppress;
 	uint32_t edge_reject;
-	uint32_t edge_grid_zone[5];
-	uint32_t game_mode;
-	uint32_t fw_pen_state;
+	uint8_t edge_grid_x1;
+	uint8_t edge_grid_y1;
+	uint16_t edge_grid_x2;
+	uint16_t edge_grid_y2;
+	uint8_t game_mode;
+	uint8_t pen_enable;
+	uint8_t pen_version;
 	/* stock ts+0x21d: stylus pending state set by nvt_check_stylus_state()
 	 * when buf[3] == 2, and cleared by nvt_restore_cmd_func() after the
 	 * pen state has been re-applied. It is not the pen-suppress flag
 	 * (that is ts+0x21e / pen_suppress). */
-	uint32_t restore_pending;
-	uint32_t nfc_state;
+	uint8_t restore_pending;
+	uint8_t pen_suppress;
 	int32_t irq;
 	uint32_t int_trigger_type;
 	int reset_gpio_num;

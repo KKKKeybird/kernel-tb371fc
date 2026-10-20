@@ -1416,8 +1416,8 @@ static void nvt_restore_cmd_func(struct work_struct *work)
 {
 	pr_info("NVT-ts: nvt_restore_cmd_func: %s++\n", "nvt_restore_cmd_func");
 	nvt_edge_reject_set(nvt_ts->edge_reject);
-	nvt_edge_grid_zone_set(nvt_ts->edge_grid_zone[0], nvt_ts->edge_grid_zone[1],
-			       nvt_ts->edge_grid_zone[2], nvt_ts->edge_grid_zone[3]);
+	nvt_edge_grid_zone_set(nvt_ts->edge_grid_x1, nvt_ts->edge_grid_y1,
+			       nvt_ts->edge_grid_x2, nvt_ts->edge_grid_y2);
 	nvt_game_mode_set(nvt_ts->game_mode);
 	if (!nvt_ts->pen_suppress)
 		nvt_support_pen_set(nvt_ts->pen_enable, nvt_ts->pen_version);
@@ -2244,8 +2244,8 @@ static void nvt_boot_update_firmware_work(struct work_struct *work)
 
 	pr_info("NVT-ts: nvt_restore_cmd_func: %s++\n", "nvt_restore_cmd_func");
 	nvt_edge_reject_set(nvt_ts->edge_reject);
-	nvt_edge_grid_zone_set(nvt_ts->edge_grid_zone[0], nvt_ts->edge_grid_zone[1],
-			       nvt_ts->edge_grid_zone[2], nvt_ts->edge_grid_zone[3]);
+	nvt_edge_grid_zone_set(nvt_ts->edge_grid_x1, nvt_ts->edge_grid_y1,
+			       nvt_ts->edge_grid_x2, nvt_ts->edge_grid_y2);
 	nvt_game_mode_set(nvt_ts->game_mode);
 	if (!nvt_ts->pen_suppress)
 		nvt_support_pen_set(nvt_ts->pen_enable, nvt_ts->pen_version);
@@ -2476,7 +2476,7 @@ static ssize_t nvt_support_pen_store(struct file *file, const char __user *buf,
 				     size_t count, loff_t *pos)
 {
 	char data[33] = { 0 };
-	unsigned int enable, version;
+	int enable, version;
 
 	/* stock nvt_support_pen_store @0x8ae18c0: __check_object_size ->
 	 * copy_from_user into a kernel stack buffer -> sscanf. Passing the
@@ -2491,7 +2491,7 @@ static ssize_t nvt_support_pen_store(struct file *file, const char __user *buf,
 		return -EFAULT;
 	data[count] = '\0';
 
-	if (sscanf(data, "%u,%u", &enable, &version) != 2)
+	if (sscanf(data, "%d,%d", &enable, &version) != 2)
 		return -EINVAL;
 	nvt_ts->pen_enable = enable;
 	nvt_ts->pen_version = version;
@@ -2550,8 +2550,8 @@ static const struct file_operations gesture_control_fops = {
 static int nvt_edge_grid_zone_show(struct seq_file *s, void *v)
 {
 	seq_printf(s, "%d,%d,%d,%d\n",
-		   nvt_ts->edge_grid_zone[0], nvt_ts->edge_grid_zone[1],
-		   nvt_ts->edge_grid_zone[2], nvt_ts->edge_grid_zone[3]);
+		   nvt_ts->edge_grid_x1, nvt_ts->edge_grid_y1,
+		   nvt_ts->edge_grid_x2, nvt_ts->edge_grid_y2);
 	return 0;
 }
 
@@ -2580,10 +2580,10 @@ static ssize_t nvt_edge_grid_zone_store(struct file *file,
 		return -EINVAL;
 
 	mutex_lock(&nvt_ts->lock);
-	nvt_ts->edge_grid_zone[0] = x1;
-	nvt_ts->edge_grid_zone[1] = y1;
-	nvt_ts->edge_grid_zone[2] = x2;
-	nvt_ts->edge_grid_zone[3] = y2;
+	nvt_ts->edge_grid_x1 = x1;
+	nvt_ts->edge_grid_y1 = y1;
+	nvt_ts->edge_grid_x2 = x2;
+	nvt_ts->edge_grid_y2 = y2;
 	mutex_unlock(&nvt_ts->lock);
 
 	pr_info("NVT-ts: %s: x1=%d, y1=%d, x2=%d, y2=%d\n",
@@ -2603,7 +2603,7 @@ static const struct file_operations nvt_edge_grid_zone_fops = {
 /* ---- fw_pen_state (stock 0x8ae1af0/0x8ae1b18) ---- */
 static int nvt_get_fw_pen_state_show(struct seq_file *s, void *v)
 {
-	seq_printf(s, "%d\n", nvt_ts->fw_pen_state);
+	seq_printf(s, "%d\n", nvt_ts->restore_pending);
 	return 0;
 }
 
@@ -4058,7 +4058,6 @@ static int nvt_ts_probe(struct spi_device *client)
 	}
 
 	/* stock success tail */
-	ts->nfc_state = 0;
 	bTouchIsAwake = 1;
 	ts->edge_reject = 0;
 	INIT_WORK(&nvt_restore_cmd_work, nvt_restore_cmd_func);
