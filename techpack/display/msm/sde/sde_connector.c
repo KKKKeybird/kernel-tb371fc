@@ -2905,11 +2905,6 @@ void sde_connector_mi_get_current_backlight(struct drm_connector *connector, uin
 		return;
 	}
 
-	if (display->panel->mi_cfg.in_aod) {
-		*brightness = display->panel->mi_cfg.aod_backlight;
-		return;
-	}
-
 	*brightness = c_conn->mi_dimlayer_state.current_backlight;
 }
 

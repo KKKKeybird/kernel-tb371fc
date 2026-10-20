@@ -618,7 +618,6 @@ skip_dimlayer_parse:
 	mi_cfg->dimming_state = STATE_NONE;
 	mi_cfg->fod_backlight_flag = false;
 	mi_cfg->fod_flag = false;
-	mi_cfg->in_aod = false;
 	mi_cfg->fod_hbm_off_time = ktime_get();
 	mi_cfg->fod_backlight_off_time = ktime_get();
 	mi_cfg->dc_enable = false;

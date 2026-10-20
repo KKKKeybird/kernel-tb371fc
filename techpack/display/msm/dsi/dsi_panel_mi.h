@@ -246,12 +246,10 @@ struct dsi_panel_mi_cfg {
 	u32 fod_target_backlight;
 	bool fod_flag;
 	/* set doze hbm/lbm only in AOD */
-	bool in_aod;
 	u32 dc_threshold;
 	bool dc_enable;
 	u32 dc_type;
 	u32 hbm_brightness;
-	u32 aod_backlight;
 	uint32_t doze_brightness;
 	bool bl_wait_frame;
 	bool bl_enable;
