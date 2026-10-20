@@ -6919,11 +6919,6 @@ int dsi_display_set_mode(struct dsi_display *display,
 			timing.h_active, timing.v_active,
 			timing.refresh_rate);
 
-	if (display->panel->cur_mode->timing.refresh_rate != timing.refresh_rate) {
-		if (display->drm_conn && display->drm_conn->kdev)
-			sysfs_notify(&display->drm_conn->kdev->kobj, NULL, "dynamic_fps");
-	}
-
 	memcpy(display->panel->cur_mode, &adj_mode, sizeof(adj_mode));
 error:
 	mutex_unlock(&display->display_lock);
