@@ -1167,22 +1167,10 @@ static int dsi_panel_parse_misc_host_config(struct dsi_host_common_cfg *host,
 	host->force_hs_clk_lane = utils->read_bool(utils->data,
 					"qcom,mdss-dsi-force-clock-lane-hs");
 
-	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-clk-strength", &val);
-	if (!rc) {
-		host->clk_strength = val;
-		DSI_INFO("[%s] clk_strength = %d\n", name, val);
-	} else {
-		host->clk_strength = 0;
-		DSI_INFO("[%s] clk_strength default value = %d\n", name, val);
-	}
-
 	panel_cphy_mode = utils->read_bool(utils->data,
 					"qcom,panel-cphy-mode");
 	host->phy_type = panel_cphy_mode ? DSI_PHY_TYPE_CPHY
 						: DSI_PHY_TYPE_DPHY;
-
-	host->cphy_strength = utils->read_bool(utils->data,
-					"qcom,mdss-dsi-cphy-strength");
 
 	return 0;
 }

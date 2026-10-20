@@ -605,7 +605,7 @@ skip_dimlayer_parse:
 	if (mi_cfg->panel_on_dimming_delay)
 		INIT_DELAYED_WORK(&mi_cfg->dimming_enable_delayed_work, panelon_dimming_enable_delayed_work);
 
-	if (panel->host_config.cphy_strength)
+	if (panel->host_config.phy_type == DSI_PHY_TYPE_CPHY)
 		INIT_DELAYED_WORK(&mi_cfg->cabc_delayed_work, panelon_cabc_delayed_work);
 
 	rc = utils->read_u32(of_node,

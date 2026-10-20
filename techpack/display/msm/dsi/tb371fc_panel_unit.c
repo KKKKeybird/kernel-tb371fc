@@ -547,7 +547,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	if (dc_skip_set_backlight(panel, bl_lvl))
 		return rc;
 
-	if (0 == bl_lvl && (panel->host_config.cphy_strength ||
+	if (0 == bl_lvl && (panel->host_config.phy_type == DSI_PHY_TYPE_CPHY ||
 			     panel->mi_cfg.panel_id == 0x4C38314100420400)) {
 		dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_INSERT_BLACK);
 		usleep_range(6 * 1000, 6 * 1000 + 10);
@@ -604,7 +604,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	}
 
 	if (mi_cfg->last_bl_level == 0 && bl_lvl &&
-	    (panel->host_config.cphy_strength ||
+	    (panel->host_config.phy_type == DSI_PHY_TYPE_CPHY ||
 	     panel->mi_cfg.panel_id == 0x4C38314100420400))
 		dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISABLE_INSERT_BLACK);
 

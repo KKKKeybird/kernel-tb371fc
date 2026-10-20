@@ -2702,7 +2702,7 @@ static irqreturn_t esd_err_irq_handle(int irq, void *data)
 	}
 
 	if (gpio_get_value(display->panel->mi_cfg.esd_err_irq_gpio) &&
-		display->panel->host_config.cphy_strength) {
+		display->panel->host_config.phy_type == DSI_PHY_TYPE_CPHY) {
 		SDE_ERROR("trigger esd by mistake,return\n");
 		return IRQ_HANDLED;
 	}
