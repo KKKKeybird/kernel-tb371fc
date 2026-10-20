@@ -1584,44 +1584,6 @@ void dsi_panel_doubleclick_enable(bool on)
 }
 EXPORT_SYMBOL(dsi_panel_doubleclick_enable);
 
-int dsi_panel_power_turn_off(bool on)
-{
-	int rc = 0;
-	struct pinctrl_state *state;
-
-	if (!g_panel) {
-		pr_err("dsi_panel_power_turn_off invalid params\n");
-		return -EINVAL;
-	}
-
-	if ((g_panel->host_config.phy_type == DSI_PHY_TYPE_CPHY) &&
-		(g_panel->mi_cfg.tddi_doubleclick_flag == true)) {
-			pr_err("dsi_panel_power_turn_off in tddi doubleclick\n");
-	} else {
-		return 0;
-	}
-
-	if (gpio_is_valid(g_panel->reset_config.reset_gpio) &&
-					!g_panel->reset_gpio_always_on)
-		gpio_set_value(g_panel->reset_config.reset_gpio, 0);
-
-	if (gpio_is_valid(g_panel->reset_config.lcd_mode_sel_gpio))
-		gpio_set_value(g_panel->reset_config.lcd_mode_sel_gpio, 0);
-
-
-	state = g_panel->pinctrl.suspend;
-	rc = pinctrl_select_state(g_panel->pinctrl.pinctrl, state);
-	if (rc)
-		DSI_ERR("[%s] failed to set pin state, rc=%d\n",
-				g_panel->name, rc);
-
-	rc = dsi_pwr_enable_regulator(&g_panel->power_info, false);
-	if (rc)
-		pr_err("[%s] failed to enable vregs, rc=%d\n", g_panel->name, rc);
-
-	return rc;
-}
-
 int mi_dsi_panel_set_fod_brightness(struct mipi_dsi_device *dsi, u16 brightness)
 {
 	u8 payload[2] = {(fpr_alpha_set[brightness] >> 8) & 0x0f, fpr_alpha_set[brightness] & 0xff};

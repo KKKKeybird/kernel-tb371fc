@@ -2225,8 +2225,6 @@ static void msm_pdev_shutdown(struct platform_device *pdev)
 		return;
 	}
 
-	dsi_panel_power_turn_off(false);
-
 	msm_lastclose(ddev);
 
 	/* set this after lastclose to allow kickoff from lastclose */

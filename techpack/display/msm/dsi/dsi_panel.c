@@ -15,8 +15,6 @@
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
 #include "dsi_mi_feature.h"
-#include "tb371fc_panel_seq.h"
-#include "tb371fc_panel_unit.h"
 
 #include "dsi_display.h"
 #include "sde_dbg.h"
@@ -364,112 +362,6 @@ int dsi_panel_trigger_esd_attack(struct dsi_panel *panel)
 	DSI_ERR("failed to pull down gpio\n");
 	return -EINVAL;
 }
-
-static int dsi_panel_reset(struct dsi_panel *panel)
-{
-	int rc = 0;
-	struct dsi_panel_reset_config *r_config = &panel->reset_config;
-	int i;
-
-	if (gpio_is_valid(panel->reset_config.disp_en_gpio)) {
-		rc = gpio_direction_output(panel->reset_config.disp_en_gpio, 1);
-		if (rc) {
-			DSI_ERR("unable to set dir for disp gpio rc=%d\n", rc);
-			goto exit;
-		}
-	}
-
-	if (r_config->count) {
-		rc = gpio_direction_output(r_config->reset_gpio,
-			r_config->sequence[0].level);
-		if (rc) {
-			DSI_ERR("unable to set dir for rst gpio rc=%d\n", rc);
-			goto exit;
-		}
-	}
-
-	for (i = 0; i < r_config->count; i++) {
-		gpio_set_value(r_config->reset_gpio,
-			       r_config->sequence[i].level);
-
-		/*
-		 * TASK-078: the factory driver issues a fixed 10 ms per step
-		 * (its dtbo reset-sequence is 5 x 10 ms, which the stock image
-		 * hard-codes). Use the factory constant instead of trusting the
-		 * dtbo value, so a different dtbo cannot change the timing.
-		 */
-		tb371fc_panel_reset_step_delay(TB371FC_PANEL_RESET_STEP_MS);
-	}
-
-	/*
-	 * TASK-078: the factory driver issues a fixed 1 ms delay between the
-	 * reset train and the backlight bias calls.
-	 */
-	tb371fc_panel_power_on_backlight_delay();
-
-	if (gpio_is_valid(panel->bl_config.en_gpio)) {
-		rc = gpio_direction_output(panel->bl_config.en_gpio, 1);
-		if (rc)
-			DSI_ERR("unable to set dir for bklt gpio rc=%d\n", rc);
-	}
-
-	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio)) {
-		bool out = true;
-
-		if ((panel->reset_config.mode_sel_state == MODE_SEL_DUAL_PORT)
-				|| (panel->reset_config.mode_sel_state
-					== MODE_GPIO_LOW))
-			out = false;
-		else if ((panel->reset_config.mode_sel_state
-				== MODE_SEL_SINGLE_PORT) ||
-				(panel->reset_config.mode_sel_state
-				 == MODE_GPIO_HIGH))
-			out = true;
-
-		rc = gpio_direction_output(
-			panel->reset_config.lcd_mode_sel_gpio, out);
-		if (rc)
-			DSI_ERR("unable to set dir for mode gpio rc=%d\n", rc);
-	}
-
-	if (gpio_is_valid(panel->panel_test_gpio)) {
-		rc = gpio_direction_input(panel->panel_test_gpio);
-		if (rc)
-			DSI_WARN("unable to set dir for panel test gpio rc=%d\n",
-					rc);
-	}
-
-exit:
-	return rc;
-}
-
-static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
-{
-	int rc = 0;
-	struct pinctrl_state *state;
-
-	if (panel->host_config.ext_bridge_mode)
-		return 0;
-
-	if (enable)
-		state = panel->pinctrl.active;
-	else
-		state = panel->pinctrl.suspend;
-
-	rc = pinctrl_select_state(panel->pinctrl.pinctrl, state);
-	if (rc)
-		DSI_ERR("[%s] failed to set pin state, rc=%d\n",
-				panel->name, rc);
-
-	return rc;
-}
-
-
-/* TB371FC p108: kernel power-cut+reset+init at wake always degrades the
- * panel to 0x0c (black); soft sleep with power kept preserves 0x9c
- * (p106/p107 evidence). Skip both power_off and power_on. */
-static bool p108_keep_panel_power = true;
-
 
 int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 				enum dsi_cmd_set_type type)

@@ -156,25 +156,21 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	struct dsi_panel_reset_config *r_config = &panel->reset_config;
 	int rc = 0;
 
-	/* D67 (final): the touch IC shares the panel reset/vddio and the DT
-	 * carries no mi,is-tddi-flag / doubleclick wiring, so running this
-	 * power-off resets the TDDI/touch FW (measured: fw_status A3 at
-	 * suspend+55ms -> 0x00 in doze) and kills the armed DT2W gesture.
-	 * The pre-TASK-078 driver never ran power-off (p108_keep_panel_power
-	 * early-return) and DT2W worked; keep that proven behavior. The
-	 * DSI link and backlight are still disabled normally. */
-	return 0;
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	if (!nvt_gesture_flag) {
+#endif
+		if (gpio_is_valid(r_config->disp_en_gpio))
+			gpiod_set_raw_value(gpio_to_desc(r_config->disp_en_gpio), 0);
 
-	if (gpio_is_valid(r_config->disp_en_gpio))
-		gpiod_set_raw_value(gpio_to_desc(r_config->disp_en_gpio), 0);
+		if (gpio_is_valid(r_config->reset_gpio) &&
+		    !panel->reset_gpio_always_on)
+			gpiod_set_raw_value(gpio_to_desc(r_config->reset_gpio), 0);
 
-	if (gpio_is_valid(r_config->reset_gpio) &&
-	    !panel->reset_gpio_always_on)
-		gpiod_set_raw_value(gpio_to_desc(r_config->reset_gpio), 0);
-
-	if (gpio_is_valid(r_config->lcd_mode_sel_gpio))
-		gpiod_set_raw_value(gpio_to_desc(r_config->lcd_mode_sel_gpio),
-				    0);
+		if (gpio_is_valid(r_config->lcd_mode_sel_gpio))
+			gpiod_set_raw_value(gpio_to_desc(r_config->lcd_mode_sel_gpio), 0);
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	}
+#endif
 
 	if (gpio_is_valid(panel->panel_test_gpio)) {
 		rc = gpiod_direction_input(gpio_to_desc(panel->panel_test_gpio));
@@ -182,13 +178,26 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 			DSI_WARN("set dir for panel test gpio failed rc=%d\n", rc);
 	}
 
-	lcd_set_bias(false);
-	usleep_range(100000, 100998);
+#ifdef CONFIG_BACKLIGHT_KTZ8866A
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	if (!nvt_gesture_flag)
+#endif
+		lcd_set_bias(false);
+#endif
 
-	rc = dsi_panel_set_pinctrl_state(panel, false);
-	if (rc) {
-		DSI_ERR("[%s] failed set pinctrl state, rc=%d\n", panel->name, rc);
-		return rc;
+	usleep_range(100000, 101000);
+
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	if (!nvt_gesture_flag && !panel->host_config.ext_bridge_mode)
+#else
+	if (!panel->host_config.ext_bridge_mode)
+#endif
+	{
+		rc = pinctrl_select_state(panel->pinctrl.pinctrl,
+					  panel->pinctrl.suspend);
+		if (rc)
+			DSI_ERR("[%s] failed set pinctrl state, rc=%d\n",
+				panel->name, rc);
 	}
 
 	rc = dsi_pwr_enable_regulator(&panel->power_info, false);
@@ -303,7 +312,6 @@ int dsi_panel_pre_disable(struct dsi_panel *panel)
 int dsi_panel_disable(struct dsi_panel *panel)
 {
 	int rc = 0;
-	struct dsi_panel_mi_cfg *mi_cfg;
 
 	if (!panel) {
 		DSI_ERR("invalid params\n");
@@ -311,7 +319,6 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	}
 
 	mutex_lock(&panel->panel_lock);
-	mi_cfg = &panel->mi_cfg;
 	if (!atomic_read(&panel->esd_recovery_pending)) {
 		if (dsi_panel_is_type_oled(panel) &&
 		    (panel->power_mode == SDE_MODE_DPMS_LP1 ||
@@ -325,8 +332,6 @@ int dsi_panel_disable(struct dsi_panel *panel)
 				panel->name, rc);
 			rc = 0;
 		}
-	} else {
-		mi_cfg->unset_doze_brightness = mi_cfg->doze_brightness_state;
 	}
 
 	panel->panel_initialized = false;

@@ -370,8 +370,6 @@ int dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,
 
 int dsi_panel_lockdowninfo_param_read(struct dsi_panel *panel);
 
-int dsi_panel_power_turn_off(bool on);
-
 int mi_dsi_panel_set_fod_brightness(struct mipi_dsi_device *dsi, u16 brightness);
 
 #endif /* _DSI_PANEL_MI_H_ */
