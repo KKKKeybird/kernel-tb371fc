@@ -374,8 +374,6 @@ int dsi_panel_read_gamma_param(struct dsi_panel *panel);
 
 int dsi_panel_update_gamma_param(struct dsi_panel *panel);
 
-int dsi_panel_write_gamma_cmd_set(struct dsi_panel *panel,
-				enum dsi_gamma_cmd_set_type type);
 
 int dsi_panel_read_dc_param(struct dsi_panel *panel);
 
@@ -392,16 +390,13 @@ int mi_dsi_panel_update_lhbm_white_param(struct dsi_panel *panel, int fod_lhbm_w
 
 int dsi_panel_switch_disp_rate_gpio(struct dsi_panel *panel);
 
-ssize_t dsi_panel_read_wp_info(struct dsi_panel *panel, char *buf);
 
 int dsi_panel_set_doze_brightness(struct dsi_panel *panel,
 				int doze_brightness, bool need_panel_lock);
 
 int dsi_panel_update_elvss_dimming(struct dsi_panel *panel);
 
-int dsi_panel_read_greenish_gamma_setting(struct dsi_panel *panel);
 
-int dsi_panel_update_greenish_gamma_setting(struct dsi_panel *panel);
 
 int dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,
 				struct dsi_display_mode *adj_mode);
