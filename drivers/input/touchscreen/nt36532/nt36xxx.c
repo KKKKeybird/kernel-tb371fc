@@ -719,7 +719,7 @@ void nvt_charger_init(void)
 		pr_err("NVT-ts: allocate nvt_charger_notify_wq failed\n");
 		return;
 	}
-	INIT_DELAYED_WORK(&nvt_ts->charger_work, nvt_charger_notify_work);
+	INIT_WORK(&nvt_ts->charger_work, nvt_charger_notify_work);
 	nvt_ts->psy_nb.notifier_call = nvt_charger_notifier_callback;
 	ret = power_supply_reg_notifier(&nvt_ts->psy_nb);
 	if (ret) {
@@ -773,8 +773,8 @@ int nvt_charger_notifier_callback(struct notifier_block *nb,
 		pr_info("NVT-ts: usb_plug_status = %d\n", val.intval);
 		nvt_ts->charger_present = val.intval;
 		if (bTouchIsAwake && nvt_ts->charger_wq)
-			queue_delayed_work_on(8, nvt_ts->charger_wq,
-					     &nvt_ts->charger_work, 0);
+			queue_work_on(8, nvt_ts->charger_wq,
+				      &nvt_ts->charger_work);
 	}
 	return NOTIFY_DONE;
 }
@@ -2154,8 +2154,8 @@ int nvt_update_firmware(const char *firmware_name)
 		nvt_ts->fw_update_stat = 1;
 		ret = nvt_get_fw_info();
 		if (nvt_ts->charger_wq)
-			queue_delayed_work_on(8, nvt_ts->charger_wq,
-					      &nvt_ts->charger_work, 0);
+			queue_work_on(8, nvt_ts->charger_wq,
+				       &nvt_ts->charger_work);
 	}
 
 out_free_map:
@@ -4054,7 +4054,7 @@ err_extra_proc:
 		nvt_fwu_wq = NULL;
 	}
 	if (ts->charger_wq) {
-		cancel_delayed_work_sync(&ts->charger_work);
+		cancel_work_sync(&ts->charger_work);
 		destroy_workqueue(ts->charger_wq);
 		ts->charger_wq = NULL;
 	}

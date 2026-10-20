@@ -169,7 +169,7 @@ struct nvt_ts_data {
 	int32_t fw_sub_ver;
 	int32_t charger_present;
 	uint32_t fw_update_stat;
-	struct delayed_work charger_work;
+	struct work_struct charger_work;
 	struct workqueue_struct *charger_wq;
 	struct notifier_block psy_nb;
 	u8 irq_enabled;
