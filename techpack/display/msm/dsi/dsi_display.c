@@ -38,8 +38,6 @@
 
 DEFINE_MUTEX(dsi_display_clk_mutex);
 
-extern int mi_disp_lhbm_attach_primary_dsi_display(struct dsi_display *display);
-
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
 static struct dsi_display_boot_param boot_displays[MAX_DSI_ACTIVE_DISPLAY] = {
@@ -5096,13 +5094,6 @@ static int dsi_display_sysfs_deinit(struct dsi_display *display)
 	return 0;
 }
 
-void dsi_display_set_fod_ui(struct dsi_display *display, bool status)
-{
-	struct device *dev = &display->pdev->dev;
-	atomic_set(&display->fod_ui, status);
-	sysfs_notify(&dev->kobj, NULL, "fod_ui");
-}
-
 /**
  * dsi_display_bind - bind dsi device with controlling device
  * @dev:        Pointer to base of platform device
@@ -5316,10 +5307,6 @@ static int dsi_display_bind(struct device *dev,
 
 	/* register te irq handler */
 	dsi_display_register_te_irq(display);
-
-	rc = mi_disp_lhbm_attach_primary_dsi_display(display);
-	if (rc)
-		DSI_ERR("lhbm attach primary_dsi_display fail\n");
 
 	goto error;
 

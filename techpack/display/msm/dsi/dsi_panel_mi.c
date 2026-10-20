@@ -29,7 +29,6 @@
 #include "../../../../kernel/irq/internals.h"
 
 #include "mi_disp_nvt_alpha_data.h"
-#include "mi_disp_lhbm.h"
 
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 
@@ -1646,11 +1645,6 @@ int dsi_panel_set_disp_param(struct dsi_panel *panel, u32 param)
 		pr_info("fod_lhbm_low_brightness_allow=%d\n", fod_lhbm_low_brightness_allow);
 		mi_cfg->fp_status = fp_status;
 		mi_cfg->fod_lhbm_low_brightness_allow = fod_lhbm_low_brightness_allow;
-		if  (fp_status == ENROLL_STOP ||
-				fp_status == AUTH_STOP ||
-				fp_status == HEART_RATE_STOP) {
-			mi_disp_set_fod_queue_work(0, false);
-		}
 		break;
 	case DISPPARAM_ROUND_ON:
 		pr_info("DISPPARAM_ROUND_ON\n");

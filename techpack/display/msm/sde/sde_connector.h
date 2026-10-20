@@ -991,22 +991,11 @@ int sde_connector_get_panel_vfp(struct drm_connector *connector,
  */
 int sde_connector_esd_status(struct drm_connector *connector);
 
-/**
- * sde_connector_hbm_ctl - mi function to control hbm
- * @connector: Pointer to DRM connector object
- * @op_code: hbm operation code
- */
-int sde_connector_hbm_ctl(struct drm_connector *connector, uint32_t op_code);
-
-int sde_connector_pre_hbm_ctl(struct drm_connector *connector);
-
 void sde_connector_mi_update_dimlayer_state(struct drm_connector *connector,
 	enum mi_dimlayer_type mi_dimlayer_type);
 
 void sde_connector_mi_get_current_backlight(struct drm_connector *connector, uint32_t *brightness);
 
 void sde_connector_mi_get_current_alpha(struct drm_connector *connector, uint32_t brightness, uint32_t *alpha);
-
-void sde_connector_fod_notify(struct drm_connector *connector);
 
 #endif /* _SDE_CONNECTOR_H_ */
