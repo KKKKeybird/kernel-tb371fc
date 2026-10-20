@@ -22,6 +22,10 @@
 #include "dsi_panel_mi.h"
 #include "tb371fc_panel_unit.h"
 
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+extern bool nvt_gesture_flag;
+#endif
+
 extern int lcd_bl_set_led_brightness(int value);
 extern void lcd_bl_set_reg(void);
 extern int lcd_set_bias(bool enable);
@@ -51,6 +55,8 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 	int rc;
 	int i;
 
+	DSI_WARN("lcm dsi_panel_power_on start\n");
+
 	rc = dsi_pwr_enable_regulator(&panel->power_info, true);
 	if (rc) {
 		DSI_ERR("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
@@ -63,7 +69,10 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		goto error_disable_vregs;
 	}
 
-	lcd_set_bias(true);
+#ifdef CONFIG_TOUCHSCREEN_NT36532
+	if (!nvt_gesture_flag)
+#endif
+		lcd_set_bias(true);
 	lcd_bl_set_reg();
 	usleep_range(10000, 10010);
 
@@ -122,6 +131,9 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		if (rc)
 			DSI_WARN("unable to set dir for panel test gpio rc=%d\n", rc);
 	}
+
+	if (rc)
+		goto error_disable_gpio;
 
 	return 0;
 
