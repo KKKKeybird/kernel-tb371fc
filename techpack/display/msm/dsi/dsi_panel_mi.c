@@ -1001,7 +1001,6 @@ int dsi_panel_read_cmd_set(struct dsi_panel *panel,
 	struct dsi_display *display;
 	struct dsi_display_ctrl *ctrl;
 	struct dsi_cmd_desc *cmds;
-	enum dsi_cmd_set_state state;
 	int i, rc = 0, count = 0;
 	u32 flags = 0;
 
@@ -1048,7 +1047,6 @@ int dsi_panel_read_cmd_set(struct dsi_panel *panel,
 
 	count = read_config->read_cmd.count;
 	cmds = read_config->read_cmd.cmds;
-	state = read_config->read_cmd.state;
 	if (count == 0) {
 		pr_err("No commands to be sent\n");
 		goto exit;
@@ -1057,8 +1055,6 @@ int dsi_panel_read_cmd_set(struct dsi_panel *panel,
 		cmds->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
 		flags |= DSI_CTRL_CMD_LAST_COMMAND;
 	}
-	if (state == DSI_CMD_SET_STATE_LP)
-		cmds->msg.flags |= MIPI_DSI_MSG_USE_LPM;
 	flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ |
 		  DSI_CTRL_CMD_CUSTOM_DMA_SCHED);
 
