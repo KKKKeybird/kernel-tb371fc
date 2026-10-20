@@ -22,7 +22,6 @@
 #include "dsi_mi_feature.h"
 #include "dsi_display.h"
 #include "dsi_panel_mi.h"
-#include "clone_cooling_device.h"
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
@@ -147,7 +146,6 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	struct dsi_backlight_config *bl_config;
 	static int display_count;
 	char bl_node_name[BL_NODE_NAME_SIZE];
-	int rc = 0;
 
 	if (!c_conn || !dev || !dev->dev) {
 		SDE_ERROR("invalid param\n");
@@ -175,15 +173,6 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 		return -ENODEV;
 	}
 	display_count++;
-	rc = sde_backlight_clone_setup(c_conn, dev->dev, c_conn->bl_device);
-	if (rc) {
-		SDE_ERROR("Failed to register backlight_clone_cdev: %ld\n",
-				    PTR_ERR(c_conn->cdev_clone));
-		backlight_clone_cdev_unregister(c_conn->cdev_clone);
-		backlight_device_unregister(c_conn->bl_device);
-		c_conn->bl_device = NULL;
-		return -ENODEV;
-	}
 	return 0;
 }
 
@@ -997,8 +986,6 @@ void sde_connector_destroy(struct drm_connector *connector)
 		drm_property_blob_put(c_conn->blob_mode_info);
 	if (c_conn->blob_ext_hdr)
 		drm_property_blob_put(c_conn->blob_ext_hdr);
-	if (c_conn->cdev_clone)
-		backlight_clone_cdev_unregister(c_conn->cdev_clone);
 	if (c_conn->bl_device)
 		backlight_device_unregister(c_conn->bl_device);
 	drm_connector_unregister(connector);

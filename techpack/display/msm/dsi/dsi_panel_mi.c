@@ -595,15 +595,6 @@ skip_dimlayer_parse:
 		pr_info("hbm brightness %d \n", mi_cfg->hbm_brightness);
 	}
 
-	rc = of_property_read_u32(of_node,
-			"mi,mdss-dsi-panel-max-brightness-clone", &mi_cfg->max_brightness_clone);
-	if (rc) {
-		mi_cfg->max_brightness_clone = 4095;
-		pr_info("default max_brightness_clone is %d\n", mi_cfg->max_brightness_clone);
-	} else {
-		pr_info("max_brightness_clone is %d \n", mi_cfg->max_brightness_clone);
-	}
-
 	if (mi_cfg->dc_type == 0 && mi_cfg->hbm_51_ctrl_flag) {
 		rc = of_property_read_u32(of_node,
 			"mi,mdss-dsi-panel-fod-on-b2-index", &mi_cfg->fod_on_b2_index);

@@ -251,7 +251,6 @@ struct dsi_panel_mi_cfg {
 	bool dc_enable;
 	u32 dc_type;
 	u32 hbm_brightness;
-	u32 max_brightness_clone;
 	u32 aod_backlight;
 	uint32_t doze_brightness;
 	bool bl_wait_frame;
