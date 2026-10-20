@@ -2318,17 +2318,22 @@ int nvt_check_fw_status(void)
 /* ---- proc fw_version ---- */
 static int nvt_fw_version_show(struct seq_file *s, void *v)
 {
-	/* D42: do NOT hold xbuf_lock here - CTP_SPI_READ/WRITE take it
-	 * internally; the old wrapper caused a self-deadlock (cat /proc/
-	 * nvt_fw_version stuck in D state inside CTP_SPI_WRITE).
-	 */
-	nvt_get_fw_info();
 	seq_printf(s, "FW Version: %d\n\n", nvt_ts->fw_ver);
 	return 0;
 }
 
 static int nvt_fw_version_open(struct inode *inode, struct file *file)
 {
+	int ret;
+
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+	ret = nvt_get_fw_info();
+	mutex_unlock(&nvt_ts->lock);
+
+	if (ret)
+		return -EAGAIN;
+
 	return single_open(file, nvt_fw_version_show, NULL);
 }
 
