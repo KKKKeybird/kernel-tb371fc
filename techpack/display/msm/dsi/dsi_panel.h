@@ -146,7 +146,6 @@ struct dsi_panel_reset_config {
 	u32 count;
 
 	int reset_gpio;
-	int tp_reset_gpio;
 	int disp_en_gpio;
 	int lcd_mode_sel_gpio;
 	u32 reset_powerdown_delay;

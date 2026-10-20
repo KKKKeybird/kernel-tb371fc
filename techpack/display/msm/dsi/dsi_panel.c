@@ -2183,10 +2183,6 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 		goto error;
 	}
 
-	panel->reset_config.tp_reset_gpio = utils->get_named_gpio(utils->data,
-						"qcom,platform-tp-reset-gpio",
-						0);
-
 	panel->reset_config.disp_en_gpio = utils->get_named_gpio(utils->data,
 						"qcom,5v-boost-gpio",
 						0);
