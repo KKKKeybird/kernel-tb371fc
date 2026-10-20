@@ -362,7 +362,7 @@ int dsi_panel_write_cmd_set(struct dsi_panel *panel,
 int dsi_panel_read_cmd_set(struct dsi_panel *panel,
 				struct dsi_read_config *read_config);
 
-int dsi_panel_write_mipi_reg(struct dsi_panel *panel, char *buf);
+int dsi_panel_write_mipi_reg(struct dsi_panel *panel, char *buf, size_t count);
 
 ssize_t dsi_panel_read_mipi_reg(struct dsi_panel *panel, char *buf);
 

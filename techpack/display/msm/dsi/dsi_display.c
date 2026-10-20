@@ -8281,7 +8281,7 @@ int dsi_display_mipi_reg_write(struct device *dev,
 		DSI_ERR("Invalid display/panel ptr\n");
 		return -EINVAL;
 	}
-	return dsi_panel_write_mipi_reg(panel, (char *)buf);
+	return dsi_panel_write_mipi_reg(panel, (char *)buf, count);
 }
 
 module_init(dsi_display_register);

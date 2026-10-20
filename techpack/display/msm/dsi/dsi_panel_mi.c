@@ -2778,7 +2778,7 @@ exit_ctrl:
 }
 
 int dsi_panel_write_mipi_reg(struct dsi_panel *panel,
-				char *buf)
+				char *buf, size_t count)
 {
 	struct dsi_panel_cmd_set cmd_sets = {0};
 	int retval = 0, dlen = 0;
@@ -2839,6 +2839,7 @@ int dsi_panel_write_mipi_reg(struct dsi_panel *panel,
 		 * sizeof(rbuf[256]) cap accepted 4x longer reads. */
 		if (tmp_data > 64) {
 			pr_err("read size exceeding the limit %d\n", 64);
+			retval = -EINVAL;
 			goto exit_free0;
 		}
 		g_dsi_read_cfg.cmds_rlen = tmp_data;
@@ -2877,6 +2878,8 @@ int dsi_panel_write_mipi_reg(struct dsi_panel *panel,
 	retval = dsi_panel_get_cmd_pkt_count(buffer, buf_size, &packet_count);
 	if (!packet_count) {
 		pr_err("get pkt count failed!\n");
+		if (!retval)
+			retval = -EINVAL;
 		goto exit_free1;
 	}
 
@@ -2910,7 +2913,7 @@ int dsi_panel_write_mipi_reg(struct dsi_panel *panel,
 	}
 
 	pr_debug("[%s]: done!\n", panel->name);
-	retval = 0;
+	retval = count;
 
 exit_free3:
 	dsi_panel_destroy_cmd_packets(&cmd_sets);
@@ -2922,6 +2925,8 @@ exit_free0:
 	kfree(input_dup);
 exit_unlock:
 	mutex_unlock(&panel->panel_lock);
+	if (!retval)
+		retval = -EINVAL;
 	return retval;
 }
 
