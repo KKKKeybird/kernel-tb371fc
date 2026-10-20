@@ -749,22 +749,35 @@ int nvt_charger_notifier_callback(struct notifier_block *nb,
 	union power_supply_propval val;
 	int ret;
 
-	if (!psy || strcmp(psy->desc->name, "usb") != 0)
+	/* Stock nvt_charger_notifier_callback @0x8ad9b48 gates on the
+	 * firmware-update flag, POWER_SUPPLY_PROP_STATUS (0), a live work
+	 * queue, and bTouchIsAwake before reading or queuing charger work. */
+	if (!nvt_ts || nvt_ts->fw_update_stat != 1)
+		return NOTIFY_DONE;
+	if (!psy) {
+		pr_err("NVT-ts: Couldn't get usbpsy\n");
+		return -EINVAL;
+	}
+	if (strcmp(psy->desc->name, "usb") != 0)
+		return NOTIFY_DONE;
+	if (event != POWER_SUPPLY_PROP_STATUS)
 		return NOTIFY_DONE;
 
 	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &val);
-	if (ret)
-		return NOTIFY_OK;
+	if (ret < 0) {
+		pr_err("NVT-ts: Couldn't get POWER_SUPPLY_PROP_PRESENT rc=%d\n", ret);
+		return -EINVAL;
+	}
 
 	if (val.intval != nvt_ts->charger_present) {
 		pr_info("NVT-ts: usb_plug_status = %d\n", val.intval);
 		nvt_ts->charger_present = val.intval;
-		queue_delayed_work_on(8, nvt_ts->charger_wq,
-				     &nvt_ts->charger_work, 0);
+		if (bTouchIsAwake && nvt_ts->charger_wq)
+			queue_delayed_work_on(8, nvt_ts->charger_wq,
+					     &nvt_ts->charger_work, 0);
 	}
-	return NOTIFY_OK;
+	return NOTIFY_DONE;
 }
-
 int nvt_support_pen_set(u8 enable, u8 version)
 {
 	u8 buf[4];
@@ -2138,7 +2151,7 @@ int nvt_update_firmware(const char *firmware_name)
 	if (!ret) {
 		pr_info("NVT-ts: Update firmware success! <%ld us>\n",
 			(long)ktime_us_delta(fw_dl_end, fw_dl_start));
-		nvt_ts->fw_entry_size = 1;
+		nvt_ts->fw_update_stat = 1;
 		ret = nvt_get_fw_info();
 		if (nvt_ts->charger_wq)
 			queue_delayed_work_on(8, nvt_ts->charger_wq,

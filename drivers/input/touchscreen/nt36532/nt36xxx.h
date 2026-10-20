@@ -168,6 +168,7 @@ struct nvt_ts_data {
 	int32_t fw_ver;
 	int32_t fw_sub_ver;
 	int32_t charger_present;
+	uint32_t fw_update_stat;
 	struct delayed_work charger_work;
 	struct workqueue_struct *charger_wq;
 	struct notifier_block psy_nb;
@@ -220,7 +221,6 @@ struct nvt_ts_data {
 	int64_t hall_timer0;
 	uint32_t x_error_count;
 	uint32_t pen_mode;
-	uint32_t fw_entry_size;
 	uint32_t hw_crc;
 	uint32_t map_version;
 	uint32_t partition_size;
