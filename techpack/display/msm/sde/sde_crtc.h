@@ -377,7 +377,6 @@ struct sde_crtc {
 	int hist_irq_idx;
 
 	int comp_ratio;
-	uint32_t mi_dimlayer_type;
 
 	struct drm_property_blob *dspp_blob_info;
 };
@@ -910,8 +909,6 @@ void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count);
  */
 void sde_crtc_get_misr_info(struct drm_crtc *crtc,
 		struct sde_crtc_misr_info *crtc_misr_info);
-
-uint32_t sde_crtc_get_mi_fod_sync_info(struct sde_crtc_state *cstate);
 
 /**
  * sde_crtc_get_num_datapath - get the number of datapath active

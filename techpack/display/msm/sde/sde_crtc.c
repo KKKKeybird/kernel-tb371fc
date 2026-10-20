@@ -3162,7 +3162,6 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 	struct sde_splash_display *splash_display;
 	bool cont_splash_enabled = false;
 	size_t i;
-	uint32_t fod_sync_info;
 	struct sde_crtc_state *cstate;
 
 	if (!crtc) {
@@ -3244,9 +3243,6 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 			(cont_splash_enabled || sde_crtc->enabled)) {
 
 		cstate = to_sde_crtc_state(crtc->state);
-		fod_sync_info = sde_crtc_get_mi_fod_sync_info(cstate);
-		sde_crtc->mi_dimlayer_type = fod_sync_info;
-
 		sde_cp_crtc_apply_properties(crtc);
 	}
 
@@ -5085,9 +5081,6 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 	}
 
 	/* mi properties */
-	msm_property_install_range(&sde_crtc->property_info, "mi_fod_sync_info",
-		0x0, 0, U32_MAX, 0, CRTC_PROP_MI_FOD_SYNC_INFO);
-
 	/* range properties */
 	msm_property_install_range(&sde_crtc->property_info,
 		"input_fence_timeout", 0x0, 0, SDE_CRTC_MAX_INPUT_FENCE_TIMEOUT,
@@ -6634,12 +6627,4 @@ void sde_crtc_update_cont_splash_settings(struct drm_crtc *crtc)
 	sde_crtc->cur_perf.core_clk_rate = (rate > 0) ?
 					rate : kms->perf.max_core_clk_rate;
 	sde_crtc->cur_perf.core_clk_rate = kms->perf.max_core_clk_rate;
-}
-
-uint32_t sde_crtc_get_mi_fod_sync_info(struct sde_crtc_state *cstate)
-{
-	if (!cstate)
-		return 0;
-
-	return sde_crtc_get_property(cstate, CRTC_PROP_MI_FOD_SYNC_INFO);
 }
