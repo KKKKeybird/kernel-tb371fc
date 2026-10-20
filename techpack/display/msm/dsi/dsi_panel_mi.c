@@ -634,7 +634,6 @@ skip_dimlayer_parse:
 	mi_cfg->bl_enable = true;
 	mi_cfg->panel_dead_flag = false;
 
-	mi_cfg->dither_enabled = false;
 	mi_cfg->local_hbm_cur_status = false;
 	mi_cfg->fod_lhbm_low_brightness_enabled = false;
 	mi_cfg->fp_status = 0;

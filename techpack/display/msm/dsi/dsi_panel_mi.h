@@ -268,7 +268,6 @@ struct dsi_panel_mi_cfg {
 	uint32_t brightnes_alpha_lut_item_count;
 	brightness_alpha *brightness_alpha_lut;
 
-	bool dither_enabled;
 	u32 cabc_current_status;
 	u32 cabc_temp_status;
 	int current_tp_code_fps;

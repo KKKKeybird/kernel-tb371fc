@@ -4532,28 +4532,10 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 	struct msm_display_dsc_info *dsc = NULL;
 	struct sde_encoder_virt *sde_enc;
 	struct sde_hw_pingpong *hw_pp;
-	struct dsi_display *dsi_display;
-	struct sde_connector *c_conn;
-	struct dsi_panel_mi_cfg *mi_cfg;
 
 	if (!phys || !phys->connector || !phys->hw_pp ||
 			!phys->hw_pp->ops.setup_dither || !phys->parent)
 		return;
-
-	c_conn = to_sde_connector(phys->connector);
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		dsi_display = (struct dsi_display *) c_conn->display;
-		if (!dsi_display || !dsi_display->panel) {
-			SDE_ERROR("invalid display/panel\n");
-			return;
-		}
-
-		mi_cfg = &dsi_display->panel->mi_cfg;
-		if (!mi_cfg->dither_enabled) {
-			SDE_DEBUG("dither_enabled = %d\n", mi_cfg->dither_enabled);
-			return;
-		}
-	}
 
 	topology = sde_connector_get_topology_name(phys->connector);
 	if ((topology == SDE_RM_TOPOLOGY_PPSPLIT) &&
