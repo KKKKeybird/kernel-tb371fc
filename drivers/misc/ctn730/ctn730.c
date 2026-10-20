@@ -27,7 +27,7 @@
 #include <linux/sysfs.h>
 #include <drm/drm_panel.h>
 
-extern void nvt_support_pen_set_nfc(bool no_pen);
+extern void nvt_support_pen_set_nfc(bool normal);
 
 #define CTN730_STATUS_TEXT_MAX	27
 

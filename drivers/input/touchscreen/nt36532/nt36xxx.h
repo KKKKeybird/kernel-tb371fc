@@ -28,6 +28,11 @@
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
+#include <linux/hqsysfs.h>
+
+/* i2c-hid keyboard power sequencing (stock callback calls both). */
+extern void kb_hid_suspend(void);
+extern void kb_hid_resume(void);
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 
@@ -159,12 +164,6 @@ struct nvt_ts_data {
 	struct power_supply *psy;
 	bool psy_online;
 	bool gesture_flag;
-	bool bTouchIsAwake;
-	/* D116: stock ts+1328 - panel-awake flag maintained by the drm
-	 * panel notifier (suspend=0 / resume-tail=1) and consumed by
-	 * cmd_store/ext_cmd_store/work_func/hall_check (stock reads
-	 * 0x8adeff4/0x8adf2d4/0x8adb784/0x8adb9e0/0x8adc120). */
-	u8 panel_awake;
 	bool hw_sleep_check;
 	int32_t fw_ver;
 	int32_t fw_sub_ver;
@@ -201,6 +200,10 @@ struct nvt_ts_data {
 	uint32_t edge_grid_zone[5];
 	uint32_t game_mode;
 	uint32_t fw_pen_state;
+	/* stock ts+0x21d: stylus pending state set by nvt_check_stylus_state()
+	 * when buf[3] == 2, and cleared by nvt_restore_cmd_func() after the
+	 * pen state has been re-applied. It is not the pen-suppress flag
+	 * (that is ts+0x21e / pen_suppress). */
 	uint32_t restore_pending;
 	uint32_t nfc_state;
 	int32_t irq;
@@ -305,7 +308,7 @@ struct nvt_ts_data {
 int nvt_get_fw_info(void);
 int nvt_check_fw_reset_state(uint8_t reset_state);
 int nvt_update_firmware(const char *firmware_name);
-void nvt_support_pen_set_nfc(bool no_pen);
+void nvt_support_pen_set_nfc(bool normal);
 int nvt_support_pen_set(u8 enable, u8 version);
 int nvt_cmd_store(uint8_t value);
 int nvt_ext_cmd_store(uint8_t mode, uint8_t value);
@@ -333,6 +336,12 @@ void nvt_get_mdata(int32_t *buf, u8 *x_num, u8 *y_num);
 void nvt_read_get_num_mdata(uint32_t addr, int32_t *buf, uint32_t num);
 int nvt_mp_proc_init(void);
 void nvt_mp_proc_deinit(void);
+enum pen_status {
+	TS_NONE,
+	TS_RELEASE,
+	TS_TOUCH,
+};
+
 int nvt_extra_proc_init(void);
 void nvt_extra_proc_deinit(void);
 int check_tp_state(unsigned long enable);

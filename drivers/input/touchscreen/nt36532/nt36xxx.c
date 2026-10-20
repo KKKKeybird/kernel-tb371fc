@@ -505,16 +505,14 @@ int nvt_cmd_store(u8 value)
 
 	/* D113 (F8, review REVIEW-VERDICT-F7-F10.md): stock nvt_cmd_store
 	 * (0x8adef78) uses mutex_lock_interruptible (ts+0xf8, returns
-	 * -ERESTARTSYS on signal) and gates on bTouchIsAwake (ts+1328):
+	 * -ERESTARTSYS on signal) and gates on global bTouchIsAwake
+	 * (0xa4e5530):
 	 * ==0 -> pr_err "Touch is already suspend, ignore 0x%02x cmd"
 	 * (995) + return -1. Ours used mutex_lock() and had no gate. */
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	/* D116 (corrects D115): stock cmd_store (0x8adeff4) gates on
-	 * ts+1328 - the panel-awake flag maintained ONLY by the drm panel
-	 * notifier (suspend=0 / resume-tail=1), not by the PM suspend/
-	 * resume path. Ours: nvt_ts->panel_awake. */
-	if (!nvt_ts->panel_awake) {
+	/* Stock cmd_store 0x8adeff4 gates on global bTouchIsAwake. */
+	if (!bTouchIsAwake) {
 		pr_err("NVT-ts: nvt_cmd_store: Touch is already suspend, ignore 0x%02x cmd\n",
 		       value);
 		mutex_unlock(&nvt_ts->lock);
@@ -556,8 +554,8 @@ int nvt_ext_cmd_store(u8 mode, u8 value)
 	/* D113 (F8): ext_cmd_store mirrors cmd_store (stock sibling). */
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	/* D116: same panel_awake gate as cmd_store (stock 0x8adf2d4). */
-	if (!nvt_ts->panel_awake) {
+	/* Same global-awake gate as cmd_store (stock 0x8adf2d4). */
+	if (!bTouchIsAwake) {
 		pr_err("NVT-ts: nvt_ext_cmd_store: Touch is already suspend, ignore cmd\n");
 		mutex_unlock(&nvt_ts->lock);
 		return -1;
@@ -597,7 +595,14 @@ int nvt_edge_grid_zone_set(u8 x1, u8 y1, u16 x2, u16 y2)
 	int ret = -1;
 	int attempt;
 
-	mutex_lock(&nvt_ts->lock);
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+	if (!bTouchIsAwake) {
+		pr_err("3[%s] %s %d: Touch is already suspend, ignore cmd\n",
+		       "nvt_edge_grid_zone_set", "nvt_edge_grid_zone_set", 1196);
+		mutex_unlock(&nvt_ts->lock);
+		return -1;
+	}
 	if (nvt_set_page(nvt_ts->mmap[0] | 0x50)) {
 		pr_err("NVT-ts: nvt_edge_grid_zone_set: set_page error\n");
 		mutex_unlock(&nvt_ts->lock);
@@ -760,10 +765,12 @@ int nvt_support_pen_set(u8 enable, u8 version)
 	int retry;
 
 	if (mutex_lock_interruptible(&nvt_ts->lock))
-		return -EINTR;
+		return -ERESTARTSYS;
 	if (!bTouchIsAwake) {
+		pr_err("3[%s] %s %d: Touch is already suspend, ignore cmd\n",
+		       "nvt_support_pen_set", "nvt_support_pen_set", 1413);
 		mutex_unlock(&nvt_ts->lock);
-		return -EPERM;
+		return -1;
 	}
 	/* TASK-081 D93 (pen regression part 2): stock nvt_support_pen_set
 	 * (0x8adf9e8) writes a 4-byte frame {0x50, 0x7b, enable, version}
@@ -796,12 +803,16 @@ int nvt_support_pen_set(u8 enable, u8 version)
 	return -EIO;
 }
 
-void nvt_support_pen_set_nfc(bool no_pen)
+void nvt_support_pen_set_nfc(bool normal)
 {
-	if (!no_pen) {
+	if (normal == true) {
 		nvt_ts->pen_suppress = 0;
 		if (nvt_ts->pen_enable == 1)
 			nvt_support_pen_set(1, nvt_ts->pen_version);
+		else
+			pr_info("3[%s] %s %d: The pen no connect!\n",
+			       "nvt_support_pen_set_nfc",
+			       "nvt_support_pen_set_nfc", 1387);
 	} else {
 		nvt_support_pen_set(0, 0);
 		nvt_ts->pen_suppress = 1;
@@ -1008,9 +1019,10 @@ static long penraw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			 * no matching disable - preempt-count imbalance on every
 			 * HAL ioctl. */
 			u8 slot = (nvt_lenovo_index + 0x10) & 0x1f;
+			u32 i;
+
 			if (nvt_lenovo_count < 0x10)
 				slot = 0;
-			u32 i;
 
 			for (i = 0; i < nvt_lenovo_count; i++) {
 				memcpy(nvt_lenovo_out + 8 + i * 0x28,
@@ -1045,10 +1057,11 @@ static const struct file_operations nvt_lenovo_fops = {
 	.release = penraw_close,
 };
 
-void nvt_lenovo_report(u8 id, u32 x, u32 y, u8 tilt_x, u8 tilt_y, u32 pressure)
+void nvt_lenovo_report(enum pen_status status, u32 x, u32 y, u8 tilt_x, u8 tilt_y, u32 pressure)
 {
 	u8 *entry;
 
+	(void)status;
 	entry = nvt_lenovo_buf[nvt_lenovo_index];
 	memset(entry, 0, 0x28);
 	entry[0] = nvt_lenovo_seq;
@@ -1212,10 +1225,9 @@ static void nvt_hall_check_func(struct work_struct *work)
 	int hall;
 
 	elapsed = jiffies_to_msecs(jiffies - nvt_hall_timer0);
-	gpio_direction_input(1275);
-	hall = gpio_get_value(1275);
+	hall = gpiod_get_raw_value(gpio_to_desc(1275));
 
-	if (elapsed > 1000 && !nvt_ts->panel_awake && hall != ((~nvt_hall_status) & 1)) {
+	if (elapsed > 1000 && !bTouchIsAwake && hall != ((~nvt_hall_status) & 1)) {
 		if (!nvt_ts->hw_sleep_check) {
 			if (nvt_hall_pm_status == 1) {
 				pr_info("NVT-ts: nvt_hall_check_func: The status of double click has changed\n");
@@ -1246,7 +1258,7 @@ static void nvt_hall_check_func(struct work_struct *work)
 }
 
 /* ---- nvt_restore_cmd_func ---- */
-static struct delayed_work nvt_restore_cmd_work;
+static struct work_struct nvt_restore_cmd_work;
 struct proc_dir_entry *NVT_proc_entry;
 /* D55: the focaltech driver keeps its own `static` active_panel, so the
  * extern below must bind to the synaptics global definition (the only
@@ -1371,8 +1383,10 @@ static void nvt_restore_cmd_func(struct work_struct *work)
 	nvt_edge_grid_zone_set(nvt_ts->edge_grid_zone[0], nvt_ts->edge_grid_zone[1],
 			       nvt_ts->edge_grid_zone[2], nvt_ts->edge_grid_zone[3]);
 	nvt_game_mode_set(nvt_ts->game_mode);
-	if (!nvt_ts->restore_pending)
+	if (!nvt_ts->pen_suppress)
 		nvt_support_pen_set(nvt_ts->pen_enable, nvt_ts->pen_version);
+	else
+		nvt_support_pen_set(0, 0);
 	nvt_ts->restore_pending = 0;
 	pr_info("NVT-ts: nvt_restore_cmd_func: %s--\n", "nvt_restore_cmd_func");
 }
@@ -1381,18 +1395,19 @@ static void nvt_restore_cmd_func(struct work_struct *work)
 static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 					   unsigned long event, void *data)
 {
-	/* D57: the payload is struct drm_panel_notifier{refresh_rate, data,
-	 * id}; the blank value lives behind ->data. The old local
-	 * nvt_panel_event{power_mode} read offset 0 = refresh_rate (120),
-	 * so the suspend/resume branches never matched the real blank. */
-	struct drm_panel_notifier *panel_data = (struct drm_panel_notifier *)data;
+	struct drm_panel_notifier *panel_data;
+	struct gpio_desc *hall_desc;
+	u32 i;
 	int hall;
-	int blank_val = panel_data->data ?
-			*(int *)panel_data->data : -1;
+	int blank_val = -1;
 
-	if (!data || (event != DRM_PANEL_EARLY_EVENT_BLANK && event != DRM_PANEL_EVENT_BLANK))
+	if (!data || (event != DRM_PANEL_EARLY_EVENT_BLANK &&
+		      event != DRM_PANEL_EVENT_BLANK))
 		return NOTIFY_DONE;
-
+	panel_data = (struct drm_panel_notifier *)data;
+	if (!panel_data->data)
+		return NOTIFY_DONE;
+	blank_val = *(int *)panel_data->data;
 	pr_info("NVT-ts: nvt_drm_panel_notifier_callback: hid-keyboard,%s,event=%lu, blank=%d\n",
 		"nvt_drm_panel_notifier_callback", event, blank_val);
 
@@ -1400,75 +1415,37 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 	    blank_val == DRM_PANEL_BLANK_UNBLANK) {
 		if (nvt_gesture_flag)
 			cancel_delayed_work_sync(&nvt_hall_check_work);
-		/* D51: was `if (!bTouchIsAwake)` - inverted, so the first
-		 * screen-on after suspend returned early and left the IC in
-		 * sleep mode: touch dead until the next reboot. Stock skips
-		 * the resume work only when the touch is ALREADY awake. */
 		if (bTouchIsAwake) {
 			pr_info("NVT-ts: nvt_drm_panel_notifier_callback: Touch is already resume\n");
+			kb_hid_resume();
 			return NOTIFY_OK;
 		}
 		mutex_lock(&nvt_ts->lock);
-		/* D52: stock resume asserts the HW reset GPIO before the
-		 * re-download (panelcb.dis 0x8adc3f4: gpiod_set_raw_value). */
-		gpio_set_value(nvt_ts->reset_gpio_num, 1);
+		gpiod_set_raw_value(gpio_to_desc(nvt_ts->reset_gpio_num), 1);
 		if (nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME) == 0)
 			nvt_check_fw_reset_state(NVT_FW_INIT_RESET_STATE);
 		else
 			pr_info("NVT-ts: nvt_ts_resume: download firmware failed, ignore check fw state\n");
-		enable_irq_wake(nvt_ts->irq);
-		/* D59: stock resume ends with nvt_irq_enable(true) +
-		 * nvt_check_fw_status() (status gate, 0x77 -> wait a0-af).
-		 * Without the enable, a suspend/resume cycle that raced the
-		 * irq state leaves touch dead; without the status wait the
-		 * input path opens against a half-booted fw. */
 		nvt_irq_enable(true);
-		nvt_check_fw_status();
 		bTouchIsAwake = 1;
-		nvt_ts->panel_awake = 1;   /* D116: stock 0x8adc5f4, resume tail */
-		hall = gpio_get_value(1275);
-		if (hall == 0 || !nvt_gesture_flag) {
-			/* D53: stock sends {EVENT_MAP_HOST_CMD, cmd} =
-			 * {0x50, 0x11} (panelcb 0x8adc640: buf[0]=0x50 from
-			 * the earlier store, buf[1]=0x11). The p547 frames
-			 * had register and data bytes swapped. */
-			u8 buf[2] = { 0x50, 0x11 };
-
-			CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
-		} else {
-			u8 buf[2] = { 0x50, 0x13 };
-
-			CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
-		}
-		input_report_abs(nvt_ts->input_dev, ABS_MT_SLOT, 0);
-		input_report_abs(nvt_ts->input_dev, ABS_MT_TRACKING_ID, -1);
-		input_report_abs(nvt_ts->input_dev, ABS_MT_PRESSURE, 0);
-		input_report_abs(nvt_ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-					input_report_abs(nvt_ts->input_dev,
-						 ABS_MT_PRESSURE, 0);
-		input_report_key(nvt_ts->input_dev, BTN_TOUCH, 0);
-		input_sync(nvt_ts->input_dev);
-		if (nvt_ts->pen_support) {
-			input_report_abs(nvt_ts->pen_dev, ABS_MT_SLOT, 0);
-			input_report_abs(nvt_ts->pen_dev, ABS_MT_PRESSURE, 0);
-			input_report_key(nvt_ts->pen_dev, BTN_TOOL_PEN, 0);
-			input_report_key(nvt_ts->pen_dev, BTN_STYLUS, 0);
-			input_sync(nvt_ts->pen_dev);
-		}
 		mutex_unlock(&nvt_ts->lock);
-		msleep(50);
+		queue_work_on(8, nvt_fwu_wq, &nvt_restore_cmd_work);
 		pr_info("NVT-ts: nvt_ts_resume: end\n");
+		kb_hid_resume();
 	} else if (event == DRM_PANEL_EARLY_EVENT_BLANK &&
 		   blank_val == DRM_PANEL_BLANK_POWERDOWN) {
 		pr_info("NVT-ts: nvt_ts_suspend: start\n");
-		hall = gpio_get_value(1275);
+		hall_desc = gpio_to_desc(1275);
+		hall = gpiod_get_raw_value(hall_desc);
 		if (!bTouchIsAwake) {
 			pr_info("NVT-ts: nvt_ts_suspend: Touch is already suspend\n");
+			kb_hid_suspend();
 			return NOTIFY_OK;
 		}
+		if (!nvt_gesture_flag)
+			nvt_irq_enable(false);
 		mutex_lock(&nvt_ts->lock);
 		bTouchIsAwake = 0;
-		nvt_ts->panel_awake = 0;   /* D116: stock 0x8adc4bc, suspend */
 		if (hall == 0 || !nvt_gesture_flag) {
 			u8 buf[2] = { 0x50, 0x11 };
 
@@ -1477,30 +1454,43 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 			u8 buf[2] = { 0x50, 0x13 };
 
 			CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
-			enable_irq_wake(nvt_ts->irq);
+			irq_set_irq_wake(nvt_ts->irq, 1);
 			pr_info("NVT-ts: nvt_ts_suspend: Enabled touch wakeup gesture\n");
 			nvt_hall_pm = 0;
 			nvt_hall_pm_status = 0;
 			queue_delayed_work_on(8, nvt_hall_check_wq,
-				      &nvt_hall_check_work,
-				      msecs_to_jiffies(250));
+					      &nvt_hall_check_work,
+					      msecs_to_jiffies(250));
 		}
 		mutex_unlock(&nvt_ts->lock);
-		input_report_abs(nvt_ts->input_dev, ABS_MT_SLOT, 0);
-		input_report_abs(nvt_ts->input_dev, ABS_MT_TRACKING_ID, -1);
-		input_report_abs(nvt_ts->input_dev, ABS_MT_PRESSURE, 0);
-		input_report_abs(nvt_ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+		{
+			for (i = 0; i < nvt_ts->max_finger_num; i++) {
+				input_mt_slot(nvt_ts->input_dev, i);
+				input_report_abs(nvt_ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+				input_report_abs(nvt_ts->input_dev, ABS_MT_PRESSURE, 0);
+				input_mt_report_slot_state(nvt_ts->input_dev,
+							   MT_TOOL_FINGER, false);
+			}
+		}
 		input_report_key(nvt_ts->input_dev, BTN_TOUCH, 0);
 		input_sync(nvt_ts->input_dev);
 		if (nvt_ts->pen_support) {
-			input_report_abs(nvt_ts->pen_dev, ABS_MT_SLOT, 0);
-			input_report_abs(nvt_ts->pen_dev, ABS_MT_PRESSURE, 0);
+			input_report_abs(nvt_ts->pen_dev, ABS_X, 0);
+			input_report_abs(nvt_ts->pen_dev, ABS_Y, 0);
+			input_report_abs(nvt_ts->pen_dev, ABS_PRESSURE, 0);
+			input_report_abs(nvt_ts->pen_dev, ABS_TILT_X, 0);
+			input_report_abs(nvt_ts->pen_dev, ABS_TILT_Y, 0);
+			input_report_abs(nvt_ts->pen_dev, ABS_DISTANCE, 0);
+			input_report_key(nvt_ts->pen_dev, BTN_TOUCH, 0);
 			input_report_key(nvt_ts->pen_dev, BTN_TOOL_PEN, 0);
 			input_report_key(nvt_ts->pen_dev, BTN_STYLUS, 0);
+			input_report_key(nvt_ts->pen_dev, BTN_STYLUS2, 0);
+			nvt_lenovo_report(TS_RELEASE, 0, 0, 0, 0, 0);
 			input_sync(nvt_ts->pen_dev);
 		}
 		msleep(50);
 		pr_info("NVT-ts: nvt_ts_suspend: end\n");
+		kb_hid_suspend();
 	}
 	return NOTIFY_OK;
 }
@@ -1527,12 +1517,10 @@ int nvt_ts_pm_resume(struct device *dev)
 	 * hw_sleep_check - wakes any PM waiter blocked since suspend re-armed. */
 	complete(&nvt_ts->pm_completion);
 	if (nvt_hall_pm == 1 && nvt_gesture_flag && nvt_hall_pm_status == 0) {
-		/* D68: stock 0x8adcefc does gpio_direction_input(1275) before
-		 * the read, and the frame is {0x50, 0x11} (halfword 0x1150 at
-		 * 0x8adcf18). The previous build read without direction setup
-		 * and sent the inverted {0x11, 0x50}. */
-		gpio_direction_input(1275);
-		hall = gpio_get_value(1275);
+		/* W3 (stock 0x8adcefc): gpio_to_desc(1275) +
+		 * gpiod_get_raw_value, with no gpio_direction_input. The frame
+		 * is {0x50, 0x11} (halfword 0x1150 at 0x8adcf18). */
+		hall = gpiod_get_raw_value(gpio_to_desc(1275));
 		if (hall == 0) {
 			u8 buf[2] = { 0x50, 0x11 };
 
@@ -2162,6 +2150,30 @@ out:
 	return ret;
 }
 
+static char tp_version_info[128];
+
+/* stock get_tp_info @0x8ad8e20: refresh fw info, format by gpio_82, print,
+ * then publish HWID_CTP (0x23) through the stock hq_register_hw_info()
+ * provider (drivers/misc/hqsysfs). */
+void get_tp_info(void)
+{
+	nvt_get_fw_info();
+	if (gpio_82 == 0) {
+		sprintf(tp_version_info,
+			"[Vendor]:BOE, [TP-IC]:NT36532, [fw]:0x%02X",
+			nvt_ts->fw_ver);
+		pr_info("[%s]: tp_version %s\n", __func__, tp_version_info);
+	} else if (gpio_82 == 1) {
+		sprintf(tp_version_info,
+			"[Vendor]:TIANMA, [TP-IC]:NT36532, [fw]:0x%02X",
+			nvt_ts->fw_ver);
+		pr_info("[%s]: tp_version %s\n", __func__, tp_version_info);
+	} else {
+		pr_err("failed to add tp_info\n");
+	}
+	hq_register_hw_info(HWID_CTP, tp_version_info);
+}
+
 static void nvt_boot_update_firmware_work(struct work_struct *work)
 {
 	/* D55 final: the DSI panel registers at ~1.08s but NVT probes at
@@ -2189,7 +2201,21 @@ static void nvt_boot_update_firmware_work(struct work_struct *work)
 	    drm_panel_notifier_register(active_panel, &nvt_ts->drm_nb) < 0)
 		pr_err("NVT-ts: fwu-work notifier registration failed\n");
 
+	mutex_lock(&nvt_ts->lock);
 	nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
+	get_tp_info();
+	mutex_unlock(&nvt_ts->lock);
+
+	pr_info("NVT-ts: nvt_restore_cmd_func: %s++\n", "nvt_restore_cmd_func");
+	nvt_edge_reject_set(nvt_ts->edge_reject);
+	nvt_edge_grid_zone_set(nvt_ts->edge_grid_zone[0], nvt_ts->edge_grid_zone[1],
+			       nvt_ts->edge_grid_zone[2], nvt_ts->edge_grid_zone[3]);
+	nvt_game_mode_set(nvt_ts->game_mode);
+	if (!nvt_ts->pen_suppress)
+		nvt_support_pen_set(nvt_ts->pen_enable, nvt_ts->pen_version);
+	else
+		nvt_support_pen_set(0, 0);
+	pr_info("NVT-ts: nvt_restore_cmd_func: %s--\n", "nvt_restore_cmd_func");
 }
 
 /* ---- nvt_clear_fw_status (stock @0xffffff8008ad8870, TASK-081) ---- */
@@ -2893,11 +2919,15 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 	int count = 0;
 	int ret;
 
-	if (nvt_ts->hw_sleep_check && mutex_is_locked(&nvt_ts->lock)) {
+	/* W1 (stock 0x8adb758-0x8adb77c): when hw_sleep_check is set, wait
+	 * up to 175 jiffies (literal immediate in stock) for resume to complete; only a timeout (0) drops
+	 * this IRQ. */
+	if (nvt_ts->hw_sleep_check &&
+	    wait_for_completion_timeout(&nvt_ts->pm_completion, 175) == 0) {
 		pr_err("NVT-ts: nvt_ts_work_func: system(bus) can't finished resuming procedure, skip it\n");
 		return IRQ_HANDLED;
 	}
-	if (!nvt_ts->panel_awake)
+	if (!bTouchIsAwake)
 		pm_wakeup_dev_event(&nvt_ts->client->dev, 5000, 0);
 
 	mutex_lock(&nvt_ts->lock);
@@ -2922,8 +2952,7 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 			nvt_read_fw_history(nvt_ts->mmap[30]);
 			nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
 			mutex_unlock(&nvt_ts->lock);
-			queue_delayed_work_on(8, nvt_fwu_wq,
-					      &nvt_restore_cmd_work, 0);
+			queue_work_on(8, nvt_fwu_wq, &nvt_restore_cmd_work);
 			return IRQ_HANDLED;
 		}
 	} else {
@@ -2943,7 +2972,7 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 	}
 
 	if (nvt_check_stylus_state(point_data[1] >> 3, point_data) == 0) {
-		if (!nvt_ts->panel_awake) {
+		if (!bTouchIsAwake) {
 			nvt_ts_wakeup_gesture_report(point_data[1] >> 3, point_data);
 		} else {
 			for (i = 0; i < nvt_ts->max_finger_num; i++) {
@@ -3037,7 +3066,7 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 					input_report_key(nvt_ts->pen_dev, BTN_TOOL_PEN, 0);
 					input_report_key(nvt_ts->pen_dev, BTN_STYLUS, 0);
 					input_report_key(nvt_ts->pen_dev, BTN_STYLUS2, 0);
-					nvt_lenovo_report(0, 0, 0, 0, 0, 0);
+					nvt_lenovo_report(TS_NONE, 0, 0, 0, 0, 0);
 				} else if (pen_id == 1) {
 					input_report_abs(nvt_ts->pen_dev, ABS_X, pen_x);
 					input_report_abs(nvt_ts->pen_dev, ABS_Y, pen_y);
@@ -3058,7 +3087,7 @@ irqreturn_t nvt_ts_work_func(int irq, void *dev_id)
 							 pen_buttons & 1);
 					input_report_key(nvt_ts->pen_dev, BTN_STYLUS2,
 							 (pen_buttons >> 1) & 1);
-					nvt_lenovo_report(pen_id, pen_x, pen_y,
+					nvt_lenovo_report(TS_TOUCH, pen_x, pen_y,
 							  (u8)pen_tilt_x, (u8)pen_tilt_y,
 							  pen_pressure);
 				} else if (pen_id != 0xf0) {
@@ -3973,14 +4002,8 @@ static int nvt_ts_probe(struct spi_device *client)
 	/* stock success tail */
 	ts->nfc_state = 0;
 	bTouchIsAwake = 1;
-	/* D117: stock probe tail sets ts+1328 = 1 alongside ts+344
-	 * (0x8adb290 mov w19,#1 / 0x8adb2a8 strb [x9,#1328] /
-	 * 0x8adb30c strb [x8,#344]) - touch is born awake. D116 missed
-	 * the probe-side init, leaving panel_awake=0 until the first
-	 * screen-off/on cycle (touch dead at boot, user-confirmed). */
-	nvt_ts->panel_awake = 1;
 	ts->edge_reject = 0;
-	INIT_DELAYED_WORK(&nvt_restore_cmd_work, nvt_restore_cmd_func);
+	INIT_WORK(&nvt_restore_cmd_work, nvt_restore_cmd_func);
 	ts->restore_pending = 0;
 	check_tp_state(1);
 	pr_info("3[%s] %s %d: end\n", "nvt_ts_probe", "nvt_ts_probe", 2782);
@@ -4057,10 +4080,8 @@ static int nvt_ts_remove(struct spi_device *client)
 		nvt_fwu_wq = NULL;
 	}
 	device_init_wakeup(&nvt_ts->input_dev->dev, 0);
-	if (nvt_ts->bTouchIsAwake) {
-		disable_irq(nvt_ts->irq);
-		nvt_ts->bTouchIsAwake = false;
-	}
+	if (nvt_ts->irq_enabled)
+		nvt_irq_enable(false);
 	{
 		struct irq_desc *d = irq_to_desc(nvt_ts->irq);
 
@@ -4087,10 +4108,8 @@ static void nvt_ts_shutdown(struct spi_device *client)
 {
 	pr_info("3[%s] %s %d: Shutdown driver...\n",
 		"nvt_ts_shutdown", "nvt_ts_shutdown", 2994);
-	if (nvt_ts->bTouchIsAwake) {
-		disable_irq(nvt_ts->irq);
-		nvt_ts->bTouchIsAwake = false;
-	}
+	if (nvt_ts->irq_enabled)
+		nvt_irq_enable(false);
 	{
 		struct irq_desc *d = irq_to_desc(nvt_ts->irq);
 
