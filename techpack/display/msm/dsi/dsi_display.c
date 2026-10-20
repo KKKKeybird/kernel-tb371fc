@@ -7678,18 +7678,6 @@ int dsi_display_enable(struct dsi_display *display)
 		return -EINVAL;
 	}
 
-	/* TB371FC p174: notify drm_panel listeners (nt36532 wake gesture)
-	 * BEFORE the panel work. The touch recovery (full fw download,
-	 * ~190ms) must complete BEFORE the panel-on commands: a panel
-	 * enable against an IC still armed in gesture mode (0x13) blacks
-	 * the panel (n84 quick power-key wake, TASK-022). */
-	{
-		int p174_blank = DRM_PANEL_BLANK_UNBLANK;
-		struct drm_panel_notifier p174_ev = { .data = &p174_blank };
-		drm_panel_notifier_call_chain(&display->panel->drm_panel,
-			DRM_PANEL_EVENT_BLANK, &p174_ev);
-	}
-
 	if (!display->panel->cur_mode) {
 		DSI_ERR("no valid mode set for the display\n");
 		return -EINVAL;
@@ -7928,14 +7916,6 @@ int dsi_display_disable(struct dsi_display *display)
 	mutex_unlock(&display->display_lock);
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 
-	/* TB371FC p140: notify drm_panel listeners (nt36532 wake gesture)
-	 * before the panel powers down (TASK-022). */
-	if (rc == 0) {
-		int p140_blank = DRM_PANEL_BLANK_POWERDOWN;
-		struct drm_panel_notifier p140_ev = { .data = &p140_blank };
-		drm_panel_notifier_call_chain(&display->panel->drm_panel,
-			DRM_PANEL_EARLY_EVENT_BLANK, &p140_ev);
-	}
 	return rc;
 }
 
