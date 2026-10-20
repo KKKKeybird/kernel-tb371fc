@@ -353,17 +353,24 @@ int nvt_write_addr(u32 addr, u8 value)
 
 int nvt_read_reg(u32 addr, u8 *value)
 {
-	u8 buf[2] = { addr & 0x7f, 0 };
+	u8 buf[2];
+	int retry;
 
-	/* D112 (F9, review REVIEW-VERDICT-F7-F10.md): stock nvt_read_reg
-	 * (0x8ad8190-0x8ad82d8) has NO backward branch - a single SPI
-	 * read, no retry loop and no buf[0]&0x80 ready check (D108 only
-	 * removed the sleep; the loop itself was also old-tree). */
+	/*
+	 * REVERT-D112: E2 proved that the single-read form breaks the boot
+	 * firmware auto-copy handshake (buf[1]=0x69, CRC results all zero).
+	 * Keep the ready-bit retry protocol; it is required by this device.
+	 */
 	nvt_set_page(addr);
-	if (CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf)))
-		return -EIO;
-	*value = buf[1];
-	return 0;
+	for (retry = 0; retry < 8; retry++) {
+		buf[0] = addr & 0x7f;
+		if (CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf)))
+			return -EIO;
+		*value = buf[1];
+		if (buf[0] & 0x80)
+			return 0;
+	}
+	return -EBUSY;
 }
 
 int nvt_get_fw_info(void)
