@@ -357,22 +357,6 @@ bool dsi_panel_is_need_tx_cmd(u32 param);
 
 int dsi_panel_set_disp_param(struct dsi_panel *panel, u32 param);
 
-int dsi_panel_read_gamma_param(struct dsi_panel *panel);
-
-int dsi_panel_update_gamma_param(struct dsi_panel *panel);
-
-
-int dsi_panel_read_dc_param(struct dsi_panel *panel);
-
-int dsi_panel_update_dc_param(struct dsi_panel *panel);
-
-int mi_dsi_panel_read_and_update_dc_param_v2(struct dsi_panel *panel);
-
-int mi_dsi_panel_read_and_update_gir_param(struct dsi_panel *panel);
-
-int mi_dsi_panel_read_and_update_lhbm_green_500nit_param(struct dsi_panel *panel);
-int mi_dsi_panel_read_lhbm_white_param(struct dsi_panel *panel);
-int mi_dsi_panel_read_lhbm_white_reg(struct dsi_panel *panel, int fod_lhbm_white_state);
 int mi_dsi_panel_update_lhbm_white_param(struct dsi_panel *panel, int fod_lhbm_white_state, int cmd_index);
 
 int dsi_panel_switch_disp_rate_gpio(struct dsi_panel *panel);
@@ -380,10 +364,6 @@ int dsi_panel_switch_disp_rate_gpio(struct dsi_panel *panel);
 
 int dsi_panel_set_doze_brightness(struct dsi_panel *panel,
 				int doze_brightness, bool need_panel_lock);
-
-int dsi_panel_update_elvss_dimming(struct dsi_panel *panel);
-
-
 
 int dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,
 				struct dsi_display_mode *adj_mode);
