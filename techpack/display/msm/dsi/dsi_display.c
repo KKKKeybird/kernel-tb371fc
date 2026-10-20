@@ -7753,68 +7753,6 @@ int dsi_display_enable(struct dsi_display *display)
 		display->panel->panel_initialized = true;
 		DSI_DEBUG("cont splash enabled, display enable not required\n");
 
-		rc = dsi_panel_update_elvss_dimming(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to update elvss dimming parameter, rc=%d\n",
-			       display->name, rc);
-		}
-
-		rc = dsi_panel_read_gamma_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read gamma para, rc=%d\n",
-				display->name, rc);
-		} else {
-			rc = dsi_panel_update_gamma_param(display->panel);
-			if (rc) {
-				DSI_ERR("[%s] failed to update gamma para, rc=%d\n",
-					display->name, rc);
-			}
-		}
-
-		rc = dsi_panel_read_dc_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read DC para, rc=%d\n",
-				display->name, rc);
-		} else {
-			rc = dsi_panel_update_dc_param(display->panel);
-			if (rc) {
-				DSI_ERR("[%s] failed to update DC para, rc=%d\n",
-					display->name, rc);
-			}
-		}
-
-		rc = mi_dsi_panel_read_and_update_dc_param_v2(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read DC para, rc=%d\n",
-				display->name, rc);
-		}
-
-		rc = mi_dsi_panel_read_and_update_gir_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read and update gir  para, rc=%d\n",
-				display->name, rc);
-		}
-
-		rc = mi_dsi_panel_read_and_update_lhbm_green_500nit_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read and update fod lhbm green 500nit  para, rc=%d\n",
-				display->name, rc);
-		}
-
-		rc = mi_dsi_panel_read_lhbm_white_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read fod lhbm white para, rc=%d\n",
-				display->name, rc);
-		}
-
-		if (display->panel->mi_cfg.is_tddi_flag) {
-			rc = dsi_panel_lockdowninfo_param_read(display->panel);
-			if (!rc) {
-				DSI_ERR("[%s] failed to read lockdowninfo para, rc=%d\n",
-					display->name, rc);
-			}
-		}
-
 		return 0;
 	}
 
