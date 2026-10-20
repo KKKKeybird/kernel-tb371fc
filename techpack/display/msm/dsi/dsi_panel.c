@@ -508,9 +508,6 @@ int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 		if (type == DSI_CMD_SET_VID_TO_CMD_SWITCH)
 			cmds->msg.flags |= MIPI_DSI_MSG_ASYNC_OVERRIDE;
 
-		if (type == DSI_CMD_SET_MI_GIR_ON || type == DSI_CMD_SET_MI_GIR_OFF)
-			cmds->msg.flags |= MIPI_DSI_MSG_CMD_DMA_SCHED;
-
 		len = ops->transfer(panel->host, &cmds->msg);
 		if (len < 0) {
 			rc = len;
