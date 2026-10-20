@@ -221,11 +221,6 @@ struct dsi_panel_mi_cfg {
 
 	bool dynamic_elvss_enabled;
 
-	int esd_err_irq_gpio;
-	int esd_err_irq;
-	int esd_err_irq_flags;
-	bool esd_err_enabled;
-
 	/* elvss dimming info */
 	bool elvss_dimming_check_enable;
 	u32 elvss_dimming_read_len;
@@ -345,16 +340,8 @@ static inline const char *get_doze_brightness_name(__u32 doze_brightness)
 	}
 }
 
-int dsi_panel_parse_esd_gpio_config(struct dsi_panel *panel);
-
 int dsi_panel_parse_mi_config(struct dsi_panel *panel,
 				struct device_node *of_node);
-
-int dsi_panel_esd_irq_ctrl(struct dsi_panel *panel,
-				bool enable);
-
-int dsi_panel_esd_irq_ctrl_locked(struct dsi_panel *panel,
-			bool enable);
 
 int dsi_panel_write_cmd_set(struct dsi_panel *panel,
 				struct dsi_panel_cmd_set *cmd_sets);

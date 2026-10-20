@@ -3520,11 +3520,6 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 	esd_config = &panel->esd_config;
 	esd_config->status_mode = ESD_MODE_MAX;
 
-	/* esd check using gpio irq method has high priority */
-	rc = dsi_panel_parse_esd_gpio_config(panel);
-	if (rc)
-		DSI_DEBUG("Failed to get mi,esd-err-irq-gpio config\n");
-
 	esd_config->esd_enabled = utils->read_bool(utils->data,
 		"qcom,esd-check-enabled");
 

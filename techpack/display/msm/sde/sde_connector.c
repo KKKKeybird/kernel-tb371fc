@@ -2689,103 +2689,6 @@ static void sde_connector_check_status_work(struct work_struct *work)
 	_sde_connector_report_panel_dead(conn, false);
 }
 
-static irqreturn_t esd_err_irq_handle(int irq, void *data)
-{
-	struct sde_connector *c_conn = data;
-	struct dsi_display *display = c_conn->display;
-	struct drm_event event;
-	int power_mode;
-
-	if (!display || !display->panel) {
-		SDE_ERROR("invalid display/panel\n");
-		return IRQ_HANDLED;
-	}
-
-	if (gpio_get_value(display->panel->mi_cfg.esd_err_irq_gpio) &&
-		display->panel->host_config.phy_type == DSI_PHY_TYPE_CPHY) {
-		SDE_ERROR("trigger esd by mistake,return\n");
-		return IRQ_HANDLED;
-	}
-
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		dsi_panel_acquire_panel_lock(display->panel);
-		dsi_panel_esd_irq_ctrl_locked(display->panel, false);
-
-		if (!dsi_panel_initialized(display->panel)) {
-			SDE_ERROR("%s display panel not initialized!\n",
-					display->display_type);
-			dsi_panel_release_panel_lock(display->panel);
-			return IRQ_HANDLED;
-		}
-
-		if (atomic_read(&(display->panel->esd_recovery_pending))) {
-			DSI_INFO("%s display ESD recovery already pending\n",
-					display->display_type);
-			dsi_panel_release_panel_lock(display->panel);
-			return IRQ_HANDLED;
-		}
-
-		if (!c_conn->panel_dead) {
-			atomic_set(&display->panel->esd_recovery_pending, 1);
-		} else {
-			DSI_INFO("%s display already notify PANEL_DEAD\n",
-					display->display_type);
-			dsi_panel_release_panel_lock(display->panel);
-			return IRQ_HANDLED;
-		}
-
-		power_mode = display->panel->power_mode;
-
-		dsi_panel_release_panel_lock(display->panel);
-
-		if (power_mode == SDE_MODE_DPMS_ON ||
-			power_mode == SDE_MODE_DPMS_LP1) {
-			_sde_connector_report_panel_dead(c_conn, false);
-		} else {
-			c_conn->panel_dead = true;
-			event.type = DRM_EVENT_PANEL_DEAD;
-			event.length = sizeof(bool);
-			msm_mode_object_event_notify(&c_conn->base.base,
-				c_conn->base.dev, &event, (u8 *)&c_conn->panel_dead);
-			SDE_EVT32(SDE_EVTLOG_ERROR);
-			SDE_ERROR("%s display esd irq check failed report"
-				" PANEL_DEAD conn_id: %d enc_id: %d\n",
-				display->display_type,
-				c_conn->base.base.id, c_conn->encoder->base.id);
-		}
-	}
-
-	return IRQ_HANDLED;
-}
-
-static int sde_connector_register_esd_irq(struct sde_connector *c_conn)
-{
-	struct dsi_display *display = c_conn->display;
-	int rc = 0;
-
-	/* register esd irq and enable it after panel enabled */
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		if (!display || !display->panel) {
-			SDE_ERROR("invalid display/panel\n");
-			return -EINVAL;
-		}
-		if (display->panel->mi_cfg.esd_err_irq_gpio > 0) {
-			rc = request_threaded_irq(display->panel->mi_cfg.esd_err_irq,
-				NULL, esd_err_irq_handle,
-				display->panel->mi_cfg.esd_err_irq_flags,
-				"esd_err_irq", c_conn);
-			if (rc) {
-				SDE_ERROR("register esd irq failed\n");
-			} else {
-				SDE_INFO("register esd irq success\n");
-				disable_irq(display->panel->mi_cfg.esd_err_irq);
-			}
-		}
-	}
-
-	return rc;
-}
-
 static const struct drm_connector_helper_funcs sde_connector_helper_ops = {
 	.get_modes =    sde_connector_get_modes,
 	.mode_valid =   sde_connector_mode_valid,
@@ -3238,8 +3141,6 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 
 	INIT_DELAYED_WORK(&c_conn->status_work,
 			sde_connector_check_status_work);
-
-	sde_connector_register_esd_irq(c_conn);
 
 	return &c_conn->base;
 

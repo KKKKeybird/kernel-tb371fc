@@ -93,25 +93,3 @@ int dsi_display_hbm_set_disp_param(struct drm_connector *connector,
 
 	return rc;
 }
-
-int dsi_display_esd_irq_ctrl(struct dsi_display *display,
-		bool enable)
-{
-	int rc = 0;
-
-	if (!display) {
-		DSI_ERR("Invalid params\n");
-		return -EINVAL;
-	}
-
-	mutex_lock(&display->display_lock);
-
-	rc = dsi_panel_esd_irq_ctrl(display->panel, enable);
-	if (rc)
-		pr_err("[%s] failed to set esd irq, rc=%d\n",
-				display->name, rc);
-
-	mutex_unlock(&display->display_lock);
-
-	return rc;
-}
