@@ -4897,12 +4897,13 @@ int dsi_panel_write_cmd_set(struct dsi_panel *panel,
 	u32 count;
 	enum dsi_cmd_set_state state;
 	struct dsi_display_mode *mode;
-	const struct mipi_dsi_host_ops *ops = panel->host->ops;
+	const struct mipi_dsi_host_ops *ops;
 
-	if (!panel || !panel->cur_mode)
+	if (!panel || !cmd_sets || !panel->cur_mode)
 		return -EINVAL;
 
 	mode = panel->cur_mode;
+	ops = panel->host->ops;
 
 	cmds = cmd_sets->cmds;
 	count = cmd_sets->count;
