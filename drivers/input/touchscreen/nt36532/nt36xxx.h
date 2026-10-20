@@ -172,7 +172,6 @@ struct nvt_ts_data {
 	struct workqueue_struct *charger_wq;
 	struct notifier_block psy_nb;
 	u8 irq_enabled;
-	u8 spi_dma;
 	u8 auto_copy;
 	struct input_dev *pen_dev;
 	struct input_dev *wake_input_dev;
