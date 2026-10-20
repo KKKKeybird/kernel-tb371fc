@@ -2422,13 +2422,16 @@ static ssize_t nvt_game_mode_store(struct file *file, const char __user *buf,
 				   size_t count, loff_t *pos)
 {
 	u8 value;
-	u8 mapped;
 
 	if (kstrtou8_from_user(buf, count, 10, &value))
 		return -EINVAL;
 	nvt_ts->game_mode = value;
-	mapped = (value == 0) ? 0 : (value == 1) ? 2 : 1;
-	nvt_ext_cmd_store(0x79, mapped);
+	if (value == 0)
+		nvt_ext_cmd_store(0x79, 0);
+	else if (value == 1)
+		nvt_ext_cmd_store(0x79, 2);
+	else if (value == 2)
+		nvt_ext_cmd_store(0x79, 1);
 	return count;
 }
 
