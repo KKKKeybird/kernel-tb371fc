@@ -911,23 +911,6 @@ void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count);
 void sde_crtc_get_misr_info(struct drm_crtc *crtc,
 		struct sde_crtc_misr_info *crtc_misr_info);
 
-/**
- * sde_crtc_mi_atomic_check - to do crtc mi atomic check
- * @crtc: Pointer to sde crtc state structure
- * @cstate: Pointer to sde crtc state structure
- * @pstates: Pointer to sde plane state structure
- * @cnt: plane refence count
- */
-int sde_crtc_mi_atomic_check(struct sde_crtc *sde_crtc, struct sde_crtc_state *cstate,
-		void *pstates, int cnt);
-
-/**
- * sde_crtc_mi_atomic_check - to do crtc mi atomic check
- * @crtc: Pointer to sde crtc state structure
- * @cstate: Pointer to sde crtc state structure
- * @pstates: Pointer to sde plane state structure
- * @cnt: plane refence count
- */
 uint32_t sde_crtc_get_mi_fod_sync_info(struct sde_crtc_state *cstate);
 
 /**
