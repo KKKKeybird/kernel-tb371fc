@@ -3194,231 +3194,352 @@ unlock:
 
 /* MP criteria parsed from the novatek-mp-criteria-* DT child (stock
  * globals 0xa316890..0xa316924). */
-#define NVT_MP_AIN_MAX 128
-#define NVT_MP_LIMIT_MAX 512
+#define NVT_MP_AIN_MAX 64
+#define NVT_MP_AIN_KEY_MAX 8
+#define NVT_MP_X_Y_DIMENSION_MAX (64 * 64)
+#define NVT_MP_PEN_X_Y_DIMENSION_MAX 512
 static u32 nvt_mp_ic_x_cfg_size;
 static u32 nvt_mp_ic_y_cfg_size;
-static u32 nvt_mp_ic_key_cfg_size;
 static u32 nvt_mp_x_channel;
 static u32 nvt_mp_y_channel;
-static u32 nvt_mp_ain_x[NVT_MP_AIN_MAX];
-static u32 nvt_mp_ain_y[NVT_MP_AIN_MAX];
-static u32 nvt_mp_ain_key[NVT_MP_AIN_MAX];
-static s32 nvt_mp_limit_short_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_short_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_open_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_open_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_fw_raw_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_fw_raw_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_fw_cc_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_fw_cc_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_fw_diff_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_fw_diff_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_tipx_raw_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_tipx_raw_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_tipy_raw_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_tipy_raw_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_ringx_raw_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_ringx_raw_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_ringy_raw_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_ringy_raw_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_tipx_diff_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_tipx_diff_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_tipy_diff_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_tipy_diff_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_ringx_diff_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_ringx_diff_n[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_ringy_diff_p[NVT_MP_LIMIT_MAX];
-static s32 nvt_mp_limit_pen_ringy_diff_n[NVT_MP_LIMIT_MAX];
+static u8 nvt_mp_ain_x[NVT_MP_AIN_MAX];
+static u8 nvt_mp_ain_y[NVT_MP_AIN_MAX];
+static u8 nvt_mp_ain_key[NVT_MP_AIN_KEY_MAX] __maybe_unused = {
+	0, 1, 2, 0xff, 0xff, 0xff, 0xff, 0xff
+};
+static s32 nvt_mp_limit_short_p[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_short_n[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_open_p[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_open_n[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_fw_raw_p[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_fw_raw_n[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_fw_cc_p[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_fw_cc_n[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_fw_diff_p[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_fw_diff_n[NVT_MP_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_tipx_raw_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_tipx_raw_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_tipy_raw_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_tipy_raw_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_ringx_raw_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_ringx_raw_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_ringy_raw_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_ringy_raw_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_tipx_diff_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_tipx_diff_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_tipy_diff_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_tipy_diff_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_ringx_diff_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_ringx_diff_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_ringy_diff_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
+static s32 nvt_mp_limit_pen_ringy_diff_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
 static u32 nvt_mp_diff_test_frame;
 
-/* stock nvt_mp_parse_u32 (0x8ae28d8): of_property_read_u32 wrapper. */
+static void nvt_mp_print_result_log(const u8 *data, u32 count)
+{
+	char *buf;
+	size_t len = 0;
+	u32 i;
+
+	buf = kmalloc(count * 6 + 1, GFP_KERNEL);
+	if (!buf) {
+		pr_err("3[%s] %s %d: Allocate mp memory failed\n",
+		       __func__, __func__, 608);
+		return;
+	}
+	buf[0] = '\0';
+	for (i = 0; i < count; i++)
+		len += sprintf(buf + len, "0x%02X, ", data[i]);
+	printk("%s", buf);
+	kfree(buf);
+}
+
+static void nvt_mp_print_data_log(const s32 *data, u32 count)
+{
+	char *buf;
+	size_t len = 0;
+	u32 i;
+
+	buf = kmalloc(count * 7 + 1, GFP_KERNEL);
+	if (!buf) {
+		pr_err("3[%s] %s %d: Allocate mp memory failed\n",
+		       __func__, __func__, 584);
+		return;
+	}
+	buf[0] = '\0';
+	for (i = 0; i < count; i++)
+		len += sprintf(buf + len, "%5d, ", data[i]);
+	printk("%s", buf);
+	kfree(buf);
+}
+
+/* stock nvt_mp_parse_u32 @0x8ae28d8: of_property_read_u32 wrapper. */
 static int nvt_mp_parse_u32(struct device_node *child, const char *name,
 			    u32 *out)
 {
 	int ret = of_property_read_u32(child, name, out);
 
-	if (ret < 0)
-		pr_err("NVT-ts: nvt_mp_parse_u32: %s miss, ret=%d\n", name, ret);
-	else
-		pr_info("NVT-ts: nvt_mp_parse_u32: %s=%d\n", name, *out);
-	return ret < 0 ? -1 : 0;
+	if (ret < 0) {
+		pr_err("3[%s] %s %d: error reading %s. ret=%d\n",
+		       __func__, __func__, 2453, name, ret);
+		return -1;
+	}
+	pr_info("3[%s] %s %d: %s=%d\n", __func__, __func__, 2457, name, *out);
+	return 0;
 }
 
-/* stock nvt_mp_parse_ain (0x8ae2768): u32 array of `count` entries into
- * the AIN mapping buffer. */
+/* stock nvt_mp_parse_ain @0x8ae2768: property element count must equal
+ * `count`; read u32 entries and store the low byte into a u8 AIN map. */
 static int nvt_mp_parse_ain(struct device_node *child, const char *name,
-			    u32 *out, u32 count)
+			    u8 *out, u32 count)
 {
-	int ret = of_property_read_u32_array(child, name, out, count);
+	const void *prop;
+	u32 tmp[NVT_MP_AIN_MAX] = { 0 };
+	int len = 0;
+	u32 actual;
+	u32 i;
 
-	if (ret < 0) {
-		pr_err("NVT-ts: nvt_mp_parse_ain: %s miss, ret=%d\n", name, ret);
+	if (!out || count > NVT_MP_AIN_MAX)
+		return -1;
+
+	prop = of_find_property(child, name, &len);
+	actual = len / sizeof(u32);
+	if (!prop || !actual || actual != count) {
+		pr_err("3[%s] %s %d: error find %s. len=%d\n",
+		       __func__, __func__, 2417, name, actual);
 		return -1;
 	}
-	pr_info("NVT-ts: nvt_mp_parse_ain: %s ok\n", name);
+	pr_info("3[%s] %s %d: %s. len=%d\n",
+		__func__, __func__, 2420, name, actual);
+	if (of_property_read_u32_array(child, name, tmp, count) < 0) {
+		pr_err("3[%s] %s %d: error find %s. len=%d\n",
+		       __func__, __func__, 2423, name, actual);
+		return -1;
+	}
+	for (i = 0; i < count; i++)
+		out[i] = (u8)tmp[i];
+	nvt_mp_print_result_log(out, count);
+	printk("\n");
 	return 0;
 }
 
-/* stock nvt_mp_parse_array (0x8ae2968): s32 limit array of x*y entries,
- * each logged through nvt_print_data_log_in_one_line. */
+/* stock nvt_mp_parse_array @0x8ae2968: require at least x*y u32 entries,
+ * read the full property length, then print x entries per row. */
 static int nvt_mp_parse_array(struct device_node *child, const char *name,
-			      s32 *out, u32 count)
+			      s32 *out, u32 x_channel, u32 y_channel)
 {
-	int ret = of_property_read_u32_array(child, name, (u32 *)out, count);
+	const void *prop;
+	int len = 0;
+	u32 actual;
+	u32 total = x_channel * y_channel;
+	u32 row;
 
-	if (ret < 0) {
-		pr_err("NVT-ts: nvt_mp_parse_array: %s miss, ret=%d\n", name, ret);
+	prop = of_find_property(child, name, &len);
+	actual = len / sizeof(u32);
+	if (!prop || !actual || actual < total ||
+	    actual > NVT_MP_X_Y_DIMENSION_MAX) {
+		pr_err("3[%s] %s %d: error find %s. len=%d\n",
+		       __func__, __func__, 2481, name, actual);
 		return -1;
 	}
-	pr_info("NVT-ts: nvt_mp_parse_array: %s ok (%u entries)\n", name, count);
+	pr_info("3[%s] %s %d: %s. len=%d\n",
+		__func__, __func__, 2484, name, actual);
+	if (of_property_read_u32_array(child, name, (u32 *)out, actual) < 0) {
+		pr_err("3[%s] %s %d: error find %s. len=%d\n",
+		       __func__, __func__, 2487, name, actual);
+		return -1;
+	}
+	for (row = 0; row < y_channel; row++) {
+		nvt_mp_print_data_log(out + row * x_channel, x_channel);
+		printk("\n");
+	}
 	return 0;
 }
 
-/* stock nvt_mp_parse_dt (0x8ae2c90): find the novatek-mp-criteria-*
- * child and pull the 4 geometry u32s + AIN maps + all limit arrays.
- * Any miss aborts the whole parse with -1 like stock. */
+/* stock nvt_mp_parse_pen_array @0x8ae2af0: same as parse_array but with
+ * pen dimensions and the stock pen_size diagnostic. */
+static int nvt_mp_parse_pen_array(struct device_node *child, const char *name,
+				  s32 *out, u32 x_num, u32 y_num)
+{
+	const void *prop;
+	int len = 0;
+	u32 actual;
+	u32 total = x_num * y_num;
+	u32 row;
+
+	prop = of_find_property(child, name, &len);
+	actual = len / sizeof(u32);
+	if (!prop || !actual || actual < total ||
+	    actual > NVT_MP_PEN_X_Y_DIMENSION_MAX) {
+		pr_err("3[%s] %s %d: error find %s. len=%d, size=%d, x_num=%d, y_num=%d\n",
+		       __func__, __func__, 2521, name, actual, total, x_num, y_num);
+		return -1;
+	}
+	pr_info("3[%s] %s %d: %s. len=%d\n",
+		__func__, __func__, 2524, name, actual);
+	if (of_property_read_u32_array(child, name, (u32 *)out, actual) < 0) {
+		pr_err("3[%s] %s %d: error find %s. len=%d\n",
+		       __func__, __func__, 2527, name, actual);
+		return -1;
+	}
+	for (row = 0; row < y_num; row++) {
+		nvt_mp_print_data_log(out + row * x_num, x_num);
+		printk("\n");
+	}
+	return 0;
+}
+
+/* stock nvt_mp_parse_dt @0x8ae2c90. The shipping DT has
+ * IC_KEY_CFG_SIZE/AIN_KEY too, but stock's parse_dt reads only the four
+ * geometry u32s, AIN_X, AIN_Y, the 10 panel limit arrays, the 16 pen arrays
+ * when pen_support is set, and PS_Config_Diff_Test_Frame. */
 static int nvt_mp_parse_dt(struct device_node *parent, const char *name)
 {
-	struct device_node *child;
+	struct device_node *child = NULL;
 	u32 x_cfg, y_cfg;
-	int ret;
+	int ret = -1;
 
-	pr_info("NVT-ts: nvt_mp_parse_dt: looking for %s\n", name);
+	pr_info("3[%s] %s %d: Parse mp criteria for node %s\n",
+		__func__, __func__, 2555, name);
 	for_each_child_of_node(parent, child) {
 		if (of_node_name_eq(child, name))
 			break;
 	}
 	if (!child) {
-		pr_err("NVT-ts: nvt_mp_parse_dt: %s not found\n", name);
+		pr_err("3[%s] %s %d: Not found compatible node %s!\n",
+		       __func__, __func__, 2567, name);
 		return -1;
 	}
-	pr_info("NVT-ts: nvt_mp_parse_dt: found %s\n", name);
+	pr_info("3[%s] %s %d: found child node %s\n",
+		__func__, __func__, 2561, name);
 
 	if (nvt_mp_parse_u32(child, "IC_X_CFG_SIZE", &x_cfg) ||
 	    nvt_mp_parse_u32(child, "IC_Y_CFG_SIZE", &y_cfg) ||
 	    nvt_mp_parse_u32(child, "X_Channel", &nvt_mp_x_channel) ||
 	    nvt_mp_parse_u32(child, "Y_Channel", &nvt_mp_y_channel))
-		return -1;
+		goto out_put;
 	nvt_mp_ic_x_cfg_size = x_cfg;
 	nvt_mp_ic_y_cfg_size = y_cfg;
 
-	if (nvt_mp_parse_ain(child, "AIN_X", nvt_mp_ain_x,
-			     min_t(u32, x_cfg, NVT_MP_AIN_MAX)) ||
-	    nvt_mp_parse_ain(child, "AIN_Y", nvt_mp_ain_y,
-			     min_t(u32, y_cfg, NVT_MP_AIN_MAX)))
-		return -1;
+	if (x_cfg > NVT_MP_AIN_MAX || y_cfg > NVT_MP_AIN_MAX) {
+		pr_err("3[%s] %s %d: AIN size %u/%u exceeds %u\n",
+		       __func__, __func__, 2572, x_cfg, y_cfg, NVT_MP_AIN_MAX);
+		goto out_put;
+	}
+	if (nvt_mp_parse_ain(child, "AIN_X", nvt_mp_ain_x, x_cfg) ||
+	    nvt_mp_parse_ain(child, "AIN_Y", nvt_mp_ain_y, y_cfg))
+		goto out_put;
 
 	if (nvt_mp_parse_array(child, "PS_Config_Lmt_Short_Rawdata_P",
 			       nvt_mp_limit_short_p,
-			       min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel,
-				     NVT_MP_LIMIT_MAX)) ||
-	    	nvt_mp_parse_array(child, "PS_Config_Lmt_Short_Rawdata_N",
-				nvt_mp_limit_short_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
+	    nvt_mp_parse_array(child, "PS_Config_Lmt_Short_Rawdata_N",
+			       nvt_mp_limit_short_n,
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
 	    nvt_mp_parse_array(child, "PS_Config_Lmt_Open_Rawdata_P",
-				nvt_mp_limit_open_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
+			       nvt_mp_limit_open_p,
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
 	    nvt_mp_parse_array(child, "PS_Config_Lmt_Open_Rawdata_N",
-				nvt_mp_limit_open_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
+			       nvt_mp_limit_open_n,
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
 	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_Rawdata_P",
-				nvt_mp_limit_fw_raw_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
+			       nvt_mp_limit_fw_raw_p,
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
 	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_Rawdata_N",
-				nvt_mp_limit_fw_raw_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
+			       nvt_mp_limit_fw_raw_n,
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
 	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_CC_P",
-				nvt_mp_limit_fw_cc_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
+			       nvt_mp_limit_fw_cc_p,
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
 	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_CC_N",
-				nvt_mp_limit_fw_cc_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
+			       nvt_mp_limit_fw_cc_n,
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
 	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_Diff_P",
-				nvt_mp_limit_fw_diff_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
+			       nvt_mp_limit_fw_diff_p,
+			       nvt_mp_x_channel, nvt_mp_y_channel) ||
 	    nvt_mp_parse_array(child, "PS_Config_Lmt_FW_Diff_N",
-				nvt_mp_limit_fw_diff_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipX_FW_Raw_P",
+			       nvt_mp_limit_fw_diff_n,
+			       nvt_mp_x_channel, nvt_mp_y_channel))
+		goto out_put;
+
+	if (nvt_ts->pen_support) {
+		if (nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenTipX_FW_Raw_P",
 				nvt_mp_limit_pen_tipx_raw_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipX_FW_Raw_N",
+				nvt_ts->x_num, nvt_ts->y_gang_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenTipX_FW_Raw_N",
 				nvt_mp_limit_pen_tipx_raw_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipY_FW_Raw_P",
+				nvt_ts->x_num, nvt_ts->y_gang_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenTipY_FW_Raw_P",
 				nvt_mp_limit_pen_tipy_raw_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipY_FW_Raw_N",
+				nvt_ts->x_gang_num, nvt_ts->y_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenTipY_FW_Raw_N",
 				nvt_mp_limit_pen_tipy_raw_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingX_FW_Raw_P",
+				nvt_ts->x_gang_num, nvt_ts->y_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenRingX_FW_Raw_P",
 				nvt_mp_limit_pen_ringx_raw_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingX_FW_Raw_N",
+				nvt_ts->x_num, nvt_ts->y_gang_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenRingX_FW_Raw_N",
 				nvt_mp_limit_pen_ringx_raw_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingY_FW_Raw_P",
+				nvt_ts->x_num, nvt_ts->y_gang_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenRingY_FW_Raw_P",
 				nvt_mp_limit_pen_ringy_raw_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingY_FW_Raw_N",
+				nvt_ts->x_gang_num, nvt_ts->y_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenRingY_FW_Raw_N",
 				nvt_mp_limit_pen_ringy_raw_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipX_FW_Diff_P",
+				nvt_ts->x_gang_num, nvt_ts->y_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenTipX_FW_Diff_P",
 				nvt_mp_limit_pen_tipx_diff_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipX_FW_Diff_N",
+				nvt_ts->x_num, nvt_ts->y_gang_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenTipX_FW_Diff_N",
 				nvt_mp_limit_pen_tipx_diff_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipY_FW_Diff_P",
+				nvt_ts->x_num, nvt_ts->y_gang_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenTipY_FW_Diff_P",
 				nvt_mp_limit_pen_tipy_diff_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenTipY_FW_Diff_N",
+				nvt_ts->x_gang_num, nvt_ts->y_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenTipY_FW_Diff_N",
 				nvt_mp_limit_pen_tipy_diff_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingX_FW_Diff_P",
+				nvt_ts->x_gang_num, nvt_ts->y_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenRingX_FW_Diff_P",
 				nvt_mp_limit_pen_ringx_diff_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingX_FW_Diff_N",
+				nvt_ts->x_num, nvt_ts->y_gang_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenRingX_FW_Diff_N",
 				nvt_mp_limit_pen_ringx_diff_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingY_FW_Diff_P",
+				nvt_ts->x_num, nvt_ts->y_gang_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenRingY_FW_Diff_P",
 				nvt_mp_limit_pen_ringy_diff_p,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)) ||
-	    nvt_mp_parse_array(child, "PS_Config_Lmt_PenRingY_FW_Diff_N",
+				nvt_ts->x_gang_num, nvt_ts->y_num) ||
+		    nvt_mp_parse_pen_array(child,
+				"PS_Config_Lmt_PenRingY_FW_Diff_N",
 				nvt_mp_limit_pen_ringy_diff_n,
-				min_t(u32, nvt_mp_x_channel * nvt_mp_y_channel, \
-						NVT_MP_LIMIT_MAX)))
-		return -1;
+				nvt_ts->x_gang_num, nvt_ts->y_num))
+			goto out_put;
+	}
 
-	nvt_mp_parse_u32(child, "PS_Config_Diff_Test_Frame",
-			  &nvt_mp_diff_test_frame);
+	if (nvt_mp_parse_u32(child, "PS_Config_Diff_Test_Frame",
+			     &nvt_mp_diff_test_frame))
+		goto out_put;
 
-	return 0;
+	pr_info("3[%s] %s %d: Parse mp criteria done!\n",
+		__func__, __func__, 2710);
+	ret = 0;
+out_put:
+	of_node_put(child);
+	return ret;
 }
 
 /* stock nvt_polling_hand_shake_status (0x8ae71f0): sleep 20ms then poll
@@ -3506,6 +3627,7 @@ static int nvt_selftest_run(void)
 	int ret;
 	s32 *md = NULL;
 	u8 x_num, y_num;
+	char mp_node[32];
 
 	pr_info("NVT-ts: nvt_selftest_run: ++\n");
 
@@ -3521,8 +3643,10 @@ static int nvt_selftest_run(void)
 	if (ret < 0)
 		goto out_lock;
 
-	ret = nvt_mp_parse_dt(nvt_ts->client->dev.of_node,
-			      "novatek-mp-criteria-6067");
+	snprintf(mp_node, sizeof(mp_node), "novatek-mp-criteria-%04X",
+		 nvt_ts->nvt_pid);
+	ret = nvt_mp_parse_dt(nvt_ts->client->dev.of_node, mp_node);
+
 	if (ret != 0) {
 		pr_err("NVT-ts: nvt_selftest_run: mp_parse_dt failed\n");
 		nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
