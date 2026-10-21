@@ -611,7 +611,11 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	static bool first_tpd_status_reported = false;
 	static char last_kbd_status = 0;
 	static bool first_kbd_status_reported = false;
-	
+
+	/* IRQ is registered before hid_allocate_device in this probe. */
+	if (!ihid->hid)
+		return;
+
 	if (size > ihid->bufsize)
 		size = ihid->bufsize;
 
