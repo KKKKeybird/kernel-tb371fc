@@ -1700,9 +1700,6 @@ static int i2c_hid_remove(struct i2c_client *client)
 	pm_runtime_disable(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
 	pm_runtime_put_noidle(&client->dev);
-	device_remove_file(&hid->dev, &dev_attr_version);
-	device_remove_file(&hid->dev, &dev_attr_kb_status);
-
 	if (kb_input_dev) {
 		input_unregister_device(kb_input_dev);
 		kb_input_dev = NULL;
