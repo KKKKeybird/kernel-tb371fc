@@ -2379,7 +2379,23 @@ static const struct file_operations nvt_fw_status_fops = {
 /* ---- proc edge_reject ---- */
 static int nvt_edge_reject_show(struct seq_file *s, void *v)
 {
-	seq_printf(s, "%d\n", nvt_ts->edge_reject);
+	switch (nvt_ts->edge_reject) {
+	case 0:
+		seq_printf(s, "Vertical Direction!(0 degree)\n");
+		break;
+	case 1:
+		seq_printf(s, "Right Up Direction!(270 degree)\n");
+		break;
+	case 2:
+		seq_printf(s, "Vertical reverse Direction!(180 degree)\n");
+		break;
+	case 3:
+		seq_printf(s, "Left Up Direction!(90 degree)\n");
+		break;
+	default:
+		seq_printf(s, "Not Support!\n");
+		break;
+	}
 	return 0;
 }
 
@@ -2547,7 +2563,7 @@ static const struct file_operations gesture_control_fops = {
 /* ---- edge_grid_zone (stock 0x8ae14f0/0x8ae16a0/0x8ae16c8) ---- */
 static int nvt_edge_grid_zone_show(struct seq_file *s, void *v)
 {
-	seq_printf(s, "%d,%d,%d,%d\n",
+	seq_printf(s, "Edge Grid Zone %d,%d,%d,%d\n",
 		   nvt_ts->edge_grid_x1, nvt_ts->edge_grid_y1,
 		   nvt_ts->edge_grid_x2, nvt_ts->edge_grid_y2);
 	return 0;
