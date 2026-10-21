@@ -3625,7 +3625,7 @@ out_put:
  * logging fw history on timeout. */
 static int nvt_polling_hand_shake_status(void)
 {
-	u8 buf[4] = { 0 };
+	u8 buf[6] = { 0 };
 	int i;
 
 	usleep_range(20000, 20000);
@@ -3637,8 +3637,19 @@ static int nvt_polling_hand_shake_status(void)
 			return 0;
 		usleep_range(10000, 10000);
 	}
-	pr_err("NVT-ts: nvt_polling_hand_shake_status: handshake timeout 0x%02x\n",
-	       buf[1]);
+
+	pr_err("3[%s] %s %d: polling hand shake status failed, buf[1]=0x%02X\n",
+	       __func__, __func__, 341, buf[1]);
+
+	nvt_set_page(NVT_MM->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
+	buf[0] = EVENT_MAP_HOST_CMD;
+	memset(&buf[1], 0, sizeof(buf) - 1);
+	CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf));
+	pr_err("3[%s] %s %d: Read back 5 bytes from offset EVENT_MAP_HOST_CMD: 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
+	       __func__, __func__, 351, buf[1], buf[2], buf[3], buf[4], buf[5]);
+
+	nvt_read_fw_history(NVT_MM->MMAP_HISTORY_EVENT0);
+	nvt_read_fw_history(NVT_MM->MMAP_HISTORY_EVENT1);
 	return -1;
 }
 
@@ -3665,11 +3676,10 @@ static int nvt_save_rawdata_to_csv(const s32 *data, u8 x_num, u8 y_num,
 {
 	struct file *fp;
 	char *buf;
-	size_t row_cap;
 	size_t cap;
 	u32 total;
-	u32 off = 0;
-	u32 i;
+	u32 output_len;
+	u32 y;
 	loff_t pos = offset;
 	ssize_t ret;
 
@@ -3677,26 +3687,25 @@ static int nvt_save_rawdata_to_csv(const s32 *data, u8 x_num, u8 y_num,
 		return -EINVAL;
 
 	total = (u32)x_num * y_num;
-	row_cap = (size_t)x_num * 12 + 2;
-	cap = row_cap * y_num + 1;
+	output_len = total * 7 + (u32)y_num * 2;
+	/* Stock lays cells out at fixed 7-byte offsets. Allocate extra
+	 * slack so a wider-than-five-digit value cannot overflow memory. */
+	cap = ((size_t)x_num * 14 + 2) * y_num + 1;
 	buf = kmalloc(cap, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
-	for (i = 0; i < total; i++) {
-		int n = scnprintf(buf + off, cap - off, "%5d, ", data[i]);
+	for (y = 0; y < y_num; y++) {
+		u32 x;
+		u32 index;
 
-		if (n < 0 || off + (u32)n + 2 >= cap) {
-			kfree(buf);
-			return -EOVERFLOW;
+		for (x = 0; x < x_num; x++) {
+			index = y * x_num + x;
+			sprintf(buf + index * 7 + y * 2, "%5d, ", data[index]);
 		}
-		off += n;
-		if ((i % x_num) == x_num - 1) {
-			buf[off++] = '\r';
-			buf[off++] = '\n';
-		}
+		index = (y + 1) * x_num;
+		sprintf(buf + index * 7 + y * 2, "\r\n");
 	}
-	buf[off] = '\0';
 
 	fp = filp_open(path, O_RDWR | O_CREAT |
 		       (offset ? 0 : O_TRUNC), 0666);
@@ -3708,7 +3717,7 @@ static int nvt_save_rawdata_to_csv(const s32 *data, u8 x_num, u8 y_num,
 		return ret;
 	}
 
-	ret = kernel_write(fp, buf, off, &pos);
+	ret = kernel_write(fp, buf, output_len, &pos);
 	if (ret <= 0) {
 		pr_err("3[%s] %s %d: write %s failed\n",
 		       __func__, __func__, 3776, path);
@@ -3803,8 +3812,8 @@ static int nvt_mp_read_baseline(s32 *data)
 	nvt_get_mdata(data, &x_num, &y_num);
 	nvt_mp_copy_s16(data, x_num, y_num);
 	pr_info("NVT-ts: nvt_read_baseline:\n");
-	ret = nvt_save_rawdata_to_csv(data, x_num, y_num,
-				      NVT_CSV_FW_RAWDATA, 0);
+	ret = nvt_save_rawdata_to_csv(data, nvt_mp_x_channel,
+				      nvt_mp_y_channel, NVT_CSV_FW_RAWDATA, 0);
 	return ret < 0 ? -EAGAIN : 0;
 }
 
@@ -3824,8 +3833,8 @@ static int nvt_mp_read_cc(s32 *data)
 	nvt_get_mdata(data, &x_num, &y_num);
 	nvt_mp_copy_s16(data, x_num, y_num);
 	pr_info("NVT-ts: nvt_read_CC:\n");
-	ret = nvt_save_rawdata_to_csv(data, x_num, y_num,
-				      NVT_CSV_FW_CC, 0);
+	ret = nvt_save_rawdata_to_csv(data, nvt_mp_x_channel,
+				      nvt_mp_y_channel, NVT_CSV_FW_CC, 0);
 	return ret < 0 ? -EAGAIN : 0;
 }
 
@@ -3976,14 +3985,17 @@ static int nvt_mp_read_fw_noise(s32 *xdata)
 
 	pr_info("NVT-ts: nvt_read_fw_noise:RawData_Diff_Max:\n");
 	if (nvt_save_rawdata_to_csv(nvt_ts->mp_rawdata_diff_max,
-				    x_num, y_num, NVT_CSV_NOISE, 0) < 0)
+				    nvt_mp_x_channel, nvt_mp_y_channel,
+				    NVT_CSV_NOISE, 0) < 0)
 		return -EAGAIN;
 
 	pr_info("NVT-ts: nvt_read_fw_noise:RawData_Diff_Min:\n");
-	if (nvt_save_rawdata_to_csv(nvt_ts->mp_rawdata_diff_min, x_num, y_num,
+	if (nvt_save_rawdata_to_csv(nvt_ts->mp_rawdata_diff_min,
+				    nvt_mp_x_channel, nvt_mp_y_channel,
 				    NVT_CSV_NOISE,
-				    (u32)y_num * x_num * 7 +
-				    (u32)y_num * 2) < 0)
+				    (u32)nvt_mp_y_channel *
+				    nvt_mp_x_channel * 7 +
+				    (u32)nvt_mp_y_channel * 2) < 0)
 		return -EAGAIN;
 
 	if (!nvt_ts->pen_support)
@@ -4238,10 +4250,9 @@ static int nvt_selftest_run(void)
 	int ret = 0;
 
 	pr_info("NVT-ts: nvt_selftest_run: ++\n");
+	nvt_mp_reset_results();
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-
-	nvt_mp_reset_results();
 
 	/* stock SPI communication test: raw two-byte read before MP FW. */
 	if (CTP_SPI_READ(nvt_ts->client, spi_buf, sizeof(spi_buf)) < 0) {
