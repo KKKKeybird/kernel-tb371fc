@@ -3630,8 +3630,8 @@ static int nvt_polling_hand_shake_status(void)
 
 	usleep_range(20000, 20000);
 	for (i = 0; i < 250; i++) {
-		nvt_set_page(0x51);
-		buf[0] = 0x00;
+		nvt_set_page(NVT_MM->EVENT_BUF_ADDR | 0x51);
+		buf[0] = 0x51;
 		CTP_SPI_READ(nvt_ts->client, buf, 2);
 		if ((buf[1] & 0xfe) == 0xa0)
 			return 0;
