@@ -621,6 +621,19 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 		pr_err( "gpio_boost_en :%d\n", chg->gpio_boost_en);
 	chg->gpio_cradle = of_get_named_gpio(node, "qcom,gpio_cradle", 0);
 		pr_err("gpio_cradle :%d\n", chg->gpio_cradle);
+	chg->hq_conn_temp_high_gpio = of_get_named_gpio_flags(node,
+			"qcom,chg-control-gpio", 0, NULL);
+	if ((u32)chg->hq_conn_temp_high_gpio > 0x4ff) {
+		pr_err("conn therm gpio %d is not valid\n",
+				chg->hq_conn_temp_high_gpio);
+	} else {
+		rc = devm_gpio_request_one(chg->dev,
+				chg->hq_conn_temp_high_gpio, 0,
+				"chg-control-gpio");
+		if (rc < 0)
+			pr_err("failed to request gpio %d, error %d\n",
+				chg->hq_conn_temp_high_gpio, rc);
+	}
 	chg->pogo_5v = of_property_read_bool(node, "lenovo,pogo-5v");
 		pr_err( "pogo_5v :%d\n", chg->pogo_5v);
 	chg->lenovo_jeita = of_property_read_bool(node, "lenovo,jeita_enable");

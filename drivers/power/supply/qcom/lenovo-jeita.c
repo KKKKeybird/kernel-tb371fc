@@ -570,6 +570,10 @@ static int handle_jeita(struct lenovo_jeita_info *chip)
 		return rc;
 	}
 	temp = pval.intval;
+	rc = hq_config_chg_max_fcc(chip->batt_psy, 8000000);
+	if (rc < 0)
+		pr_err("Couldn't config max fcc rc=%d\n", rc);
+
 	rc = get_val(chip->jeita_fcc_config->fcc_cfg,
 			chip->jeita_fcc_config->param.rise_hys,
 			chip->jeita_fcc_config->param.fall_hys,
