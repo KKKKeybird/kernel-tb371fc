@@ -517,9 +517,9 @@ static int i2c_hid_set_power(struct i2c_client *client, int power_state)
 	}
 
 	if (ret && mcu_rst_gpio) {
-		gpiod_direction_output_raw(gpio_to_desc(mcu_rst_gpio), 0);
+		gpiod_set_raw_value(gpio_to_desc(mcu_rst_gpio), 0);
 		msleep(10);
-		gpiod_direction_output_raw(gpio_to_desc(mcu_rst_gpio), 1);
+		gpiod_set_raw_value(gpio_to_desc(mcu_rst_gpio), 1);
 		msleep(10);
 		dev_err(&client->dev,
 			"failed to change power setting retry 3 times,set reset pin to 1.\n");
@@ -1458,9 +1458,14 @@ static int i2c_enable_mcu(struct i2c_client *client)
 	}
 
 	is_mcu_init = true;
-	dev_info(&client->dev,
-		 "p284: mcu reset released (reset=%d resume=%d)\n",
-		 mcu_rst_gpio, mcu_resume_gpio);
+	{
+		int rst_value = gpiod_get_raw_value(gpio_to_desc(mcu_rst_gpio));
+		int resume_value = gpiod_get_raw_value(gpio_to_desc(mcu_resume_gpio));
+
+		dev_info(&client->dev,
+			 "hid-keyboard,%s,after setting: MCU_HWRESET_PIN=%d,MCU_WAKEUP_PIN=%d\n",
+			 __func__, rst_value, resume_value);
+	}
 	return 0;
 }
 
@@ -1859,6 +1864,7 @@ noinline int kb_i2c_resume(void)
 {
 	int ret = 0;
 
+	pr_info("hid-keyboard,=== %s === start\n", __func__);
 	if (!g_already_sleep)
 		return -1;
 
@@ -1875,6 +1881,7 @@ noinline int kb_i2c_resume(void)
 	}
 
 	g_already_sleep = false;
+	pr_info("hid-keyboard,=== %s === end\n", __func__);
 
 	return 0;
 }
@@ -1883,6 +1890,7 @@ noinline void kb_i2c_suspend(void)
 {
 	int ret;
 
+	pr_info("hid-keyboard,=== %s === start\n", __func__);
 	if (g_already_sleep)
 		return;
 
@@ -1899,6 +1907,7 @@ noinline void kb_i2c_suspend(void)
 	}
 
 	g_already_sleep = true;
+	pr_info("hid-keyboard,=== %s === end\n", __func__);
 }
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
 
