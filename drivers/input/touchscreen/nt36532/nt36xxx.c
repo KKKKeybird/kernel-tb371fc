@@ -1300,6 +1300,7 @@ static void nvt_hall_check_func(struct work_struct *work)
 /* ---- nvt_restore_cmd_func ---- */
 static struct work_struct nvt_restore_cmd_work;
 struct proc_dir_entry *NVT_proc_entry;
+static bool nvt_panel_notifier_registered;
 /* D55: the focaltech driver keeps its own `static` active_panel, so the
  * extern below must bind to the synaptics global definition (the only
  * non-static one in the build). Keep the same symbol name. */
@@ -2237,9 +2238,12 @@ static void nvt_boot_update_firmware_work(struct work_struct *work)
 			}
 		}
 	}
-	if (active_panel &&
-	    drm_panel_notifier_register(active_panel, &nvt_ts->drm_nb) < 0)
-		pr_err("NVT-ts: fwu-work notifier registration failed\n");
+	if (active_panel && !nvt_panel_notifier_registered) {
+		if (drm_panel_notifier_register(active_panel, &nvt_ts->drm_nb) == 0)
+			nvt_panel_notifier_registered = true;
+		else
+			pr_err("NVT-ts: fwu-work notifier registration failed\n");
+	}
 
 	mutex_lock(&nvt_ts->lock);
 	nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
@@ -3574,7 +3578,10 @@ static int nvt_save_rawdata_to_csv(const s32 *data, u8 x_num, u8 y_num,
 	struct file *fp;
 	char *buf;
 	u32 total = (u32)x_num * y_num;
-	u32 row_cap = (u32)x_num * 7 + 2;
+	/* Safe upper bound: a signed 32-bit decimal plus comma is at most
+	 * 12 bytes. Stock's 7-byte estimate is too small for actual raw data
+	 * and makes scnprintf() hit an underflowed remaining-length. */
+	u32 row_cap = (u32)x_num * 12 + 2;
 	u32 cap = row_cap * y_num + 1;
 	u32 off = 0, i, x;
 	loff_t pos = 0;
@@ -4285,6 +4292,7 @@ static int nvt_ts_probe(struct spi_device *client)
 			pr_err("3[%s] %s %d: register drm_panel_notifier failed. ret=%d\n", "nvt_ts_probe", "nvt_ts_probe", 2736, ret);
 			goto err_mp_proc;
 		}
+		nvt_panel_notifier_registered = true;
 	} else {
 		pr_err("NVT-ts: panel not ready yet, will retry via fwu work\n");
 	}
@@ -4330,6 +4338,10 @@ static int nvt_ts_probe(struct spi_device *client)
 	return 0;
 
 err_mp_proc:
+	if (active_panel && nvt_panel_notifier_registered) {
+		drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb);
+		nvt_panel_notifier_registered = false;
+	}
 	nvt_mp_proc_deinit();
 	nvt_extra_proc_deinit();
 err_extra_proc:
@@ -4374,10 +4386,12 @@ err_extra_proc:
 static int nvt_ts_remove(struct spi_device *client)
 {
 	pr_info("3[%s] %s %d: ++\n", "nvt_ts_remove", "nvt_ts_remove", 2907);
-	if (active_panel &&
-	    drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
-		pr_info("3[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
-			"nvt_ts_remove", "nvt_ts_remove", 2912);
+	if (active_panel && nvt_panel_notifier_registered) {
+		if (drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
+			pr_info("3[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
+				"nvt_ts_remove", "nvt_ts_remove", 2912);
+		nvt_panel_notifier_registered = false;
+	}
 	power_supply_unreg_notifier(&nvt_ts->psy_nb);
 	nvt_mp_proc_deinit();
 	nvt_extra_proc_deinit();
@@ -4430,10 +4444,12 @@ static void nvt_ts_shutdown(struct spi_device *client)
 			"nvt_irq_enable", "nvt_irq_enable", 230, 0,
 			d ? d->depth : -1);
 	}
-	if (active_panel &&
-	    drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
-		pr_info("3[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
-			"nvt_ts_shutdown", "nvt_ts_shutdown", 3001);
+	if (active_panel && nvt_panel_notifier_registered) {
+		if (drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
+			pr_info("3[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
+				"nvt_ts_shutdown", "nvt_ts_shutdown", 3001);
+		nvt_panel_notifier_registered = false;
+	}
 	nvt_mp_proc_deinit();
 	nvt_extra_proc_deinit();
 	if (NVT_proc_entry) {
