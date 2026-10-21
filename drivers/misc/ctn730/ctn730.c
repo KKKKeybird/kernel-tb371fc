@@ -26,6 +26,7 @@
 #include <linux/time.h>
 #include <linux/sysfs.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/power_supply.h>
 #include <drm/drm_panel.h>
 
 extern void nvt_support_pen_set_nfc(bool normal);
@@ -83,7 +84,8 @@ struct ctn730_data {
 	u16 fw_len;				/* 0x0a4 */
 	u8 rsv1[2];				/* 0x0a6 */
 	struct blocking_notifier_head notifier_head;	/* 0x0a8 */
-	u8 rsv2[0x40 - sizeof(struct blocking_notifier_head)];
+	u8 rsv2[0x38 - sizeof(struct blocking_notifier_head)];
+	struct power_supply *power_supply;	/* 0x0e0 */
 	int rf_on;				/* 0x0e8 */
 	int gpio_ven;				/* 0x0ec */
 	int gpio_rst;				/* 0x0f0 */
@@ -139,6 +141,7 @@ _Static_assert(offsetof(struct ctn730_data, fw_section_count) == 0x094, "fw_cnt"
 _Static_assert(offsetof(struct ctn730_data, fw_crc_val) == 0x0a0, "fw_crc");
 _Static_assert(offsetof(struct ctn730_data, fw_len) == 0x0a4, "fw_len");
 _Static_assert(offsetof(struct ctn730_data, notifier_head) == 0x0a8, "notifier");
+_Static_assert(offsetof(struct ctn730_data, power_supply) == 0x0e0, "power_supply");
 _Static_assert(offsetof(struct ctn730_data, rf_on) == 0x0e8, "rf_on");
 _Static_assert(offsetof(struct ctn730_data, gpio_ven) == 0x0ec, "ven");
 _Static_assert(offsetof(struct ctn730_data, gpio_rst) == 0x0f0, "rst");
@@ -1708,7 +1711,7 @@ static int ctn730_remove(struct i2c_client *client)
 		return 0;
 	free_irq(data->irq, data);
 	misc_deregister(&data->misc);
-	gpio_free(data->gpio_rst);
+	gpio_free(data->gpio_irq);
 	gpio_free(data->gpio_ven);
 	pr_info("ctn730: %s: kfree CTN730\n", "ctn730_remove");
 	kfree(data);
@@ -1723,10 +1726,10 @@ static int ctn730_probe(struct i2c_client *client,
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pinctrl_default;
 	int count, i, ret;
-	u32 irq_gpio;
+	int rst_gpio;
 
 	pr_info("ctn730: %s: probe device tree start\n", "ctn730_probe");
-	data = devm_kzalloc(&client->dev, sizeof(*data), GFP_KERNEL);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data) {
 		pr_info("ctn730: %s: failed to allocate memory for module data\n",
 			"ctn730_probe");
@@ -1737,49 +1740,61 @@ static int ctn730_probe(struct i2c_client *client,
 		pr_info("ctn730: %s: ctn730_dev is not NULL\n", "ctn730_probe");
 	client_address = client;
 	ctn730 = data;
-	data->dev = &client->dev;
 	data->client = client;
 	i2c_set_clientdata(client, data);
 
 	np = client->dev.of_node;
 	if (!np) {
 		pr_info("ctn730: %s: no node\n", "ctn730_probe");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto free_data;
 	}
+
 	pinctrl = devm_pinctrl_get(&client->dev);
 	if (IS_ERR(pinctrl)) {
-		dev_err(&client->dev, "failed to get pinctrl\n");
+		dev_err(&client->dev, "pins are not configured\n");
 	} else {
 		pinctrl_default = pinctrl_lookup_state(pinctrl, "default");
-		if (IS_ERR(pinctrl_default))
-			dev_err(&client->dev, "failed to lookup pinctrl default state\n");
-		else if (pinctrl_select_state(pinctrl, pinctrl_default))
-			dev_err(&client->dev, "failed to select pinctrl default state\n");
+		if (IS_ERR(pinctrl_default)) {
+			devm_pinctrl_put(pinctrl);
+			dev_err(&client->dev, "pins are not configured\n");
+		} else {
+			ret = pinctrl_select_state(pinctrl, pinctrl_default);
+			if (ret < 0) {
+				devm_pinctrl_put(pinctrl);
+				dev_err(&client->dev, "pins are not configured\n");
+			}
+		}
 	}
 
 	ret = of_get_named_gpio(np, "rst-gpios", 0);
 	if (ret < 0) {
-		dev_info(&client->dev, "RST GPIO error getting from OF node\n");
-		return -ENODEV;
+		dev_err(&client->dev, "RST GPIO error getting from OF node\n");
+		ret = -ENODEV;
+		goto parse_fail;
 	}
-	irq_gpio = ret;
+	rst_gpio = ret;
 	ret = of_get_named_gpio(np, "enable-gpios", 0);
 	if (ret < 0) {
-		dev_info(&client->dev, "VEN GPIO error getting from OF node\n");
-		return -ENODEV;
+		dev_err(&client->dev, "VEN GPIO error getting from OF node\n");
+		ret = -ENODEV;
+		goto parse_fail;
 	}
 	data->gpio_ven = ret;
 	ret = of_get_named_gpio(np, "interrupt-gpios", 0);
 	if (ret < 0) {
-		dev_info(&client->dev, "IRQ GPIO error getting from OF node\n");
-		return -ENODEV;
+		dev_err(&client->dev, "IRQ GPIO error getting from OF node\n");
+		ret = -ENODEV;
+		goto parse_fail;
 	}
 	data->gpio_irq = ret;
 
 	count = of_count_phandle_with_args(np, "panel", NULL);
 	pr_info("ctn730: %s: panel count:%d \n", "ctn730_probe", count);
-	if (count < 1)
-		return -ENODEV;
+	if (count < 1) {
+		ret = -ENODEV;
+		goto parse_fail;
+	}
 	for (i = 0; i < count; i++) {
 		struct device_node *panel_np = of_parse_phandle(np, "panel", i);
 		struct drm_panel *panel;
@@ -1795,78 +1810,93 @@ static int ctn730_probe(struct i2c_client *client,
 		ctn730_panel = panel_np;
 		break;
 	}
-	if (i == count)
-		return -ENODEV;
+	if (i == count) {
+		ret = -ENODEV;
+		goto parse_fail;
+	}
 
 	pr_info("ctn730: %s: parse device tree success\n", "ctn730_probe");
-	ret = gpio_request(irq_gpio, "rst-gpios");
+	ret = gpio_request(rst_gpio, "rst-gpios");
 	if (ret == 0) {
 		pr_info("ctn730: %s: request rst_gpio %d\n", "ctn730_probe",
-			irq_gpio);
+			rst_gpio);
 	} else {
 		pr_info("ctn730: %s: not able to get GPIO rst_gpio\n",
 			"ctn730_probe");
-		return -ENODEV;
 	}
-	data->gpio_rst = irq_gpio;
+	data->gpio_rst = rst_gpio;
 
 	if (data->gpio_rst < 0x500) {
 		pr_info("ctn730: %s: ctn730_rst test!\n", "ctn730_probe");
-		gpio_direction_output(data->gpio_rst, 1);
+		gpiod_direction_output_raw(gpio_to_desc(data->gpio_rst), 1);
+		gpiod_set_raw_value(gpio_to_desc(data->gpio_rst), 1);
 		msleep(20);
-		gpio_direction_output(data->gpio_rst, 0);
+		gpiod_set_raw_value(gpio_to_desc(data->gpio_rst), 0);
 		msleep(20);
-		gpio_direction_output(data->gpio_rst, 1);
+		gpiod_set_raw_value(gpio_to_desc(data->gpio_rst), 1);
 		pr_info("ctn730: %s: ctn730_rst test!\n", "ctn730_probe");
-	} else {
-		return -ENODEV;
 	}
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		pr_info("ctn730: %s: need I2C_FUNC_I2C\n", "ctn730_probe");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto free_data;
 	}
 	pr_info("ctn730: %s: I2C success\n", "ctn730_probe");
 
 	pr_info("ctn730: %s: GPIO irq_gpio %u, ven_gpio %u\n",
 		"ctn730_probe", data->gpio_irq, data->gpio_ven);
+	ret = gpio_request(data->gpio_irq, "nfc_int");
+	if (ret < 0) {
+		pr_info("ctn730: %s: not able to get GPIO irq_gpio\n",
+			"ctn730_probe");
+		ret = -ENODEV;
+		goto free_data;
+	}
+	pr_info("ctn730: %s: Enable to get GPIO irq_gpio\n", "ctn730_probe");
+
+	ret = gpio_request(data->gpio_ven, "nfc_ven");
+	if (ret < 0) {
+		pr_info("ctn730: %s: not able to get GPIO ven_gpio\n",
+			"ctn730_probe");
+		ret = -ENODEV;
+		goto free_irq_gpio;
+	}
+	pr_info("ctn730: %s: Enable to get GPIO ven_gpio\n", "ctn730_probe");
 
 	ret = gpiod_to_irq(gpio_to_desc(data->gpio_irq));
 	if (ret < 0) {
 		pr_info("ctn730: %s: not able to map GPIO irq_gpio to an IRQ\n",
 			"ctn730_probe");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto free_ven_gpio;
 	}
 	data->irq = ret;
 	pr_info("ctn730: %s: Enable to map GPIO irq_gpio to an IRQ\n",
 		"ctn730_probe");
 	pr_info("ctn730: %s: request ven_gpio %d\n", "ctn730_probe",
 		data->gpio_ven);
-	ret = gpio_request(data->gpio_ven, "nfc_ven");
-	if (ret < 0) {
-		pr_info("ctn730: %s: not able to set irq_gpio as input\n",
-			"ctn730_probe");
-		return -ENODEV;
-	}
-	pr_info("ctn730: %s: Enable to set irq_gpio as input\n", "ctn730_probe");
-	ret = gpio_direction_output(data->gpio_ven, 0);
+
+	ret = gpiod_direction_output_raw(gpio_to_desc(data->gpio_ven), 0);
 	if (ret < 0) {
 		pr_info("ctn730: %s: not able to set ven_gpio as output\n",
 			"ctn730_probe");
-		return -ENODEV;
+		goto free_ven_gpio;
 	}
 	pr_info("ctn730: %s: Enable to set ven_gpio as output\n", "ctn730_probe");
 
 	data->misc.minor = MISC_DYNAMIC_MINOR;
 	data->misc.name = "ctn730";
+	data->misc.nodename = "ctn730";
 	data->misc.fops = NULL;
-	data->misc.parent = &client->dev;
+	data->power_supply = power_supply_get_by_name("bq27541-0");
 	ret = misc_register(&data->misc);
 	if (ret) {
 		pr_info("ctn730: %s: misc_register failed\n", "ctn730_probe");
-		return ret;
+		goto free_ven_gpio;
 	}
 	pr_info("ctn730: %s: misc_register success\n", "ctn730_probe");
+	data->dev = data->misc.this_device;
 	data->misc.this_device->type = &ctn730_dev_type;
 	for (i = 0; ctn730_attrs[i]; i++)
 		device_create_file(data->misc.this_device, ctn730_attrs[i]);
@@ -1883,14 +1913,27 @@ static int ctn730_probe(struct i2c_client *client,
 				"ctn730_probe");
 	}
 
-	ret = devm_request_threaded_irq(&client->dev, data->irq, NULL,
+	device_init_wakeup(data->dev, true);
+	device_wakeup_enable(data->dev);
+	alarm_init(&data->alarm, ALARM_BOOTTIME, charging_alarmtimer_function);
+
+	INIT_DELAYED_WORK(&data->update_fw_work, update_firmware_work);
+	INIT_DELAYED_WORK(&data->rf_on_work, rf_on_work);
+	INIT_DELAYED_WORK(&data->check_static_charge_work,
+			  check_static_charge_work);
+	INIT_DELAYED_WORK(&data->check_pen_lost, check_pen_lost);
+	INIT_DELAYED_WORK(&data->set_work, set_work);
+	INIT_DELAYED_WORK(&data->reset_work, reset_work);
+
+	ret = devm_request_threaded_irq(data->dev, data->irq, NULL,
 					ctn730_dev_irq_handler,
-					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-					"ctn730_irq", data);
+					IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
+					data->misc.name, data);
 	if (ret) {
 		pr_info("ctn730: %s: request_irq failed\n", "ctn730_probe");
+		disable_irq(data->irq);
 		misc_deregister(&data->misc);
-		return ret;
+		goto free_ven_gpio;
 	}
 	pr_info("ctn730: %s: request_irq successed\n", "ctn730_probe");
 	disable_irq(data->irq);
@@ -1900,20 +1943,10 @@ static int ctn730_probe(struct i2c_client *client,
 		     &report_info_mutex_key);
 	irq_set_irq_wake(data->irq, 1);
 
-	INIT_DELAYED_WORK(&data->update_fw_work, update_firmware_work);
-	INIT_DELAYED_WORK(&data->rf_on_work, rf_on_work);
-	INIT_DELAYED_WORK(&data->check_static_charge_work,
-			  check_static_charge_work);
-	INIT_DELAYED_WORK(&data->check_pen_lost, check_pen_lost);
-	INIT_DELAYED_WORK(&data->set_work, set_work);
-	INIT_DELAYED_WORK(&data->reset_work, reset_work);
-	/* stock: alarm.function = charging_alarmtimer_function (probe+0x89 = data+0x448) */
-	data->alarm.function = charging_alarmtimer_function;
-
 	pr_info("ctn730: %s: ctn730_enable\n", "ctn730_enable");
 	if (!data->enabled) {
 		if (data->gpio_ven < 0x500)
-			gpio_direction_output(data->gpio_ven, 1);
+			gpiod_direction_output_raw(gpio_to_desc(data->gpio_ven), 1);
 		enable_irq(data->irq);
 		data->enabled = 1;
 	}
@@ -1927,6 +1960,18 @@ static int ctn730_probe(struct i2c_client *client,
 	}
 	pr_info("ctn730: %s: CTN730 successed\n", "ctn730_probe");
 	return 0;
+
+parse_fail:
+	pr_info("ctn730: %s: parse device tree fail,probe fail\n",
+		"ctn730_probe");
+free_data:
+	kfree(data);
+	return ret;
+free_ven_gpio:
+	gpio_free(data->gpio_ven);
+free_irq_gpio:
+	gpio_free(data->gpio_irq);
+	goto free_data;
 }
 
 static const struct i2c_device_id ctn730_id[] = {
