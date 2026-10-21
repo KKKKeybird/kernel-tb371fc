@@ -1318,6 +1318,39 @@ static ssize_t hid_show_status(struct device *dev,
 	}
 }
 
+/* Stock register_kb_wakeup_devices @0xffffff8008cb18c8. */
+static int register_kb_wakeup_devices(void)
+{
+	pr_info("hid-keyboard,%s\n", __func__);
+	kb_input_dev = input_allocate_device();
+	if (!kb_input_dev) {
+		pr_err("hid-keyboard,%s,failed to input_allocate_device keyboard device\n",
+		       __func__);
+		return -1;
+	}
+
+	input_set_capability(kb_input_dev, EV_KEY, 0x74);  /* KEY_POWER */
+	input_set_capability(kb_input_dev, EV_KEY, 0x28e);
+	input_set_capability(kb_input_dev, EV_KEY, 0x28f);
+	input_set_capability(kb_input_dev, EV_KEY, 0x280);
+	input_set_capability(kb_input_dev, EV_KEY, 0x282);
+	input_set_capability(kb_input_dev, EV_KEY, 0x283);
+	input_set_capability(kb_input_dev, EV_KEY, 0x284);
+	input_set_capability(kb_input_dev, EV_KEY, 0x285);
+	input_set_capability(kb_input_dev, EV_KEY, 0x286);
+	input_set_capability(kb_input_dev, EV_KEY, 0x287);
+	input_set_capability(kb_input_dev, EV_KEY, 0x289);
+	input_set_capability(kb_input_dev, EV_KEY, 0x28a);
+	input_set_capability(kb_input_dev, EV_KEY, 0x28b);
+	kb_input_dev->name = "keyboard_wakeup_devices";
+	if (input_register_device(kb_input_dev)) {
+		pr_err("hid-keyboard,%s,failed to register keyboard device\n",
+		       __func__);
+		return -1;
+	}
+	return 0;
+}
+
 /* stock kb_report_power_key @0xffffff8008cb1828: log; if the input device
  * is not registered log and return -1; otherwise report KEY_POWER press +
  * sync + release + sync and return 0. */
@@ -1624,22 +1657,8 @@ static int i2c_hid_probe(struct i2c_client *client,
 		if (ret)
 			hid_err(hid,"can't create status attribute err: %d\n",ret);
 
-		if (!kb_input_dev) {
-			struct input_dev *idev;
-
-			idev = input_allocate_device();
-			if (idev) {
-				idev->name = "kb-power-key";
-				idev->id.bustype = BUS_I2C;
-				input_set_capability(idev, EV_KEY, KEY_POWER);
-				if (input_register_device(idev)) {
-					hid_err(hid, "kb power key input dev register failed\n");
-					input_free_device(idev);
-				} else {
-					kb_input_dev = idev;
-				}
-			}
-		}
+		if (!kb_input_dev)
+			register_kb_wakeup_devices();
 
 		if (lenovo_i2c_kb_registed) {
 			hidinput_disconnect(hid);
