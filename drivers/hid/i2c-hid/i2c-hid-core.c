@@ -64,6 +64,7 @@
 /* flags */
 #define I2C_HID_STARTED		0
 #define I2C_HID_RESET_PENDING	1
+#define I2C_HID_COMMAND_IN_PROGRESS	2
 
 #define I2C_HID_PWR_ON		0x00
 #define I2C_HID_PWR_SLEEP	0x01
@@ -348,10 +349,18 @@ static int __i2c_hid_command(struct i2c_client *client,
 		msg_num = 2;
 	}
 
-	if (wait)
+	/* stock sets RESET_PENDING only for wait commands without a response
+	 * buffer; commands with data_len >= 1 use the bit2 in-progress gate. */
+	if (wait && data_len <= 0)
 		set_bit(I2C_HID_RESET_PENDING, &ihid->flags);
 
+	if (data_len > 0)
+		set_bit(I2C_HID_COMMAND_IN_PROGRESS, &ihid->flags);
+
 	ret = i2c_transfer(client->adapter, msg, msg_num);
+
+	if (data_len > 0)
+		clear_bit(I2C_HID_COMMAND_IN_PROGRESS, &ihid->flags);
 
 	if (ret != msg_num)
 		return ret < 0 ? ret : -EIO;
@@ -791,6 +800,11 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 static irqreturn_t i2c_hid_irq(int irq, void *dev_id)
 {
 	struct i2c_hid *ihid = dev_id;
+
+	/* stock i2c_hid_irq 0x8cb3b2c: drop frames while a command has a
+	 * pending response buffer. */
+	if (test_bit(I2C_HID_COMMAND_IN_PROGRESS, &ihid->flags))
+		return IRQ_HANDLED;
 
 	i2c_hid_get_input(ihid);
 
