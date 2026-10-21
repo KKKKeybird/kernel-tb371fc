@@ -5181,12 +5181,15 @@ ssize_t dsi_panel_read_mipi_reg(struct dsi_panel *panel, char *buf)
 	int i = 0;
 	ssize_t count = 0;
 
+	/* Stock takes panel_lock before its null check. The outer
+	 * dsi_display wrapper already guarantees a non-null panel. */
+	mutex_lock(&panel->panel_lock);
+
 	if (!panel) {
 		pr_err("invalid params\n");
+		mutex_unlock(&panel->panel_lock);
 		return -EAGAIN;
 	}
-
-	mutex_lock(&panel->panel_lock);
 
 	if (g_dsi_read_cfg.is_read) {
 		for (i = 0; i < g_dsi_read_cfg.cmds_rlen; i++) {
