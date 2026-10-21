@@ -6,6 +6,12 @@
 
 #include "nt36xxx.h"
 
+#define NVT_TOUCH_MP 1
+#define TOUCH_KEY_NUM 0
+#include "nt36xxx_mp_ctrlram.h"
+#undef NVT_TOUCH_MP
+#undef TOUCH_KEY_NUM
+
 struct nvt_ts_data *nvt_ts;
 bool nvt_gesture_flag;
 u8 bTouchIsAwake;
@@ -3264,6 +3270,49 @@ static int nvt_mp_result_pen_ringx_diff_min;
 static int nvt_mp_result_pen_ringy_diff_max;
 static int nvt_mp_result_pen_ringy_diff_min;
 
+static void nvt_mp_load_default_criteria(void)
+{
+#define NVT_MP_DEFAULT_COPY(dst, src) memcpy((dst), (src), sizeof(dst))
+	nvt_mp_ic_x_cfg_size = IC_X_CFG_SIZE;
+	nvt_mp_ic_y_cfg_size = IC_Y_CFG_SIZE;
+	nvt_mp_x_channel = X_Channel;
+	nvt_mp_y_channel = Y_Channel;
+	NVT_MP_DEFAULT_COPY(nvt_mp_ain_x, AIN_X);
+	NVT_MP_DEFAULT_COPY(nvt_mp_ain_y, AIN_Y);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_short_p, PS_Config_Lmt_Short_Rawdata_P);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_short_n, PS_Config_Lmt_Short_Rawdata_N);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_open_p, PS_Config_Lmt_Open_Rawdata_P);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_open_n, PS_Config_Lmt_Open_Rawdata_N);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_fw_raw_p, PS_Config_Lmt_FW_Rawdata_P);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_fw_raw_n, PS_Config_Lmt_FW_Rawdata_N);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_fw_cc_p, PS_Config_Lmt_FW_CC_P);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_fw_cc_n, PS_Config_Lmt_FW_CC_N);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_fw_diff_p, PS_Config_Lmt_FW_Diff_P);
+	NVT_MP_DEFAULT_COPY(nvt_mp_limit_fw_diff_n, PS_Config_Lmt_FW_Diff_N);
+
+	if (nvt_ts->pen_support) {
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_tipx_raw_p, PS_Config_Lmt_PenTipX_FW_Raw_P);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_tipx_raw_n, PS_Config_Lmt_PenTipX_FW_Raw_N);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_tipy_raw_p, PS_Config_Lmt_PenTipY_FW_Raw_P);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_tipy_raw_n, PS_Config_Lmt_PenTipY_FW_Raw_N);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_ringx_raw_p, PS_Config_Lmt_PenRingX_FW_Raw_P);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_ringx_raw_n, PS_Config_Lmt_PenRingX_FW_Raw_N);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_ringy_raw_p, PS_Config_Lmt_PenRingY_FW_Raw_P);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_ringy_raw_n, PS_Config_Lmt_PenRingY_FW_Raw_N);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_tipx_diff_p, PS_Config_Lmt_PenTipX_FW_Diff_P);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_tipx_diff_n, PS_Config_Lmt_PenTipX_FW_Diff_N);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_tipy_diff_p, PS_Config_Lmt_PenTipY_FW_Diff_P);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_tipy_diff_n, PS_Config_Lmt_PenTipY_FW_Diff_N);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_ringx_diff_p, PS_Config_Lmt_PenRingX_FW_Diff_P);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_ringx_diff_n, PS_Config_Lmt_PenRingX_FW_Diff_N);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_ringy_diff_p, PS_Config_Lmt_PenRingY_FW_Diff_P);
+		NVT_MP_DEFAULT_COPY(nvt_mp_limit_pen_ringy_diff_n, PS_Config_Lmt_PenRingY_FW_Diff_N);
+	}
+
+	nvt_mp_diff_test_frame = PS_Config_Diff_Test_Frame;
+#undef NVT_MP_DEFAULT_COPY
+}
+
 static void nvt_mp_print_result_log(const u8 *data, u32 count)
 {
 	char *buf;
@@ -3677,36 +3726,34 @@ static int nvt_save_rawdata_to_csv(const s32 *data, u8 x_num, u8 y_num,
 static void nvt_mp_print_selftest_result(int result, const u8 *record,
 					 const s32 *raw, u8 x_num, u8 y_num)
 {
-	u32 row, col;
-	u32 index;
+	u32 row;
 
 	if (nvt_mp_test_result_printed)
 		return;
 
 	if (result == 0) {
 		pr_info(" PASS!\n");
-		return;
+		goto out_newline;
 	}
 	if (result == 1) {
 		pr_info(" ERROR! Read Data FAIL!\n");
-		return;
+		goto out_newline;
 	}
+	if (result != -1)
+		goto out_newline;
 
 	pr_info(" FAIL!\n");
 	pr_info("RecordResult:\n");
 	for (row = 0; row < y_num; row++) {
-		index = row * x_num;
-		nvt_mp_print_result_log(record + index, x_num);
+		nvt_mp_print_result_log(record + row * x_num, x_num);
 		pr_info("\n");
 	}
 	pr_info("ReadData:\n");
-	for (row = 0; row < y_num; row++) {
-		for (col = 0; col < x_num; col++) {
-			index = row * x_num + col;
-			pr_info("%5d, ", raw[index]);
-		}
-		pr_info("\n");
-	}
+	/* Stock passes the first row after the y*x grid here. Preserve that
+	 * exact behavior rather than improving the diagnostic output. */
+	nvt_mp_print_data_log(raw + (u32)y_num * x_num, x_num);
+	pr_info("\n");
+out_newline:
 	pr_info("\n");
 }
 
@@ -4232,13 +4279,9 @@ static int nvt_selftest_run(void)
 			goto out_unlock;
 		}
 	} else {
-		/* The shipping TB371FC DT always carries this property. The
-		 * legacy non-DT criteria tables are outside phase-2 scope, so
-		 * fail closed instead of consuming uninitialised globals. */
-		pr_err("3[%s] %s %d: Not found novatek,mp-support-dt, default criteria unavailable\n",
-		       __func__, __func__, 2189);
-		ret = -EINVAL;
-		goto out_unlock;
+		pr_info("3[%s] %s %d: Not found novatek,mp-support-dt, use default setting\n",
+			__func__, __func__, 2189);
+		nvt_mp_load_default_criteria();
 	}
 
 	if (nvt_check_fw_reset_state(0xa1)) {
@@ -4568,7 +4611,7 @@ static int nvt_selftest_show(struct seq_file *m, void *v)
 				nvt_ts->mp_raw_pen_tipx_raw,
 				nvt_ts->x_num, nvt_ts->y_gang_num);
 		} else {
-			pr_info("FAIL!\n");
+			pr_info(" FAIL!\n");
 			if (nvt_mp_result_pen_tipx_raw == -1) {
 				pr_info("Pen Tip X Raw");
 				nvt_mp_print_selftest_result(
@@ -4611,7 +4654,7 @@ static int nvt_selftest_show(struct seq_file *m, void *v)
 				nvt_ts->mp_raw_pen_tipx_diff_max,
 				nvt_ts->x_num, nvt_ts->y_gang_num);
 		} else {
-			pr_info("FAIL!\n");
+			pr_info(" FAIL!\n");
 			if (nvt_mp_result_pen_tipx_diff_max == -1) {
 				pr_info("Pen Tip X Diff Max");
 				nvt_mp_print_selftest_result(
