@@ -435,6 +435,17 @@ static int ctn730_drm_notifier_callback(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static void ctn730_queue_failure_work(struct ctn730_data *data,
+				      unsigned long delay)
+{
+	if (data->rf_on == 2)
+		queue_delayed_work_on(8, system_wq, &data->update_fw_work, delay);
+	else if (data->rf_on == 1)
+		queue_delayed_work_on(8, system_wq, &data->rf_on_work, delay);
+	else
+		queue_delayed_work_on(8, system_wq, &data->set_work, delay);
+}
+
 static int ctn730_i2c_send(struct ctn730_data *data, void *buf, size_t len)
 {
 	int ret;
@@ -450,7 +461,7 @@ static int ctn730_i2c_send(struct ctn730_data *data, void *buf, size_t len)
 	ret = i2c_transfer_buffer_flags(data->client, buf, len, 0);
 	if (ret == (int)len)
 		return ret;
-	if (ret == -EREMOTEIO) {
+	if (ret == -ENOTCONN) {
 		msleep(1);
 		ret = i2c_transfer_buffer_flags(data->client, buf, len, 0);
 		if (ret == (int)len) {
@@ -458,21 +469,11 @@ static int ctn730_i2c_send(struct ctn730_data *data, void *buf, size_t len)
 				"ctn730_i2c_send", "ctn730_i2c_send");
 			return ret;
 		}
-		queue_delayed_work_on(8, system_wq, &data->update_fw_work,
-				      msecs_to_jiffies(1));
-		return -EBUSY;
+		ctn730_queue_failure_work(data, 1);
+		return -EIO;
 	}
-	if (data->fw_status == 2) {
-		queue_delayed_work_on(8, system_wq, &data->update_fw_work,
-				      msecs_to_jiffies(25));
-	} else if (data->fw_status == 1) {
-		queue_delayed_work_on(8, system_wq, &data->rf_on_work,
-				      msecs_to_jiffies(25));
-	} else {
-		queue_delayed_work_on(8, system_wq, &data->set_work,
-				      msecs_to_jiffies(25));
-	}
-	return -EBUSY;
+	ctn730_queue_failure_work(data, 25);
+	return -EIO;
 }
 
 static void ctn730_set_ven(struct ctn730_data *data, int value)
