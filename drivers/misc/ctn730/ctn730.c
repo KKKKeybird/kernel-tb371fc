@@ -286,22 +286,22 @@ int check_tp_state(unsigned long enable)
 	return 0;
 }
 
-int ctn730_read_reg(struct ctn730_data *data)
+int ctn730_read_reg(struct i2c_client *client)
 {
-	int ret = i2c_smbus_read_word_data(data->client, 0);
+	int ret = i2c_smbus_read_word_data(client, 0);
 
 	if (ret < 0)
-		dev_err(&data->client->dev, "%s: err %d\n",
+		dev_err(&client->dev, "%s: err %d\n",
 			"ctn730_read_reg", ret);
 	return ret;
 }
 
-int ctn730_write_reg(struct ctn730_data *data, u16 val)
+int ctn730_write_reg(struct i2c_client *client, u16 val)
 {
-	int ret = i2c_smbus_write_word_data(data->client, 0, val);
+	int ret = i2c_smbus_write_word_data(client, 0, val);
 
 	if (ret < 0)
-		dev_err(&data->client->dev, "%s: err %d\n",
+		dev_err(&client->dev, "%s: err %d\n",
 			"ctn730_write_reg", ret);
 	msleep(10);
 	return ret;
@@ -310,12 +310,12 @@ int ctn730_write_reg(struct ctn730_data *data, u16 val)
 /* stock ctn730_notifier_call_chain @0xffffff8008882b58 (global T):
  * blocking_notifier_call_chain(data + 0xa8, ...) -- the notifier_head IS at
  * offset 0x0a8, asserted above, so &data->notifier_head is the same pointer.
- * Kept as (data, val) for the in-file callers; NULL cookie matches stock's
- * callers in ctn730_parse_message/set_work.
+ * Stock transparently forwards the caller cookie; internal callers pass NULL.
  */
-void ctn730_notifier_call_chain(struct ctn730_data *data, unsigned long val)
+void ctn730_notifier_call_chain(struct ctn730_data *data, unsigned long val,
+				void *cookie)
 {
-	blocking_notifier_call_chain(&data->notifier_head, val, NULL);
+	blocking_notifier_call_chain(&data->notifier_head, val, cookie);
 }
 
 /* Exported pen/keyboard-hook API. Stock bodies are these thin wrappers on the
@@ -851,7 +851,7 @@ static void check_static_charge_work(struct work_struct *work)
 	if (is_hard_reset != 1) {
 		memset(data->param, 0, 6);
 		memset(data->mac, 0, 8);
-		ctn730_notifier_call_chain(data, data->cmd_delay);
+		ctn730_notifier_call_chain(data, data->cmd_delay, NULL);
 		ctn730_uevent_change(data);
 		return;
 	}
@@ -860,7 +860,7 @@ static void check_static_charge_work(struct work_struct *work)
 	nvt_support_pen_set_nfc(true);
 	memset(data->param, 0, 6);
 	memset(data->mac, 0, 8);
-	ctn730_notifier_call_chain(data, data->cmd_delay);
+	ctn730_notifier_call_chain(data, data->cmd_delay, NULL);
 	ctn730_uevent_change(data);
 }
 
@@ -882,7 +882,7 @@ static void check_pen_lost(struct work_struct *work)
 		pr_info("ctn730: %s: pen_lost :open pen mode\n", "check_pen_lost");
 		nvt_support_pen_set_nfc(true);
 	}
-	ctn730_notifier_call_chain(data, data->cmd_delay);
+	ctn730_notifier_call_chain(data, data->cmd_delay, NULL);
 	ctn730_uevent_change(data);
 }
 
@@ -1169,7 +1169,7 @@ t80_dispatch:
 			memset(data->mac_or_param, 0, 8);
 			if (!data->level) {
 				data->level = 1;
-				ctn730_notifier_call_chain(data, data->level);
+				ctn730_notifier_call_chain(data, data->level, NULL);
 				kobject_uevent(&data->misc.this_device->kobj,
 					KOBJ_CHANGE);
 			}
@@ -1329,7 +1329,7 @@ t80_init_block:
 			data->version[1]);
 		data->fw_ver_sel = 1;
 	}
-	ctn730_notifier_call_chain(data, data->level);
+	ctn730_notifier_call_chain(data, data->level, NULL);
 	if (!is_hard_reset)
 		kobject_uevent(&data->misc.this_device->kobj, KOBJ_CHANGE);
 	is_hard_reset = 0;
@@ -1352,7 +1352,7 @@ app_chn_connected:
 	is_hard_reset = 0;
 	pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
 		ctn730_status_text[6]);
-	ctn730_notifier_call_chain(data, data->level);
+	ctn730_notifier_call_chain(data, data->level, NULL);
 	queue_delayed_work_on(8, system_wq, &data->check_pen_lost,
 		msecs_to_jiffies(15));
 	goto resched_tail;
