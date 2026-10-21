@@ -3190,7 +3190,7 @@ unlock:
  * novatek-mp-criteria-*: geometry + Short/Open/CC/Raw/Diff/Pen limits),
  * check_fw_reset_state(0xa1), clear_fw_status, change_mode(0x41),
  * check_fw_status, then per-test raw acquisitions each dumped through
- * nvt_save_rawdata_to_csv to /sdcard/Download/*.csv (7 files), finishing
+ * nvt_save_rawdata_to_csv to /sdcard/Download (7 CSV files), finishing
  * with another update_firmware to restore the normal image.
  * Phase 1 implements parse_dt + hand-shake + CSV writer + the FW rawdata
  * main chain; the Short/Open/CC/Noise/Pen segments (stock pseudo lines
@@ -3238,6 +3238,31 @@ static s32 nvt_mp_limit_pen_ringx_diff_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
 static s32 nvt_mp_limit_pen_ringy_diff_p[NVT_MP_PEN_X_Y_DIMENSION_MAX];
 static s32 nvt_mp_limit_pen_ringy_diff_n[NVT_MP_PEN_X_Y_DIMENSION_MAX];
 static u32 nvt_mp_diff_test_frame;
+static int nvt_mp_test_result_printed;
+static int nvt_mp_selftest_fw_ver;
+static int nvt_mp_result_spi_comm;
+static int nvt_mp_result_short;
+static int nvt_mp_result_open;
+static int nvt_mp_result_fw_rawdata;
+static int nvt_mp_result_cap_rawdata;
+static int nvt_mp_result_fw_cc;
+static int nvt_mp_result_noise;
+static int nvt_mp_result_fw_diff_max;
+static int nvt_mp_result_fw_diff_min;
+static int nvt_mp_result_pen_fw_raw;
+static int nvt_mp_result_pen_tipx_raw;
+static int nvt_mp_result_pen_tipy_raw;
+static int nvt_mp_result_pen_ringx_raw;
+static int nvt_mp_result_pen_ringy_raw;
+static int nvt_mp_result_pen_noise;
+static int nvt_mp_result_pen_tipx_diff_max;
+static int nvt_mp_result_pen_tipx_diff_min;
+static int nvt_mp_result_pen_tipy_diff_max;
+static int nvt_mp_result_pen_tipy_diff_min;
+static int nvt_mp_result_pen_ringx_diff_max;
+static int nvt_mp_result_pen_ringx_diff_min;
+static int nvt_mp_result_pen_ringy_diff_max;
+static int nvt_mp_result_pen_ringy_diff_min;
 
 static void nvt_mp_print_result_log(const u8 *data, u32 count)
 {
@@ -3568,150 +3593,1122 @@ static int nvt_polling_hand_shake_status(void)
 	return -1;
 }
 
-/* ---- nvt_selftest fops placeholder (stock nvt_selftest_fops@0x9814d48) ---- */
-/* stock nvt_save_rawdata_to_csv (0x8ae6e40): build a comma-separated grid
- * (x_num columns of %7d, CRLF rows) into a kmalloc buffer, then write it
- * to the stock path via filp_open/O_CREAT/O_TRUNC + kernel_write. */
+/* ---- nvt_selftest phase 2: stock CSV/result pipeline ---- */
+
+#define NVT_CSV_FW_RAWDATA  "/sdcard/Download/FWRawdataTest.csv"
+#define NVT_CSV_FW_CC       "/sdcard/Download/FWCCTest.csv"
+#define NVT_CSV_PEN_RAW     "/sdcard/Download/PenFWRawTest.csv"
+#define NVT_CSV_NOISE       "/sdcard/Download/NoiseTest.csv"
+#define NVT_CSV_PEN_NOISE   "/sdcard/Download/PenNoiseTest.csv"
+#define NVT_CSV_SHORT       "/sdcard/Download/ShortTest.csv"
+#define NVT_CSV_OPEN        "/sdcard/Download/OpenTest.csv"
+
+#define NVT_MP_MODE_NORMAL  0x00
+#define NVT_MP_MODE_CC      0x41
+#define NVT_MP_FREQ_HOP_DISABLE 0x66
+
+/* stock nvt_save_rawdata_to_csv @0x8ae6e40. The fifth argument is a
+ * byte offset: zero truncates the file, non-zero appends at that exact
+ * offset. Stock uses 7 bytes per cell; keep its "%5d, " syntax but size
+ * the buffer safely for values wider than five characters. */
 static int nvt_save_rawdata_to_csv(const s32 *data, u8 x_num, u8 y_num,
-				   const char *path, u32 flags)
+				   const char *path, u32 offset)
 {
 	struct file *fp;
 	char *buf;
-	u32 total = (u32)x_num * y_num;
-	/* Safe upper bound: a signed 32-bit decimal plus comma is at most
-	 * 12 bytes. Stock's 7-byte estimate is too small for actual raw data
-	 * and makes scnprintf() hit an underflowed remaining-length. */
-	u32 row_cap = (u32)x_num * 12 + 2;
-	u32 cap = row_cap * y_num + 1;
-	u32 off = 0, i, x;
-	loff_t pos = 0;
-	int ret;
+	size_t row_cap;
+	size_t cap;
+	u32 total;
+	u32 off = 0;
+	u32 i;
+	loff_t pos = offset;
+	ssize_t ret;
 
-	pr_info("NVT-ts: nvt_save_rawdata_to_csv: %s++\n", __func__);
+	if (!data || !path || !x_num || !y_num)
+		return -EINVAL;
+
+	total = (u32)x_num * y_num;
+	row_cap = (size_t)x_num * 12 + 2;
+	cap = row_cap * y_num + 1;
 	buf = kmalloc(cap, GFP_KERNEL);
-	if (!buf) {
-		pr_err("NVT-ts: nvt_save_rawdata_to_csv: kmalloc failed\n");
+	if (!buf)
 		return -ENOMEM;
-	}
 
 	for (i = 0; i < total; i++) {
-		int n = scnprintf(buf + off, cap - off, "%7d,", data[i]);
+		int n = scnprintf(buf + off, cap - off, "%5d, ", data[i]);
+
+		if (n < 0 || off + (u32)n + 2 >= cap) {
+			kfree(buf);
+			return -EOVERFLOW;
+		}
 		off += n;
 		if ((i % x_num) == x_num - 1) {
-			buf[off++] = 0x0d;
-			buf[off++] = 0x0a;
+			buf[off++] = '\r';
+			buf[off++] = '\n';
 		}
 	}
-	buf[off] = 0;
+	buf[off] = '\0';
 
-	fp = filp_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	fp = filp_open(path, O_RDWR | O_CREAT |
+		       (offset ? 0 : O_TRUNC), 0666);
 	if (IS_ERR(fp)) {
 		ret = PTR_ERR(fp);
-		pr_err("NVT-ts: nvt_save_rawdata_to_csv: open %s failed %d\n",
-		       path, ret);
+		pr_err("3[%s] %s %d: open %s failed\n",
+		       __func__, __func__, 3725, path);
 		kfree(buf);
 		return ret;
 	}
+
 	ret = kernel_write(fp, buf, off, &pos);
-	if (ret < 0)
-		pr_err("NVT-ts: nvt_save_rawdata_to_csv: write failed %d\n", ret);
+	if (ret <= 0) {
+		pr_err("3[%s] %s %d: write %s failed\n",
+		       __func__, __func__, 3776, path);
+		ret = -EIO;
+	} else {
+		ret = 0;
+	}
+
 	filp_close(fp, NULL);
 	kfree(buf);
 	pr_info("NVT-ts: nvt_save_rawdata_to_csv: %s--\n", __func__);
-	return ret < 0 ? ret : 0;
-}
-
-#define NVT_CSV_FW_RAWDATA "/sdcard/Download/FWRawdataTest.csv"
-
-/* stock nvt_selftest_open (0x8ae4060) phase-1 main chain: lock, probe,
- * refresh firmware, parse MP criteria, reset(0xa1), clear+mode 0x41,
- * read the FW rawdata grid, dump FWRawdataTest.csv, restore firmware.
- * Short/Open/CC/Noise/Pen segments (stock pseudo L300-L2134) follow in
- * phase 2. */
-
-static int nvt_selftest_run(void)
-{
-	int ret;
-	s32 *md = NULL;
-	u8 x_num, y_num;
-	char mp_node[32];
-
-	pr_info("NVT-ts: nvt_selftest_run: ++\n");
-
-	mutex_lock(&nvt_ts->lock);
-
-	ret = nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
-	if (ret < 0) {
-		pr_err("NVT-ts: nvt_selftest_run: update_firmware failed %d\n", ret);
-		goto out_lock;
-	}
-
-	ret = nvt_get_fw_info();
-	if (ret < 0)
-		goto out_lock;
-
-	snprintf(mp_node, sizeof(mp_node), "novatek-mp-criteria-%04X",
-		 nvt_ts->nvt_pid);
-	ret = nvt_mp_parse_dt(nvt_ts->client->dev.of_node, mp_node);
-
-	if (ret != 0) {
-		pr_err("NVT-ts: nvt_selftest_run: mp_parse_dt failed\n");
-		nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
-		goto out_lock;
-	}
-
-	if (nvt_check_fw_reset_state(NVT_FW_INIT_RESET_STATE))
-		goto out_lock;
-
-	if (nvt_clear_fw_status())
-		goto out_lock;
-
-	ret = nvt_change_mode(0x41 /* stock selftest rawdata mode */);
-	if (ret < 0)
-		goto out_lock;
-
-	if (nvt_check_fw_status())
-		goto out_lock;
-
-	x_num = nvt_ts->x_num;
-	y_num = nvt_ts->y_num;
-	md = kcalloc((u32)x_num * y_num, sizeof(s32), GFP_KERNEL);
-	if (!md) {
-		ret = -ENOMEM;
-		goto out_lock;
-	}
-
-	nvt_read_mdata(NVT_MM->BASELINE_ADDR); /* stock: mmap[0]+0xc */
-	nvt_get_mdata(md, &x_num, &y_num);
-
-	ret = nvt_save_rawdata_to_csv(md, x_num, y_num,
-				      NVT_CSV_FW_RAWDATA, 0);
-	if (ret < 0)
-		pr_err("NVT-ts: nvt_selftest_run: save csv failed %d\n", ret);
-
-	/* phase 2 (stock pseudo L300-L2134): Short/Open/CC/Noise/Pen
-	 * segments with their own change_mode/hand-shake rounds. */
-
-	nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
-
-out_lock:
-	kfree(md);
-	mutex_unlock(&nvt_ts->lock);
-	pr_info("NVT-ts: nvt_selftest_run: -- ret=%d\n", ret);
 	return ret;
 }
 
-static int nvt_selftest_show(struct seq_file *m, void *v)
+static void nvt_mp_print_selftest_result(int result, const u8 *record,
+					 const s32 *raw, u8 x_num, u8 y_num)
 {
-	int ret = nvt_selftest_run();
+	u32 row, col;
+	u32 index;
 
-	seq_printf(m, "%d\n", ret);
+	if (nvt_mp_test_result_printed)
+		return;
+
+	if (result == 0) {
+		pr_info("Pass!\n");
+		return;
+	}
+	if (result == 1) {
+		pr_info(" ERROR! Read Data FAIL!\n");
+		return;
+	}
+
+	pr_info(" FAIL!\n");
+	pr_info("RecordResult:\n");
+	for (row = 0; row < y_num; row++) {
+		index = row * x_num;
+		nvt_mp_print_result_log(record + index, x_num);
+		pr_info("\n");
+	}
+	pr_info("ReadData:\n");
+	for (row = 0; row < y_num; row++) {
+		for (col = 0; col < x_num; col++) {
+			index = row * x_num + col;
+			pr_info("%5d, ", raw[index]);
+		}
+		pr_info("\n");
+	}
+	pr_info("\n");
+}
+
+/* stock inlined RawDataTest_SinglePoint_Sub: 0x01 high-limit fail,
+ * 0x02 low-limit fail, 0 pass. */
+static int nvt_mp_validate_raw(const s32 *raw, int32_t *record_store,
+			       u8 x_num, u8 y_num,
+			       const s32 *limit_p, const s32 *limit_n)
+{
+	u8 *record = (u8 *)record_store;
+	bool pass = true;
+	u32 index;
+	u32 total;
+
+	if (!raw || !record || !limit_p || !limit_n)
+		return -1;
+
+	total = (u32)x_num * y_num;
+	for (index = 0; index < total; index++) {
+		record[index] = 0;
+		if (raw[index] > limit_p[index])
+			record[index] |= 0x01;
+		if (raw[index] < limit_n[index])
+			record[index] |= 0x02;
+		if (record[index])
+			pass = false;
+	}
+	return pass ? 0 : -1;
+}
+
+static void nvt_mp_copy_s16(s32 *data, u8 x_num, u8 y_num)
+{
+	u32 index;
+	u32 total = (u32)x_num * y_num;
+
+	for (index = 0; index < total; index++)
+		data[index] = (s16)data[index];
+}
+/* stock inlined nvt_read_baseline. */
+static int nvt_mp_read_baseline(s32 *data)
+{
+	u8 x_num;
+	u8 y_num;
+	int ret;
+
+	nvt_read_mdata(NVT_MM->BASELINE_ADDR);
+	nvt_get_mdata(data, &x_num, &y_num);
+	nvt_mp_copy_s16(data, x_num, y_num);
+	pr_info("NVT-ts: nvt_read_baseline:\n");
+	ret = nvt_save_rawdata_to_csv(data, x_num, y_num,
+				      NVT_CSV_FW_RAWDATA, 0);
+	return ret < 0 ? -EAGAIN : 0;
+}
+
+/* stock inlined nvt_read_CC. Pipe selection is deliberately inverted
+ * relative to the raw baseline path. */
+static int nvt_mp_read_cc(s32 *data)
+{
+	u8 x_num;
+	u8 y_num;
+	int ret;
+
+	if (nvt_get_fw_pipe() == 0)
+		nvt_read_mdata(NVT_MM->DIFF_PIPE1_ADDR);
+	else
+		nvt_read_mdata(NVT_MM->DIFF_PIPE0_ADDR);
+
+	nvt_get_mdata(data, &x_num, &y_num);
+	nvt_mp_copy_s16(data, x_num, y_num);
+	pr_info("NVT-ts: nvt_read_CC:\n");
+	ret = nvt_save_rawdata_to_csv(data, x_num, y_num,
+				      NVT_CSV_FW_CC, 0);
+	return ret < 0 ? -EAGAIN : 0;
+}
+
+/* stock inlined nvt_read_pen_baseline. Four independent pen grids are
+ * written into one CSV at cumulative byte offsets. */
+static int nvt_mp_read_pen_baseline(void)
+{
+	u32 offset = 0;
+	u8 x_num = nvt_ts->x_num;
+	u8 y_num = nvt_ts->y_num;
+	u8 x_gang = nvt_ts->x_gang_num;
+	u8 y_gang = nvt_ts->y_gang_num;
+
+	nvt_read_get_num_mdata(NVT_MM->PEN_2D_BL_TIP_X_ADDR,
+			       nvt_ts->mp_raw_pen_tipx_raw,
+			       (u32)x_num * y_gang);
+	nvt_read_get_num_mdata(NVT_MM->PEN_2D_BL_TIP_Y_ADDR,
+			       nvt_ts->mp_raw_pen_tipy_raw,
+			       (u32)x_gang * y_num);
+	nvt_read_get_num_mdata(NVT_MM->PEN_2D_BL_RING_X_ADDR,
+			       nvt_ts->mp_raw_pen_ringx_raw,
+			       (u32)x_num * y_gang);
+	nvt_read_get_num_mdata(NVT_MM->PEN_2D_BL_RING_Y_ADDR,
+			       nvt_ts->mp_raw_pen_ringy_raw,
+			       (u32)x_gang * y_num);
+
+	pr_info("NVT-ts: nvt_read_pen_baseline:RawData_PenTipX_Raw\n");
+	if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_tipx_raw,
+				    x_num, y_gang, NVT_CSV_PEN_RAW,
+				    offset) < 0)
+		return -EAGAIN;
+	offset += (u32)y_gang * x_num * 7 + (u32)y_gang * 2;
+
+	pr_info("NVT-ts: nvt_read_pen_baseline:RawData_PenTipY_Raw\n");
+	if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_tipy_raw,
+				    x_gang, y_num, NVT_CSV_PEN_RAW,
+				    offset) < 0)
+		return -EAGAIN;
+	offset += (u32)y_num * x_gang * 7 + (u32)y_num * 2;
+
+	pr_info("NVT-ts: nvt_read_pen_baseline:RawData_PenRingX_Raw\n");
+	if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_ringx_raw,
+				    x_num, y_gang, NVT_CSV_PEN_RAW,
+				    offset) < 0)
+		return -EAGAIN;
+	offset += (u32)y_gang * x_num * 7 + (u32)y_gang * 2;
+
+	pr_info("NVT-ts: nvt_read_pen_baseline:RawData_PenRingY_Raw\n");
+	if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_ringy_raw,
+				    x_gang, y_num, NVT_CSV_PEN_RAW,
+				    offset) < 0)
+		return -EAGAIN;
+
 	return 0;
 }
 
+static void nvt_mp_enable_noise_collect(int frame_num)
+{
+	u8 buf[5] = { 0x50, 0x47, 0xaa, (u8)frame_num, 0x00 };
+
+	nvt_set_page(NVT_MM->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
+	CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
+}
+
+static void nvt_mp_enable_short_test(void)
+{
+	u8 buf[5] = { 0x50, 0x43, 0xaa, 0x02, 0x00 };
+
+	nvt_set_page(NVT_MM->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
+	CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
+}
+
+static void nvt_mp_enable_open_test(void)
+{
+	u8 buf[5] = { 0x50, 0x45, 0xaa, 0x02, 0x00 };
+
+	nvt_set_page(NVT_MM->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
+	CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
+}
+/* stock inlined nvt_read_fw_noise. xdata is the packed max/min word
+ * stream; the two one-byte deltas are split into separate grids. */
+static int nvt_mp_read_fw_noise(s32 *xdata)
+{
+	u8 x_num;
+	u8 y_num;
+	u32 x;
+	u32 y;
+	u32 index;
+	int frame_num;
+
+	if (nvt_clear_fw_status())
+		return -EAGAIN;
+
+	frame_num = (int)nvt_mp_diff_test_frame / 10;
+	if (frame_num <= 0)
+		frame_num = 1;
+	pr_info("NVT-ts: nvt_read_fw_noise: frame_num=%d\n", frame_num);
+	nvt_mp_enable_noise_collect(frame_num);
+	msleep(frame_num * 83);
+
+	if (nvt_polling_hand_shake_status())
+		return -EAGAIN;
+
+	if (nvt_get_fw_pipe() == 0)
+		nvt_read_mdata(NVT_MM->DIFF_PIPE0_ADDR);
+	else
+		nvt_read_mdata(NVT_MM->DIFF_PIPE1_ADDR);
+
+	nvt_get_mdata(xdata, &x_num, &y_num);
+	for (y = 0; y < y_num; y++) {
+		for (x = 0; x < x_num; x++) {
+			index = y * x_num + x;
+			nvt_ts->mp_rawdata_diff_max[index] =
+				(s8)((xdata[index] >> 8) & 0xff);
+			nvt_ts->mp_rawdata_diff_min[index] =
+				(s8)(xdata[index] & 0xff);
+		}
+	}
+
+	if (nvt_ts->pen_support) {
+		nvt_read_get_num_mdata(NVT_MM->PEN_2D_DIFF_TIP_X_ADDR,
+				       nvt_ts->mp_raw_pen_tipx_diff_max,
+				       (u32)nvt_ts->x_num * nvt_ts->y_gang_num);
+		nvt_read_get_num_mdata(NVT_MM->PEN_2D_RAW_TIP_X_ADDR,
+				       nvt_ts->mp_raw_pen_tipx_diff_min,
+				       (u32)nvt_ts->x_num * nvt_ts->y_gang_num);
+		nvt_read_get_num_mdata(NVT_MM->PEN_2D_DIFF_TIP_Y_ADDR,
+				       nvt_ts->mp_raw_pen_tipy_diff_max,
+				       (u32)nvt_ts->x_gang_num * nvt_ts->y_num);
+		nvt_read_get_num_mdata(NVT_MM->PEN_2D_RAW_TIP_Y_ADDR,
+				       nvt_ts->mp_raw_pen_tipy_diff_min,
+				       (u32)nvt_ts->x_gang_num * nvt_ts->y_num);
+		nvt_read_get_num_mdata(NVT_MM->PEN_2D_DIFF_RING_X_ADDR,
+				       nvt_ts->mp_raw_pen_ringx_diff_max,
+				       (u32)nvt_ts->x_num * nvt_ts->y_gang_num);
+		nvt_read_get_num_mdata(NVT_MM->PEN_2D_RAW_RING_X_ADDR,
+				       nvt_ts->mp_raw_pen_ringx_diff_min,
+				       (u32)nvt_ts->x_num * nvt_ts->y_gang_num);
+		nvt_read_get_num_mdata(NVT_MM->PEN_2D_DIFF_RING_Y_ADDR,
+				       nvt_ts->mp_raw_pen_ringy_diff_max,
+				       (u32)nvt_ts->x_gang_num * nvt_ts->y_num);
+		nvt_read_get_num_mdata(NVT_MM->PEN_2D_RAW_RING_Y_ADDR,
+				       nvt_ts->mp_raw_pen_ringy_diff_min,
+				       (u32)nvt_ts->x_gang_num * nvt_ts->y_num);
+	}
+
+	nvt_change_mode(NVT_MP_MODE_NORMAL);
+
+	pr_info("NVT-ts: nvt_read_fw_noise:RawData_Diff_Max:\n");
+	if (nvt_save_rawdata_to_csv(nvt_ts->mp_rawdata_diff_max,
+				    x_num, y_num, NVT_CSV_NOISE, 0) < 0)
+		return -EAGAIN;
+
+	pr_info("NVT-ts: nvt_read_fw_noise:RawData_Diff_Min:\n");
+	if (nvt_save_rawdata_to_csv(nvt_ts->mp_rawdata_diff_min, x_num, y_num,
+				    NVT_CSV_NOISE,
+				    (u32)y_num * x_num * 7 +
+				    (u32)y_num * 2) < 0)
+		return -EAGAIN;
+
+	if (!nvt_ts->pen_support)
+		return 0;
+
+	x_num = nvt_ts->x_num;
+	y_num = nvt_ts->y_num;
+	{
+		u8 x_gang = nvt_ts->x_gang_num;
+		u8 y_gang = nvt_ts->y_gang_num;
+		u32 pen_offset = 0;
+
+		pr_info("NVT-ts: nvt_read_fw_noise:RawData_PenTipX_DiffMax:\n");
+		if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_tipx_diff_max,
+					    x_num, y_gang, NVT_CSV_PEN_NOISE,
+					    pen_offset) < 0)
+			return -EAGAIN;
+		pen_offset += (u32)y_gang * x_num * 7 + (u32)y_gang * 2;
+
+		pr_info("NVT-ts: nvt_read_fw_noise:RawData_PenTipX_DiffMin:\n");
+		if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_tipx_diff_min,
+					    x_num, y_gang, NVT_CSV_PEN_NOISE,
+					    pen_offset) < 0)
+			return -EAGAIN;
+		pen_offset += (u32)y_gang * x_num * 7 + (u32)y_gang * 2;
+
+		pr_info("NVT-ts: nvt_read_fw_noise:RawData_PenTipY_DiffMax:\n");
+		if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_tipy_diff_max,
+					    x_gang, y_num, NVT_CSV_PEN_NOISE,
+					    pen_offset) < 0)
+			return -EAGAIN;
+		pen_offset += (u32)y_num * x_gang * 7 + (u32)y_num * 2;
+
+		pr_info("NVT-ts: nvt_read_fw_noise:RawData_PenTipY_DiffMin:\n");
+		if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_tipy_diff_min,
+					    x_gang, y_num, NVT_CSV_PEN_NOISE,
+					    pen_offset) < 0)
+			return -EAGAIN;
+		pen_offset += (u32)y_num * x_gang * 7 + (u32)y_num * 2;
+
+		pr_info("NVT-ts: nvt_read_fw_noise:RawData_PenRingX_DiffMax:\n");
+		if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_ringx_diff_max,
+					    x_num, y_gang, NVT_CSV_PEN_NOISE,
+					    pen_offset) < 0)
+			return -EAGAIN;
+		pen_offset += (u32)y_gang * x_num * 7 + (u32)y_gang * 2;
+
+		pr_info("NVT-ts: nvt_read_fw_noise:RawData_PenRingX_DiffMin:\n");
+		if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_ringx_diff_min,
+					    x_num, y_gang, NVT_CSV_PEN_NOISE,
+					    pen_offset) < 0)
+			return -EAGAIN;
+		pen_offset += (u32)y_gang * x_num * 7 + (u32)y_gang * 2;
+
+		pr_info("NVT-ts: nvt_read_fw_noise:RawData_PenRingY_DiffMax:\n");
+		if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_ringy_diff_max,
+					    x_gang, y_num, NVT_CSV_PEN_NOISE,
+					    pen_offset) < 0)
+			return -EAGAIN;
+		pen_offset += (u32)y_num * x_gang * 7 + (u32)y_num * 2;
+
+		pr_info("NVT-ts: nvt_read_fw_noise:RawData_PenRingY_DiffMin:\n");
+		if (nvt_save_rawdata_to_csv(nvt_ts->mp_raw_pen_ringy_diff_min,
+					    x_gang, y_num, NVT_CSV_PEN_NOISE,
+					    pen_offset) < 0)
+			return -EAGAIN;
+	}
+
+	return 0;
+}
+/* stock inlined nvt_read_fw_short. Short data is already laid out in
+ * X_Channel/Y_Channel order. */
+static int nvt_mp_read_fw_short(s32 *data)
+{
+	u8 *rawdata_buf = NULL;
+	u8 tmp[0x101];
+	u32 raw_pipe_addr;
+	u32 x;
+	u32 y;
+	u32 index;
+	u32 x_channels = nvt_mp_x_channel;
+	u32 y_channels = nvt_mp_y_channel;
+	size_t bytes;
+
+	if (nvt_clear_fw_status())
+		return -EAGAIN;
+
+	nvt_mp_enable_short_test();
+	if (nvt_polling_hand_shake_status())
+		return -EAGAIN;
+
+	bytes = (size_t)x_channels * y_channels * 2;
+	rawdata_buf = kzalloc(bytes, GFP_KERNEL);
+	if (!rawdata_buf)
+		return -ENOMEM;
+
+	raw_pipe_addr = nvt_get_fw_pipe() ? NVT_MM->RAW_PIPE1_ADDR :
+					    NVT_MM->RAW_PIPE0_ADDR;
+	memset(tmp, 0, sizeof(tmp));
+	for (y = 0; y < y_channels; y++) {
+		if (x_channels * 2 + 1 > sizeof(tmp)) {
+			kfree(rawdata_buf);
+			return -EOVERFLOW;
+		}
+		nvt_set_page(raw_pipe_addr + y * x_channels * 2);
+		tmp[0] = (u8)((raw_pipe_addr + y * x_channels * 2) & 0xff);
+		CTP_SPI_READ(nvt_ts->client, tmp, x_channels * 2 + 1);
+		memcpy(rawdata_buf + y * x_channels * 2, tmp + 1,
+		       x_channels * 2);
+	}
+
+	for (y = 0; y < y_channels; y++) {
+		for (x = 0; x < x_channels; x++) {
+			index = y * x_channels + x;
+			data[index] = (s16)(rawdata_buf[index * 2] |
+					   (rawdata_buf[index * 2 + 1] << 8));
+		}
+	}
+	kfree(rawdata_buf);
+
+	nvt_change_mode(NVT_MP_MODE_NORMAL);
+	pr_info("NVT-ts: nvt_read_fw_short:RawData_Short\n");
+	if (nvt_save_rawdata_to_csv(data, x_channels, y_channels,
+				    NVT_CSV_SHORT, 0) < 0)
+		return -EAGAIN;
+	return 0;
+}
+
+/* stock inlined nvt_read_fw_open. Unlike Short, Open reads the full
+ * IC_X_CFG_SIZE/IC_Y_CFG_SIZE array and maps it through AIN_X/AIN_Y. */
+static int nvt_mp_read_fw_open(s32 *data)
+{
+	u8 *rawdata_buf = NULL;
+	u8 tmp[0x101];
+	u32 raw_pipe_addr;
+	u32 x;
+	u32 y;
+	u32 index;
+	u32 x_channels = nvt_mp_x_channel;
+	u32 y_channels = nvt_mp_y_channel;
+	size_t bytes;
+
+	if (nvt_clear_fw_status())
+		return -EAGAIN;
+
+	nvt_mp_enable_open_test();
+	if (nvt_polling_hand_shake_status())
+		return -EAGAIN;
+
+	bytes = (size_t)nvt_mp_ic_x_cfg_size * nvt_mp_ic_y_cfg_size * 2;
+	rawdata_buf = kzalloc(bytes, GFP_KERNEL);
+	if (!rawdata_buf)
+		return -ENOMEM;
+
+	raw_pipe_addr = nvt_get_fw_pipe() ? NVT_MM->RAW_PIPE1_ADDR :
+					    NVT_MM->RAW_PIPE0_ADDR;
+	memset(tmp, 0, sizeof(tmp));
+	for (y = 0; y < nvt_mp_ic_y_cfg_size; y++) {
+		if (nvt_mp_ic_x_cfg_size * 2 + 1 > sizeof(tmp)) {
+			kfree(rawdata_buf);
+			return -EOVERFLOW;
+		}
+		nvt_set_page(raw_pipe_addr + y * nvt_mp_ic_x_cfg_size * 2);
+		tmp[0] = (u8)((raw_pipe_addr +
+			       y * nvt_mp_ic_x_cfg_size * 2) & 0xff);
+		CTP_SPI_READ(nvt_ts->client, tmp,
+			     nvt_mp_ic_x_cfg_size * 2 + 1);
+		memcpy(rawdata_buf + y * nvt_mp_ic_x_cfg_size * 2, tmp + 1,
+		       nvt_mp_ic_x_cfg_size * 2);
+	}
+
+	memset(data, 0, (size_t)x_channels * y_channels * sizeof(s32));
+	for (y = 0; y < nvt_mp_ic_y_cfg_size; y++) {
+		for (x = 0; x < nvt_mp_ic_x_cfg_size; x++) {
+			if (nvt_mp_ain_y[y] == 0xff || nvt_mp_ain_x[x] == 0xff)
+				continue;
+			if (nvt_mp_ain_y[y] >= y_channels ||
+			    nvt_mp_ain_x[x] >= x_channels)
+				continue;
+			index = (y * nvt_mp_ic_x_cfg_size + x) * 2;
+			data[nvt_mp_ain_y[y] * x_channels + nvt_mp_ain_x[x]] =
+				(s16)(rawdata_buf[index] |
+				      (rawdata_buf[index + 1] << 8));
+		}
+	}
+	kfree(rawdata_buf);
+
+	nvt_change_mode(NVT_MP_MODE_NORMAL);
+	pr_info("NVT-ts: nvt_read_fw_open:RawData_Open\n");
+	if (nvt_save_rawdata_to_csv(data, x_channels, y_channels,
+				    NVT_CSV_OPEN, 0) < 0)
+		return -EAGAIN;
+	return 0;
+}
+
+/* stock inlined nvt_switch_FreqHopEnDis(0x66). The command payload is
+ * {0x50,0x66}, readback {0x50,0xff}, two bytes each, twenty tries,
+ * 35 ms between tries. */
+static int nvt_mp_disable_freq_hop(void)
+{
+	u8 buf[2];
+	int retry;
+
+	for (retry = 0; retry < 20; retry++) {
+		nvt_set_page(NVT_MM->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = NVT_MP_FREQ_HOP_DISABLE;
+		CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
+		msleep(35);
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0xff;
+		CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf));
+		if (buf[1] == 0x00)
+			return 0;
+	}
+	pr_err("3[%s] %s %d: switch FreqHopEnDis 0x%02X failed, buf[1]=0x%02X\n",
+	       __func__, __func__, 911, NVT_MP_FREQ_HOP_DISABLE, buf[1]);
+	return -1;
+}
+
+static void nvt_mp_reset_results(void)
+{
+	nvt_mp_result_spi_comm = 0;
+	nvt_mp_result_short = 0;
+	nvt_mp_result_open = 0;
+	nvt_mp_result_fw_rawdata = 0;
+	nvt_mp_result_cap_rawdata = 0;
+	nvt_mp_result_fw_cc = 0;
+	nvt_mp_result_noise = 0;
+	nvt_mp_result_fw_diff_max = 0;
+	nvt_mp_result_fw_diff_min = 0;
+	nvt_mp_result_pen_fw_raw = 0;
+	nvt_mp_result_pen_tipx_raw = 0;
+	nvt_mp_result_pen_tipy_raw = 0;
+	nvt_mp_result_pen_ringx_raw = 0;
+	nvt_mp_result_pen_ringy_raw = 0;
+	nvt_mp_result_pen_noise = 0;
+	nvt_mp_result_pen_tipx_diff_max = 0;
+	nvt_mp_result_pen_tipx_diff_min = 0;
+	nvt_mp_result_pen_tipy_diff_max = 0;
+	nvt_mp_result_pen_tipy_diff_min = 0;
+	nvt_mp_result_pen_ringx_diff_max = 0;
+	nvt_mp_result_pen_ringx_diff_min = 0;
+	nvt_mp_result_pen_ringy_diff_max = 0;
+	nvt_mp_result_pen_ringy_diff_min = 0;
+}
+static int nvt_selftest_run(void)
+{
+	struct device_node *np = nvt_ts->client->dev.of_node;
+	u8 spi_buf[2] = { 0x00, 0x00 };
+	char mp_node[32];
+	int ret = 0;
+
+	pr_info("NVT-ts: nvt_selftest_run: ++\n");
+	if (mutex_lock_interruptible(&nvt_ts->lock))
+		return -ERESTARTSYS;
+
+	nvt_mp_reset_results();
+
+	/* stock SPI communication test: raw two-byte read before MP FW. */
+	if (CTP_SPI_READ(nvt_ts->client, spi_buf, sizeof(spi_buf)) < 0) {
+		nvt_mp_result_spi_comm = -1;
+		nvt_mp_result_short = -1;
+		nvt_mp_result_open = -1;
+		nvt_mp_result_cap_rawdata = -1;
+		nvt_mp_result_noise = -1;
+		goto out_unlock;
+	}
+
+	if (nvt_update_firmware(MP_UPDATE_FIRMWARE_NAME) < 0) {
+		pr_err("3[%s] %s %d: update mp firmware failed!\n",
+		       __func__, __func__, 2150);
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
+
+	if (nvt_get_fw_info()) {
+		pr_err("3[%s] %s %d: get fw info failed!\n",
+		       __func__, __func__, 2156);
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
+	nvt_mp_selftest_fw_ver = nvt_ts->fw_ver;
+
+	if (of_property_read_bool(np, "novatek,mp-support-dt")) {
+		snprintf(mp_node, sizeof(mp_node), "novatek-mp-criteria-%04X",
+			 nvt_ts->nvt_pid);
+		if (nvt_mp_parse_dt(np, mp_node)) {
+			nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
+			pr_err("3[%s] %s %d: mp parse device tree failed!\n",
+			       __func__, __func__, 2189);
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+	} else {
+		/* The shipping TB371FC DT always carries this property. The
+		 * legacy non-DT criteria tables are outside phase-2 scope, so
+		 * fail closed instead of consuming uninitialised globals. */
+		pr_err("3[%s] %s %d: Not found novatek,mp-support-dt, default criteria unavailable\n",
+		       __func__, __func__, 2189);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (nvt_check_fw_reset_state(0xa1)) {
+		pr_err("3[%s] %s %d: check fw reset state failed!\n",
+		       __func__, __func__, 2200);
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
+
+	if (nvt_mp_disable_freq_hop()) {
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
+
+	if (nvt_check_fw_reset_state(0xa3)) {
+		pr_err("3[%s] %s %d: check fw reset state failed!\n",
+		       __func__, __func__, 2216);
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
+	msleep(100);
+
+	if (nvt_clear_fw_status()) {
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
+
+	nvt_change_mode(NVT_MP_MODE_CC);
+
+	if (nvt_check_fw_status()) {
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
+
+	/* FW rawdata + CC. */
+	if (nvt_mp_read_baseline(nvt_ts->mp_rawdata_fw_rawdata)) {
+		nvt_mp_result_fw_rawdata = 1;
+	} else {
+		nvt_mp_result_fw_rawdata = nvt_mp_validate_raw(
+			nvt_ts->mp_rawdata_fw_rawdata,
+			nvt_ts->mp_record_fw_rawdata,
+			nvt_mp_x_channel, nvt_mp_y_channel,
+			nvt_mp_limit_fw_raw_p, nvt_mp_limit_fw_raw_n);
+	}
+
+	if (nvt_mp_read_cc(nvt_ts->mp_rawdata_fw_cc)) {
+		nvt_mp_result_fw_cc = 1;
+	} else {
+		nvt_mp_result_fw_cc = nvt_mp_validate_raw(
+			nvt_ts->mp_rawdata_fw_cc,
+			nvt_ts->mp_record_fw_cc,
+			nvt_mp_x_channel, nvt_mp_y_channel,
+			nvt_mp_limit_fw_cc_p, nvt_mp_limit_fw_cc_n);
+	}
+
+	if (nvt_mp_result_fw_rawdata == 1 || nvt_mp_result_fw_cc == 1) {
+		nvt_mp_result_cap_rawdata = 1;
+	} else if (nvt_mp_result_fw_rawdata == -1 ||
+		   nvt_mp_result_fw_cc == -1) {
+		nvt_mp_result_cap_rawdata = -1;
+	} else {
+		nvt_mp_result_cap_rawdata = 0;
+	}
+
+	if (nvt_ts->pen_support) {
+		if (nvt_mp_read_pen_baseline()) {
+			nvt_mp_result_pen_fw_raw = 1;
+		} else {
+			nvt_mp_result_pen_tipx_raw = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_tipx_raw,
+				nvt_ts->mp_record_pen_tipx_raw,
+				nvt_ts->x_num, nvt_ts->y_gang_num,
+				nvt_mp_limit_pen_tipx_raw_p,
+				nvt_mp_limit_pen_tipx_raw_n);
+			nvt_mp_result_pen_tipy_raw = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_tipy_raw,
+				nvt_ts->mp_record_pen_tipy_raw,
+				nvt_ts->x_gang_num, nvt_ts->y_num,
+				nvt_mp_limit_pen_tipy_raw_p,
+				nvt_mp_limit_pen_tipy_raw_n);
+			nvt_mp_result_pen_ringx_raw = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_ringx_raw,
+				nvt_ts->mp_record_pen_ringx_raw,
+				nvt_ts->x_num, nvt_ts->y_gang_num,
+				nvt_mp_limit_pen_ringx_raw_p,
+				nvt_mp_limit_pen_ringx_raw_n);
+			nvt_mp_result_pen_ringy_raw = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_ringy_raw,
+				nvt_ts->mp_record_pen_ringy_raw,
+				nvt_ts->x_gang_num, nvt_ts->y_num,
+				nvt_mp_limit_pen_ringy_raw_p,
+				nvt_mp_limit_pen_ringy_raw_n);
+			nvt_mp_result_pen_fw_raw =
+				(nvt_mp_result_pen_tipx_raw == -1 ||
+				 nvt_mp_result_pen_tipy_raw == -1 ||
+				 nvt_mp_result_pen_ringx_raw == -1 ||
+				 nvt_mp_result_pen_ringy_raw == -1) ? -1 : 0;
+		}
+	}
+
+	nvt_change_mode(NVT_MP_MODE_NORMAL);
+	if (nvt_mp_read_fw_noise(nvt_ts->mp_rawdata_diff)) {
+		nvt_mp_result_noise = 1;
+		nvt_mp_result_fw_diff_max = 1;
+		nvt_mp_result_fw_diff_min = 1;
+		if (nvt_ts->pen_support) {
+			nvt_mp_result_pen_noise = 1;
+			nvt_mp_result_pen_tipx_diff_max = 1;
+			nvt_mp_result_pen_tipx_diff_min = 1;
+			nvt_mp_result_pen_tipy_diff_max = 1;
+			nvt_mp_result_pen_tipy_diff_min = 1;
+			nvt_mp_result_pen_ringx_diff_max = 1;
+			nvt_mp_result_pen_ringx_diff_min = 1;
+			nvt_mp_result_pen_ringy_diff_max = 1;
+			nvt_mp_result_pen_ringy_diff_min = 1;
+		}
+	} else {
+		nvt_mp_result_fw_diff_max = nvt_mp_validate_raw(
+			nvt_ts->mp_rawdata_diff_max,
+			nvt_ts->mp_record_fw_diff_max,
+			nvt_mp_x_channel, nvt_mp_y_channel,
+			nvt_mp_limit_fw_diff_p, nvt_mp_limit_fw_diff_n);
+		nvt_mp_result_fw_diff_min = nvt_mp_validate_raw(
+			nvt_ts->mp_rawdata_diff_min,
+			nvt_ts->mp_record_fw_diff_min,
+			nvt_mp_x_channel, nvt_mp_y_channel,
+			nvt_mp_limit_fw_diff_p, nvt_mp_limit_fw_diff_n);
+		nvt_mp_result_noise =
+			(nvt_mp_result_fw_diff_max == -1 ||
+			 nvt_mp_result_fw_diff_min == -1) ? -1 : 0;
+
+		if (nvt_ts->pen_support) {
+			nvt_mp_result_pen_tipx_diff_max = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_tipx_diff_max,
+				nvt_ts->mp_record_pen_tipx_diff_max,
+				nvt_ts->x_num, nvt_ts->y_gang_num,
+				nvt_mp_limit_pen_tipx_diff_p,
+				nvt_mp_limit_pen_tipx_diff_n);
+			nvt_mp_result_pen_tipx_diff_min = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_tipx_diff_min,
+				nvt_ts->mp_record_pen_tipx_diff_min,
+				nvt_ts->x_num, nvt_ts->y_gang_num,
+				nvt_mp_limit_pen_tipx_diff_p,
+				nvt_mp_limit_pen_tipx_diff_n);
+			nvt_mp_result_pen_tipy_diff_max = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_tipy_diff_max,
+				nvt_ts->mp_record_pen_tipy_diff_max,
+				nvt_ts->x_gang_num, nvt_ts->y_num,
+				nvt_mp_limit_pen_tipy_diff_p,
+				nvt_mp_limit_pen_tipy_diff_n);
+			nvt_mp_result_pen_tipy_diff_min = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_tipy_diff_min,
+				nvt_ts->mp_record_pen_tipy_diff_min,
+				nvt_ts->x_gang_num, nvt_ts->y_num,
+				nvt_mp_limit_pen_tipy_diff_p,
+				nvt_mp_limit_pen_tipy_diff_n);
+			nvt_mp_result_pen_ringx_diff_max = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_ringx_diff_max,
+				nvt_ts->mp_record_pen_ringx_diff_max,
+				nvt_ts->x_num, nvt_ts->y_gang_num,
+				nvt_mp_limit_pen_ringx_diff_p,
+				nvt_mp_limit_pen_ringx_diff_n);
+			nvt_mp_result_pen_ringx_diff_min = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_ringx_diff_min,
+				nvt_ts->mp_record_pen_ringx_diff_min,
+				nvt_ts->x_num, nvt_ts->y_gang_num,
+				nvt_mp_limit_pen_ringx_diff_p,
+				nvt_mp_limit_pen_ringx_diff_n);
+			nvt_mp_result_pen_ringy_diff_max = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_ringy_diff_max,
+				nvt_ts->mp_record_pen_ringy_diff_max,
+				nvt_ts->x_gang_num, nvt_ts->y_num,
+				nvt_mp_limit_pen_ringy_diff_p,
+				nvt_mp_limit_pen_ringy_diff_n);
+			nvt_mp_result_pen_ringy_diff_min = nvt_mp_validate_raw(
+				nvt_ts->mp_raw_pen_ringy_diff_min,
+				nvt_ts->mp_record_pen_ringy_diff_min,
+				nvt_ts->x_gang_num, nvt_ts->y_num,
+				nvt_mp_limit_pen_ringy_diff_p,
+				nvt_mp_limit_pen_ringy_diff_n);
+			nvt_mp_result_pen_noise =
+				(nvt_mp_result_pen_tipx_diff_max == -1 ||
+				 nvt_mp_result_pen_tipx_diff_min == -1 ||
+				 nvt_mp_result_pen_tipy_diff_max == -1 ||
+				 nvt_mp_result_pen_tipy_diff_min == -1 ||
+				 nvt_mp_result_pen_ringx_diff_max == -1 ||
+				 nvt_mp_result_pen_ringx_diff_min == -1 ||
+				 nvt_mp_result_pen_ringy_diff_max == -1 ||
+				 nvt_mp_result_pen_ringy_diff_min == -1) ? -1 : 0;
+		}
+	}
+
+	if (nvt_mp_read_fw_short(nvt_ts->mp_rawdata_short)) {
+		nvt_mp_result_short = 1;
+	} else {
+		nvt_mp_result_short = nvt_mp_validate_raw(
+			nvt_ts->mp_rawdata_short, nvt_ts->mp_record_short,
+			nvt_mp_x_channel, nvt_mp_y_channel,
+			nvt_mp_limit_short_p, nvt_mp_limit_short_n);
+	}
+
+	if (nvt_mp_read_fw_open(nvt_ts->mp_rawdata_open)) {
+		nvt_mp_result_open = 1;
+	} else {
+		nvt_mp_result_open = nvt_mp_validate_raw(
+			nvt_ts->mp_rawdata_open, nvt_ts->mp_record_open,
+			nvt_mp_x_channel, nvt_mp_y_channel,
+			nvt_mp_limit_open_p, nvt_mp_limit_open_n);
+	}
+
+	nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
+
+out_unlock:
+	mutex_unlock(&nvt_ts->lock);
+	nvt_mp_test_result_printed = 0;
+	pr_info("NVT-ts: nvt_selftest_run: -- ret=%d\n", ret);
+	return ret;
+}
+/* stock c_show_selftest @0x8ae1ea8. Detailed labels go to the kernel log;
+ * /proc/android_touch/self_test itself emits the final 5-bit bitmap. */
+static int nvt_selftest_show(struct seq_file *m, void *v)
+{
+	char test_result_bmp[5];
+
+	if (!nvt_mp_test_result_printed)
+		pr_info("FW Version: %d\n\n", nvt_mp_selftest_fw_ver);
+
+	if (!nvt_mp_test_result_printed) {
+		pr_info("SPI communication test");
+		if (nvt_mp_result_spi_comm == 0)
+			pr_info("Pass!\n");
+		else
+			pr_info("Fail!\n");
+	}
+	test_result_bmp[0] = nvt_mp_result_spi_comm == 0 ? 'P' : 'F';
+
+	if (!nvt_mp_test_result_printed) {
+		pr_info("Short Test");
+		nvt_mp_print_selftest_result(nvt_mp_result_short,
+			(const u8 *)nvt_ts->mp_record_short,
+			nvt_ts->mp_rawdata_short,
+			nvt_mp_x_channel, nvt_mp_y_channel);
+	}
+	test_result_bmp[3] = nvt_mp_result_short == 0 ? 'P' : 'F';
+
+	if (!nvt_mp_test_result_printed) {
+		pr_info("Open Test");
+		nvt_mp_print_selftest_result(nvt_mp_result_open,
+			(const u8 *)nvt_ts->mp_record_open,
+			nvt_ts->mp_rawdata_open,
+			nvt_mp_x_channel, nvt_mp_y_channel);
+	}
+	test_result_bmp[2] = nvt_mp_result_open == 0 ? 'P' : 'F';
+
+	if (!nvt_mp_test_result_printed) {
+		pr_info("FW Rawdata");
+		if (nvt_mp_result_cap_rawdata == 0) {
+			pr_info("Pass!\n");
+			nvt_mp_print_selftest_result(nvt_mp_result_fw_rawdata,
+				(const u8 *)nvt_ts->mp_record_fw_rawdata,
+				nvt_ts->mp_rawdata_fw_rawdata,
+				nvt_mp_x_channel, nvt_mp_y_channel);
+		} else {
+			pr_info("Fail!\n");
+			if (nvt_mp_result_fw_rawdata == -1) {
+				pr_info("FW Rawdata");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_fw_rawdata,
+					(const u8 *)nvt_ts->mp_record_fw_rawdata,
+					nvt_ts->mp_rawdata_fw_rawdata,
+					nvt_mp_x_channel, nvt_mp_y_channel);
+			}
+			if (nvt_mp_result_fw_cc == -1) {
+				pr_info("FW CC");
+				nvt_mp_print_selftest_result(nvt_mp_result_fw_cc,
+					(const u8 *)nvt_ts->mp_record_fw_cc,
+					nvt_ts->mp_rawdata_fw_cc,
+					nvt_mp_x_channel, nvt_mp_y_channel);
+			}
+		}
+	}
+	test_result_bmp[1] = nvt_mp_result_cap_rawdata == 0 ? 'P' : 'F';
+
+	if (!nvt_mp_test_result_printed) {
+		pr_info("Noise Test");
+		if (nvt_mp_result_noise == 0) {
+			pr_info("Pass!");
+			nvt_mp_print_selftest_result(nvt_mp_result_fw_diff_max,
+				(const u8 *)nvt_ts->mp_record_fw_diff_max,
+				nvt_ts->mp_rawdata_diff_max,
+				nvt_mp_x_channel, nvt_mp_y_channel);
+		} else {
+			pr_info("Fail!\n");
+			if (nvt_mp_result_fw_diff_max == -1) {
+				pr_info("FW Diff Max");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_fw_diff_max,
+					(const u8 *)nvt_ts->mp_record_fw_diff_max,
+					nvt_ts->mp_rawdata_diff_max,
+					nvt_mp_x_channel, nvt_mp_y_channel);
+			}
+			if (nvt_mp_result_fw_diff_min == -1) {
+				pr_info("FW Diff Min");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_fw_diff_min,
+					(const u8 *)nvt_ts->mp_record_fw_diff_min,
+					nvt_ts->mp_rawdata_diff_min,
+					nvt_mp_x_channel, nvt_mp_y_channel);
+			}
+		}
+	}
+	test_result_bmp[4] = nvt_mp_result_noise == 0 ? 'P' : 'F';
+	if (nvt_ts->pen_support && !nvt_mp_test_result_printed) {
+		pr_info("Pen FW Rawdata Test");
+		if (nvt_mp_result_pen_fw_raw == 0) {
+			pr_info("Pass!\n");
+			nvt_mp_print_selftest_result(nvt_mp_result_pen_tipx_raw,
+				(const u8 *)nvt_ts->mp_record_pen_tipx_raw,
+				nvt_ts->mp_raw_pen_tipx_raw,
+				nvt_ts->x_num, nvt_ts->y_gang_num);
+		} else {
+			pr_info("Fail!\n");
+			if (nvt_mp_result_pen_tipx_raw == -1) {
+				pr_info("Pen Tip X Raw");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_tipx_raw,
+					(const u8 *)nvt_ts->mp_record_pen_tipx_raw,
+					nvt_ts->mp_raw_pen_tipx_raw,
+					nvt_ts->x_num, nvt_ts->y_gang_num);
+			}
+			if (nvt_mp_result_pen_tipy_raw == -1) {
+				pr_info("Pen Tip Y Raw");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_tipy_raw,
+					(const u8 *)nvt_ts->mp_record_pen_tipy_raw,
+					nvt_ts->mp_raw_pen_tipy_raw,
+					nvt_ts->x_gang_num, nvt_ts->y_num);
+			}
+			if (nvt_mp_result_pen_ringx_raw == -1) {
+				pr_info("Pen Ring X Raw");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_ringx_raw,
+					(const u8 *)nvt_ts->mp_record_pen_ringx_raw,
+					nvt_ts->mp_raw_pen_ringx_raw,
+					nvt_ts->x_num, nvt_ts->y_gang_num);
+			}
+			if (nvt_mp_result_pen_ringy_raw == -1) {
+				pr_info("Pen Ring Y Raw");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_ringy_raw,
+					(const u8 *)nvt_ts->mp_record_pen_ringy_raw,
+					nvt_ts->mp_raw_pen_ringy_raw,
+					nvt_ts->x_gang_num, nvt_ts->y_num);
+			}
+		}
+
+		pr_info("Pen Noise Test");
+		if (nvt_mp_result_pen_noise == 0) {
+			pr_info("Pass!\n");
+			nvt_mp_print_selftest_result(
+				nvt_mp_result_pen_tipx_diff_max,
+				(const u8 *)nvt_ts->mp_record_pen_tipx_diff_max,
+				nvt_ts->mp_raw_pen_tipx_diff_max,
+				nvt_ts->x_num, nvt_ts->y_gang_num);
+		} else {
+			pr_info("Fail!\n");
+			if (nvt_mp_result_pen_tipx_diff_max == -1) {
+				pr_info("Pen Tip X Diff Max");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_tipx_diff_max,
+					(const u8 *)nvt_ts->mp_record_pen_tipx_diff_max,
+					nvt_ts->mp_raw_pen_tipx_diff_max,
+					nvt_ts->x_num, nvt_ts->y_gang_num);
+			}
+			if (nvt_mp_result_pen_tipx_diff_min == -1) {
+				pr_info("Pen Tip X Diff Min");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_tipx_diff_min,
+					(const u8 *)nvt_ts->mp_record_pen_tipx_diff_min,
+					nvt_ts->mp_raw_pen_tipx_diff_min,
+					nvt_ts->x_num, nvt_ts->y_gang_num);
+			}
+			if (nvt_mp_result_pen_tipy_diff_max == -1) {
+				pr_info("Pen Tip Y Diff Max");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_tipy_diff_max,
+					(const u8 *)nvt_ts->mp_record_pen_tipy_diff_max,
+					nvt_ts->mp_raw_pen_tipy_diff_max,
+					nvt_ts->x_gang_num, nvt_ts->y_num);
+			}
+			if (nvt_mp_result_pen_tipy_diff_min == -1) {
+				pr_info("Pen Tip Y Diff Min");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_tipy_diff_min,
+					(const u8 *)nvt_ts->mp_record_pen_tipy_diff_min,
+					nvt_ts->mp_raw_pen_tipy_diff_min,
+					nvt_ts->x_gang_num, nvt_ts->y_num);
+			}
+			if (nvt_mp_result_pen_ringx_diff_max == -1) {
+				pr_info("Pen Ring X Diff Max");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_ringx_diff_max,
+					(const u8 *)nvt_ts->mp_record_pen_ringx_diff_max,
+					nvt_ts->mp_raw_pen_ringx_diff_max,
+					nvt_ts->x_num, nvt_ts->y_gang_num);
+			}
+			if (nvt_mp_result_pen_ringx_diff_min == -1) {
+				pr_info("Pen Ring X Diff Min");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_ringx_diff_min,
+					(const u8 *)nvt_ts->mp_record_pen_ringx_diff_min,
+					nvt_ts->mp_raw_pen_ringx_diff_min,
+					nvt_ts->x_num, nvt_ts->y_gang_num);
+			}
+			if (nvt_mp_result_pen_ringy_diff_max == -1) {
+				pr_info("Pen Ring Y Diff Max");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_ringy_diff_max,
+					(const u8 *)nvt_ts->mp_record_pen_ringy_diff_max,
+					nvt_ts->mp_raw_pen_ringy_diff_max,
+					nvt_ts->x_gang_num, nvt_ts->y_num);
+			}
+			if (nvt_mp_result_pen_ringy_diff_min == -1) {
+				pr_info("Pen Ring Y Diff Min");
+				nvt_mp_print_selftest_result(
+					nvt_mp_result_pen_ringy_diff_min,
+					(const u8 *)nvt_ts->mp_record_pen_ringy_diff_min,
+					nvt_ts->mp_raw_pen_ringy_diff_min,
+					nvt_ts->x_gang_num, nvt_ts->y_num);
+			}
+		}
+	}
+
+	seq_printf(m, "0%c-1%c-2%c-3%c-4%c\n",
+		   test_result_bmp[0], test_result_bmp[1],
+		   test_result_bmp[2], test_result_bmp[3],
+		   test_result_bmp[4]);
+	nvt_mp_test_result_printed = 1;
+	return 0;
+}
+
+static void *nvt_selftest_seq_start(struct seq_file *m, loff_t *pos)
+{
+	return *pos < 1 ? (void *)1 : NULL;
+}
+
+static void *nvt_selftest_seq_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	++*pos;
+	return NULL;
+}
+
+static void nvt_selftest_seq_stop(struct seq_file *m, void *v)
+{
+}
+
+static const struct seq_operations nvt_selftest_seq_ops = {
+	.start = nvt_selftest_seq_start,
+	.next = nvt_selftest_seq_next,
+	.stop = nvt_selftest_seq_stop,
+	.show = nvt_selftest_show,
+};
+
 static int nvt_selftest_proc_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, nvt_selftest_show, NULL);
+	int ret = nvt_selftest_run();
+
+	if (ret < 0)
+		return ret;
+	return seq_open(file, &nvt_selftest_seq_ops);
 }
 
 static const struct file_operations nvt_selftest_fops = {
@@ -3719,9 +4716,8 @@ static const struct file_operations nvt_selftest_fops = {
 	.open = nvt_selftest_proc_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
-	.release = single_release,
+	.release = seq_release,
 };
-
 static void nvt_mp_buffer_deinit(void)
 {
 #define NVT_MP_FREE(field) do { \
@@ -4197,11 +5193,14 @@ static int nvt_ts_probe(struct spi_device *client)
 		return ret;
 	}
 
-	/* firmware name by panel vendor */
-	if (gpio_82 == 1)
+	/* firmware names by panel vendor (normal + matching MP image) */
+	if (gpio_82 == 1) {
 		BOOT_UPDATE_FIRMWARE_NAME = "novatek_ts_tm_fw_6.bin";
-	else
+		MP_UPDATE_FIRMWARE_NAME = "novatek_ts_tm_mp_6.bin";
+	} else {
 		BOOT_UPDATE_FIRMWARE_NAME = "novatek_ts_fw_boe_6.bin";
+		MP_UPDATE_FIRMWARE_NAME = "novatek_ts_mp_boe_6.bin";
+	}
 
 	nvt_charger_init();
 
