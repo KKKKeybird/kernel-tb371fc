@@ -25,6 +25,7 @@
 #include <linux/ktime.h>
 #include <linux/time.h>
 #include <linux/sysfs.h>
+#include <linux/pinctrl/consumer.h>
 #include <drm/drm_panel.h>
 
 extern void nvt_support_pen_set_nfc(bool normal);
@@ -1718,6 +1719,8 @@ static int ctn730_probe(struct i2c_client *client,
 {
 	struct ctn730_data *data;
 	struct device_node *np;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pinctrl_default;
 	int count, i, ret;
 	u32 irq_gpio;
 
@@ -1742,9 +1745,15 @@ static int ctn730_probe(struct i2c_client *client,
 		pr_info("ctn730: %s: no node\n", "ctn730_probe");
 		return -ENODEV;
 	}
-	if (!client->dev.pins) {
-		dev_info(client->dev.parent, "pins are not configured\n");
-		return -ENODEV;
+	pinctrl = devm_pinctrl_get(&client->dev);
+	if (IS_ERR(pinctrl)) {
+		dev_err(&client->dev, "failed to get pinctrl\n");
+	} else {
+		pinctrl_default = pinctrl_lookup_state(pinctrl, "default");
+		if (IS_ERR(pinctrl_default))
+			dev_err(&client->dev, "failed to lookup pinctrl default state\n");
+		else if (pinctrl_select_state(pinctrl, pinctrl_default))
+			dev_err(&client->dev, "failed to select pinctrl default state\n");
 	}
 
 	ret = of_get_named_gpio(np, "rst-gpios", 0);
@@ -1768,6 +1777,8 @@ static int ctn730_probe(struct i2c_client *client,
 
 	count = of_count_phandle_with_args(np, "panel", NULL);
 	pr_info("ctn730: %s: panel count:%d \n", "ctn730_probe", count);
+	if (count < 1)
+		return -ENODEV;
 	for (i = 0; i < count; i++) {
 		struct device_node *panel_np = of_parse_phandle(np, "panel", i);
 		struct drm_panel *panel;
@@ -1816,22 +1827,8 @@ static int ctn730_probe(struct i2c_client *client,
 	}
 	pr_info("ctn730: %s: I2C success\n", "ctn730_probe");
 
-	ret = of_get_named_gpio(np, "nfc_int", 0);
-	if (ret < 0) {
-		pr_info("ctn730: %s: not able to get GPIO irq_gpio\n",
-			"ctn730_probe");
-		return -ENODEV;
-	}
-	data->gpio_irq = ret;
-	pr_info("ctn730: %s: Enable to get GPIO irq_gpio\n", "ctn730_probe");
-
-	ret = of_get_named_gpio(np, "nfc_ven", 0);
-	if (ret < 0) {
-		pr_info("ctn730: %s: not able to get GPIO ven_gpio\n",
-			"ctn730_probe");
-		return -ENODEV;
-	}
-	pr_info("ctn730: %s: Enable to get GPIO ven_gpio\n", "ctn730_probe");
+	pr_info("ctn730: %s: GPIO irq_gpio %u, ven_gpio %u\n",
+		"ctn730_probe", data->gpio_irq, data->gpio_ven);
 
 	ret = gpiod_to_irq(gpio_to_desc(data->gpio_irq));
 	if (ret < 0) {
