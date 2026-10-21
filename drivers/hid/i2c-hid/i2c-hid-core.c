@@ -1437,17 +1437,22 @@ static int i2c_hid_probe(struct i2c_client *client,
 	 * ENOTCONN. */
 	if ((ihid->pdata.output_gpio != -1) &&
 	    gpio_is_valid(ihid->pdata.output_gpio)) {
-		ret = gpio_request(ihid->pdata.output_gpio, "kb_output_gpio");
-		if (ret && ret != -EBUSY)
-			dev_warn(&client->dev,
-				 "p284: reset gpio request failed: %d\n", ret);
-		if (gpio_direction_output(ihid->pdata.output_gpio, 1))
-			dev_warn(&client->dev,
-				 "p284: failed to deassert reset gpio\n");
-		else
-			dev_info(&client->dev,
-				 "p284: mcu reset released (gpio %d)\n",
-				 ihid->pdata.output_gpio);
+		ret = gpio_request(ihid->pdata.output_gpio, "mcu_rst_gpio");
+		if (ret) {
+			dev_err(&client->dev,
+				"request mcu_rst_gpio failed: %d\n", ret);
+			return ret;
+		}
+		ret = gpiod_direction_output_raw(
+			gpio_to_desc(ihid->pdata.output_gpio), 1);
+		if (ret) {
+			dev_err(&client->dev,
+				"set mcu_rst_gpio failed: %d\n", ret);
+			return ret;
+		}
+		dev_info(&client->dev,
+			 "p284: mcu reset released (gpio %d)\n",
+			 ihid->pdata.output_gpio);
 	}
 
 	ihid->pdata.supplies[0].supply = "vdd";
