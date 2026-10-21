@@ -114,6 +114,8 @@ static bool lenovo_i2c_kb_probe_done = false;
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 start*/
 int mcu_resume_gpio = 0;
 bool g_already_sleep = false;
+int kb_i2c_suspend(void);
+int kb_i2c_resume(void);
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
 
 /* Spruce code for OSPURCET-780 by sunft3 at 2023/01/18 start */
@@ -1212,13 +1214,23 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 	 * released before the first i2c transfer.
 	 */
 	if (pdata->output_gpio < 0) {
-		ret = of_get_named_gpio(dev->of_node, "mcu_rst_gpio", 0);
+		ret = of_get_named_gpio_flags(dev->of_node, "mcu_rst_gpio", 0, NULL);
 		if (ret >= 0) {
 			pdata->output_gpio = ret;
 			dev_info(dev, "p284: got mcu_rst_gpio in dt: %d\n", ret);
 		} else {
 			dev_info(dev, "p284: no reset gpio property (%d)\n", ret);
 		}
+	}
+
+	ret = of_get_named_gpio_flags(dev->of_node, "mcu_resume_gpio", 0,
+				      NULL);
+	if (ret < 0) {
+		mcu_resume_gpio = 0;
+		dev_info(dev, "p284: no resume gpio property (%d)\n", ret);
+	} else {
+		mcu_resume_gpio = ret;
+		dev_info(dev, "p284: got mcu_resume_gpio in dt: %d\n", ret);
 	}
 	
 	ret = of_property_read_u32(dev->of_node, "hid-descr-addr", &val);
@@ -1410,6 +1422,15 @@ static int i2c_hid_probe(struct i2c_client *client,
 
 	/* Parse platform agnostic common properties from ACPI / device tree */
 	i2c_hid_fwnode_probe(client, &ihid->pdata);
+
+	if (mcu_resume_gpio) {
+		ret = gpio_request(mcu_resume_gpio, "mcu_resume_gpio");
+		if (ret) {
+			dev_err(&client->dev,
+				"request mcu_resume_gpio failed: %d\n", ret);
+			return ret;
+		}
+	}
 
 	/* p284: release the keyboard MCU reset BEFORE the first i2c
 	 * transfer — a reset-held MCU would fail the descriptor fetch with
@@ -1638,6 +1659,7 @@ static void i2c_hid_shutdown(struct i2c_client *client)
 		else
 			i2c_hid_set_power(client, I2C_HID_PWR_SHUTDOWN);
 	}
+	kb_i2c_suspend();
 	free_irq(client->irq, ihid);
 }
 
@@ -1775,15 +1797,16 @@ static int i2c_hid_runtime_resume(struct device *dev)
 }
 
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 start*/
-static int kb_i2c_hid_resume(void)
+noinline int kb_i2c_resume(void)
 {
 	int ret = 0;
 
-	if (!g_already_sleep) {
+	if (!mcu_resume_gpio)
+		return -EINVAL;
+	if (!g_already_sleep)
 		return -1;
-	}
 
-	ret = gpio_direction_output(mcu_resume_gpio, 1);
+	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_resume_gpio), 1);
         if(ret) {
                 pr_err("%s: set mcu_resume_gpio failed\n", __func__);
                 return ret;
@@ -1800,15 +1823,16 @@ static int kb_i2c_hid_resume(void)
 	return 0;
 }
 
-static int kb_i2c_hid_suspend(void)
+noinline int kb_i2c_suspend(void)
 {
 	int ret = 0;
 
-	if (g_already_sleep) {
+	if (!mcu_resume_gpio)
+		return -EINVAL;
+	if (g_already_sleep)
 		return -1;
-	}
 
-	ret = gpio_direction_output(mcu_resume_gpio, 0);
+	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_resume_gpio), 0);
         if(ret) {
                 pr_err("%s: set mcu_resume_gpio failed\n", __func__);
                 return ret;
@@ -1845,7 +1869,7 @@ int ret = 0;
 		g_screen_on = 0;
 
 	/*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 start*/
-	kb_i2c_hid_suspend();
+	kb_i2c_suspend();
 	/*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
 
 	return;
@@ -1861,7 +1885,7 @@ void kb_hid_resume(void)
 
 	printk("-----hid resume-----\n");
 	/*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 start*/
-	kb_i2c_hid_resume();
+	kb_i2c_resume();
 	/*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
 
 	ret = __i2c_hid_command(g_client, &hid_set_report_cmd, 2, 2, args, args_len,
