@@ -113,7 +113,6 @@ static bool spec_key_customerapp2;
 static char versions_info[64] = "Not detected";
 static char kb_status = 0;
 static char KB_BT_MAC_info[64] = "00:00:00:00:00:00";
-extern bool lenovo_i2c_kb_registed;
 extern unsigned int pm_wakeup_irq;
 static bool lenovo_i2c_kb_probe_done = false;
 #define VID_KB_LENOVO 0x17ef
@@ -681,11 +680,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			device_keyboard->online = ihid->inbuf[3] & 0x01;
 			device_keyboard->hall = (ihid->inbuf[3] >> 1) & 0x01;
 		}
-		if (kb_connect == 0 && lenovo_i2c_kb_registed) {
-			hidinput_disconnect(ihid->hid);
-		} else if (kb_connect == 1 && !lenovo_i2c_kb_registed) {
-			hidinput_connect(ihid->hid, 0);
-		}
 		if (hw_info_registed) {
 			unregister_hardware_info("KB_INFO");
 		}
@@ -755,6 +749,20 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			dev_err(&ihid->client->dev,
 				"hid-keyboard,%s,kb_report_power_key\n", __func__);
 			kb_report_power_key();
+		}
+	}
+
+	/* stock 0x8cb3d6c..0x8cb3da8: manage hidinput registration from
+	 * device_keyboard->status and online, not from a PID-specific global. */
+	if (lenovo_kb && device_keyboard) {
+		if (device_keyboard->status) {
+			if (device_keyboard->online == 0) {
+				hidinput_disconnect(ihid->hid);
+				device_keyboard->status = 0;
+			}
+		} else if (device_keyboard->online == 1) {
+			if (hidinput_connect(ihid->hid, 0) == 0)
+				device_keyboard->status = 1;
 		}
 	}
 
@@ -1728,8 +1736,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 	if (!(ihid->quirks & I2C_HID_QUIRK_NO_RUNTIME_PM))
 		pm_runtime_put(&client->dev);
     /* Set the keyboard to disconnect by default and register wakeup device*/
-	if (/*lenovo_i2c_kb_registed && kb_connect == 0
-		&& */(hid->vendor == VID_KB_LENOVO &&
+	if ((hid->vendor == VID_KB_LENOVO &&
 		(hid->product == PID_KB_LENOVO ||
 		 hid->product == PID_KB_LENOVO_V04)) ||
 	    (hid->vendor == VID_KB_LENOVO_TP && hid->product == PID_KB_LENOVO_TP) ||
@@ -1761,9 +1768,6 @@ static int i2c_hid_probe(struct i2c_client *client,
 		if (!kb_input_dev)
 			register_kb_wakeup_devices();
 
-		if (lenovo_i2c_kb_registed) {
-			hidinput_disconnect(hid);
-		}
 		lenovo_i2c_kb_probe_done = true;
 	}
 
