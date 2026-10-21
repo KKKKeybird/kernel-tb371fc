@@ -108,13 +108,16 @@ extern unsigned int pm_wakeup_irq;
 static bool lenovo_i2c_kb_probe_done = false;
 #define VID_KB_LENOVO 0x17ef
 #define PID_KB_LENOVO 0x6127
+#define PID_KB_LENOVO_V04 0x6175
 #define VID_KB_LENOVO_TP 0x04f3
 #define PID_KB_LENOVO_TP 0x31f3
 
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 start*/
 int mcu_resume_gpio = 0;
+int mcu_rst_gpio = 0;
 bool g_already_sleep = false;
-int kb_i2c_suspend(void);
+bool is_mcu_init = false;
+void kb_i2c_suspend(void);
 int kb_i2c_resume(void);
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
 
@@ -248,6 +251,8 @@ static const struct i2c_hid_quirks {
 		I2C_HID_QUIRK_BAD_INPUT_SIZE },
 		{ VID_KB_LENOVO, PID_KB_LENOVO,
 		 I2C_HID_QUIRK_SET_PWR_ON_SHUTDOWN | I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_WAKE_UP_SYS},
+	{ VID_KB_LENOVO, PID_KB_LENOVO_V04,
+		 I2C_HID_QUIRK_SET_PWR_ON_SHUTDOWN | I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_WAKE_UP_SYS},
 	{ VID_KB_LENOVO_TP, PID_KB_LENOVO_TP,
 		 I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_WAKE_UP_SYS | I2C_HID_QUIRK_SHOULD_SKIP_SET_PWR},
 	{ 0, 0 }
@@ -362,7 +367,6 @@ static int i2c_hid_get_report(struct i2c_client *client, u8 reportType,
 	u16 readRegister = le16_to_cpu(ihid->hdesc.wDataRegister);
 
 	i2c_hid_dbg(ihid, "%s\n", __func__);
-
 	if (reportID >= 0x0F) {
 		args[args_len++] = reportID;
 		reportID = 0x0F;
@@ -460,7 +464,7 @@ static int i2c_hid_set_or_send_report(struct i2c_client *client, u8 reportType,
 static int i2c_hid_set_power(struct i2c_client *client, int power_state)
 {
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
-	int ret;
+	int ret, retry;
 	unsigned long now, delay;
 
 	i2c_hid_dbg(ihid, "%s\n", __func__);
@@ -477,10 +481,11 @@ static int i2c_hid_set_power(struct i2c_client *client, int power_state)
 		/* Device was already activated */
 		if (!ret)
 			goto set_pwr_exit;
-	    /* vendor required to sleep 10ms to send next command */
-		if (ihid->hid->vendor == VID_KB_LENOVO && ihid->hid->product == PID_KB_LENOVO)
+		/* vendor required to sleep 10ms to send next command */
+		if (ihid->hid->vendor == VID_KB_LENOVO &&
+		    (ihid->hid->product == PID_KB_LENOVO ||
+		     ihid->hid->product == PID_KB_LENOVO_V04))
 			msleep(10);
-			
 	}
 
 	if (ihid->quirks & I2C_HID_QUIRK_DELAY_AFTER_SLEEP &&
@@ -492,15 +497,36 @@ static int i2c_hid_set_power(struct i2c_client *client, int power_state)
 		}
 	}
 
-	ret = __i2c_hid_command(client, &hid_set_power_cmd, power_state,
-		0, NULL, 0, NULL, 0);
+	/*
+	 * Stock waits once before the first power command, then allows four
+	 * attempts total with a 10 ms retry delay between attempts. The
+	 * fourth failure goes directly to the reset recovery below.
+	 */
+	msleep(10);
+	for (retry = 0; retry < 4; retry++) {
+		ret = __i2c_hid_command(client, &hid_set_power_cmd, power_state,
+			0, NULL, 0, NULL, 0);
+		if (!ret)
+			break;
+		if (retry == 0)
+			dev_err(&client->dev,
+				"failed to change power setting,then retry\n");
+		if (retry < 3)
+			msleep(10);
+	}
+
+	if (ret && mcu_rst_gpio) {
+		gpiod_direction_output_raw(gpio_to_desc(mcu_rst_gpio), 0);
+		msleep(10);
+		gpiod_direction_output_raw(gpio_to_desc(mcu_rst_gpio), 1);
+		msleep(10);
+		dev_err(&client->dev,
+			"failed to change power setting retry 3 times,set reset pin to 1.\n");
+	}
 
 	if (ihid->quirks & I2C_HID_QUIRK_DELAY_AFTER_SLEEP &&
 	    power_state == I2C_HID_PWR_SLEEP)
 		ihid->sleep_delay = jiffies + msecs_to_jiffies(20);
-
-	if (ret)
-		dev_err(&client->dev, "failed to change power setting.\n");
 
 set_pwr_exit:
 
@@ -603,10 +629,11 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 
 	i2c_hid_dbg(ihid, "input: %*ph\n", ret_size, ihid->inbuf);
 
-	if(ihid->inbuf[2] == 0x06 && ihid->hid->vendor == VID_KB_LENOVO && ihid->hid->product == PID_KB_LENOVO)
+	if(ihid->inbuf[2] == 0x06 && ihid->hid->vendor == VID_KB_LENOVO &&
+	    (ihid->hid->product == PID_KB_LENOVO ||
+	     ihid->hid->product == PID_KB_LENOVO_V04))
 	{
 		int i = 0, max_try = 50;
-		int gpio_val;
 		for (i = 0; i < max_try; i++) {
 			if (likely(lenovo_i2c_kb_probe_done))
 				break;
@@ -622,14 +649,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 		if (hw_info_registed) {
 			unregister_hardware_info("KB_INFO");
 		}
-		/* set the output gpio according to cradle status */
-		gpio_val = (ihid->inbuf[3] >> 3) & 1? 0 : 1;
-		if (ihid->pdata.output_gpio != -1) {
-			if(gpio_direction_output(ihid->pdata.output_gpio, gpio_val) < 0)
-				i2c_hid_dbg(ihid, "Set gpio to %d failed\n", gpio_val);
-			else
-				i2c_hid_dbg(ihid, "Set gpio to %d successed\n", gpio_val);
-				}
 		if (kb_connect) {
 			char *status_event[2] = {NULL, NULL};
 			char curr_tpd_status = (ihid->inbuf[3] >> 6) & 0x01;
@@ -1201,37 +1220,29 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 	u32 val;
 	int ret;
 
-	ret = of_get_named_gpio(dev->of_node, "kb,output-gpio", 0);
+	/* TB371FC magnetic keyboard MCU reset/wake pins. */
+	ret = of_get_named_gpio_flags(dev->of_node, "mcu_rst_gpio", 0, NULL);
 	if (ret < 0) {
-		pdata->output_gpio = -1;
-	} else {
-		pdata->output_gpio = ret;
-		dev_err(&client->dev, "Got output-gpio1 in dt: %d", ret);
+		dev_err(&client->dev,
+			"hid-keyboard,%s,Not support MCU HW reset pin\n", __func__);
+		return -ENODEV;
 	}
-
-	/* p284: TB371FC magnetic keyboard MCU reset (active low). The stock
-	 * DT names it mcu_rst_gpio; accept either name so the reset can be
-	 * released before the first i2c transfer.
-	 */
-	if (pdata->output_gpio < 0) {
-		ret = of_get_named_gpio_flags(dev->of_node, "mcu_rst_gpio", 0, NULL);
-		if (ret >= 0) {
-			pdata->output_gpio = ret;
-			dev_info(dev, "p284: got mcu_rst_gpio in dt: %d\n", ret);
-		} else {
-			dev_info(dev, "p284: no reset gpio property (%d)\n", ret);
-		}
-	}
+	mcu_rst_gpio = ret;
+	/* Stock keeps the reset pin in mcu_rst_gpio only. The old
+	 * kb,output-gpio consumer is not present in stock and must not
+	 * drive this pin from keyboard status frames. */
+	pdata->output_gpio = -1;
+	dev_info(dev, "p284: got mcu_rst_gpio in dt: %d\n", ret);
 
 	ret = of_get_named_gpio_flags(dev->of_node, "mcu_resume_gpio", 0,
 				      NULL);
 	if (ret < 0) {
-		mcu_resume_gpio = 0;
-		dev_info(dev, "p284: no resume gpio property (%d)\n", ret);
-	} else {
-		mcu_resume_gpio = ret;
-		dev_info(dev, "p284: got mcu_resume_gpio in dt: %d\n", ret);
+		dev_err(&client->dev,
+			"hid-keyboard,%s,Not support MCU wake_sleep pin\n", __func__);
+		return -ENODEV;
 	}
+	mcu_resume_gpio = ret;
+	dev_info(dev, "p284: got mcu_resume_gpio in dt: %d\n", ret);
 	
 	ret = of_property_read_u32(dev->of_node, "hid-descr-addr", &val);
 	if (ret) {
@@ -1380,6 +1391,58 @@ static const struct attribute_group kb_sys_attr_group = {
 static DEVICE_ATTR(version, 0444, hid_show_version, NULL);
 static DEVICE_ATTR(kb_status, 0444, hid_show_status, NULL);
 
+static int i2c_enable_mcu(struct i2c_client *client)
+{
+	int ret;
+
+	if (is_mcu_init)
+		return 0;
+
+	msleep(100);
+
+	ret = gpio_request(mcu_resume_gpio, "mcu_resume_gpio");
+	if (ret) {
+		dev_err(&client->dev,
+			"request mcu_resume_gpio failed: %d\n", ret);
+		return ret;
+	}
+
+	ret = gpio_request(mcu_rst_gpio, "mcu_rst_gpio");
+	if (ret) {
+		dev_err(&client->dev,
+			"request mcu_rst_gpio failed: %d\n", ret);
+		gpio_free(mcu_resume_gpio);
+		return ret;
+	}
+
+	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_rst_gpio), 1);
+	if (ret) {
+		dev_err(&client->dev, "set mcu_rst_gpio failed: %d\n", ret);
+		gpio_free(mcu_rst_gpio);
+		gpio_free(mcu_resume_gpio);
+		return ret;
+	}
+
+	is_mcu_init = true;
+	dev_info(&client->dev,
+		 "p284: mcu reset released (reset=%d resume=%d)\n",
+		 mcu_rst_gpio, mcu_resume_gpio);
+	return 0;
+}
+
+static void i2c_disable_mcu(void)
+{
+	if (mcu_rst_gpio) {
+		gpio_free(mcu_rst_gpio);
+		mcu_rst_gpio = 0;
+	}
+	if (mcu_resume_gpio) {
+		gpio_free(mcu_resume_gpio);
+		mcu_resume_gpio = 0;
+	}
+	is_mcu_init = false;
+}
+
 static int i2c_hid_probe(struct i2c_client *client,
 			 const struct i2c_device_id *dev_id)
 {
@@ -1423,37 +1486,9 @@ static int i2c_hid_probe(struct i2c_client *client,
 	/* Parse platform agnostic common properties from ACPI / device tree */
 	i2c_hid_fwnode_probe(client, &ihid->pdata);
 
-	if (mcu_resume_gpio) {
-		ret = gpio_request(mcu_resume_gpio, "mcu_resume_gpio");
-		if (ret) {
-			dev_err(&client->dev,
-				"request mcu_resume_gpio failed: %d\n", ret);
-			return ret;
-		}
-	}
-
-	/* p284: release the keyboard MCU reset BEFORE the first i2c
-	 * transfer — a reset-held MCU would fail the descriptor fetch with
-	 * ENOTCONN. */
-	if ((ihid->pdata.output_gpio != -1) &&
-	    gpio_is_valid(ihid->pdata.output_gpio)) {
-		ret = gpio_request(ihid->pdata.output_gpio, "mcu_rst_gpio");
-		if (ret) {
-			dev_err(&client->dev,
-				"request mcu_rst_gpio failed: %d\n", ret);
-			return ret;
-		}
-		ret = gpiod_direction_output_raw(
-			gpio_to_desc(ihid->pdata.output_gpio), 1);
-		if (ret) {
-			dev_err(&client->dev,
-				"set mcu_rst_gpio failed: %d\n", ret);
-			return ret;
-		}
-		dev_info(&client->dev,
-			 "p284: mcu reset released (gpio %d)\n",
-			 ihid->pdata.output_gpio);
-	}
+	ret = i2c_enable_mcu(client);
+	if (ret)
+		return ret;
 
 	ihid->pdata.supplies[0].supply = "vdd";
 	ihid->pdata.supplies[1].supply = "vddl";
@@ -1461,13 +1496,17 @@ static int i2c_hid_probe(struct i2c_client *client,
 	ret = devm_regulator_bulk_get(&client->dev,
 				      ARRAY_SIZE(ihid->pdata.supplies),
 				      ihid->pdata.supplies);
-	if (ret)
+	if (ret) {
+		i2c_disable_mcu();
 		return ret;
+	}
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(ihid->pdata.supplies),
 				    ihid->pdata.supplies);
-	if (ret < 0)
+	if (ret < 0) {
+		i2c_disable_mcu();
 		return ret;
+	}
 
 	if (ihid->pdata.post_power_delay_ms)
 		msleep(ihid->pdata.post_power_delay_ms);
@@ -1527,11 +1566,18 @@ static int i2c_hid_probe(struct i2c_client *client,
 	hid->version = le16_to_cpu(ihid->hdesc.bcdVersion);
 	hid->vendor = le16_to_cpu(ihid->hdesc.wVendorID);
 	hid->product = le16_to_cpu(ihid->hdesc.wProductID);
+	if ((hid->vendor == VID_KB_LENOVO &&
+	     (hid->product == PID_KB_LENOVO || hid->product == PID_KB_LENOVO_V04)) ||
+	    (hid->vendor == VID_KB_LENOVO_TP && hid->product == PID_KB_LENOVO_TP) ||
+	    (hid->vendor == 0x32cd && hid->product == 0x003a))
+		g_client = client;
 
 	snprintf(hid->name, sizeof(hid->name), "%s %04X:%04X",
 		 client->name, (u16)hid->vendor, (u16)hid->product);
 		 
-		 if (hid->vendor == VID_KB_LENOVO && hid->product == PID_KB_LENOVO) {
+		 if ((hid->vendor == VID_KB_LENOVO &&
+		     (hid->product == PID_KB_LENOVO ||
+		      hid->product == PID_KB_LENOVO_V04))) {
 		snprintf(hid->name, sizeof(hid->name), "Lenovo Keyboard Pack for Tab P12 Pro");
 	}
 	strlcpy(hid->phys, dev_name(&client->dev), sizeof(hid->phys));
@@ -1549,7 +1595,11 @@ static int i2c_hid_probe(struct i2c_client *client,
 		pm_runtime_put(&client->dev);
     /* Set the keyboard to disconnect by default and register wakeup device*/
 	if (/*lenovo_i2c_kb_registed && kb_connect == 0
-		&& */hid->vendor == VID_KB_LENOVO && hid->product == PID_KB_LENOVO) {
+		&& */(hid->vendor == VID_KB_LENOVO &&
+		(hid->product == PID_KB_LENOVO ||
+		 hid->product == PID_KB_LENOVO_V04)) ||
+	    (hid->vendor == VID_KB_LENOVO_TP && hid->product == PID_KB_LENOVO_TP) ||
+	    (hid->vendor == 0x32cd && hid->product == 0x003a)) {
 
 		ret = device_create_file(&hid->dev, &dev_attr_version);
 		if (ret)
@@ -1612,6 +1662,7 @@ err_pm:
 err_regulator:
 	regulator_bulk_disable(ARRAY_SIZE(ihid->pdata.supplies),
 			       ihid->pdata.supplies);
+	i2c_disable_mcu();
 	i2c_hid_free_buffers(ihid);
 	return ret;
 }
@@ -1619,7 +1670,7 @@ err_regulator:
 static int i2c_hid_remove(struct i2c_client *client)
 {
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
-	struct hid_device *hid;
+	struct hid_device *hid = ihid->hid;
 
 	if (!(ihid->quirks & I2C_HID_QUIRK_NO_RUNTIME_PM))
 		pm_runtime_get_sync(&client->dev);
@@ -1640,8 +1691,9 @@ static int i2c_hid_remove(struct i2c_client *client)
 		kb_status_kobj = NULL;
 	}
 
-	hid = ihid->hid;
 	hid_destroy_device(hid);
+
+	i2c_disable_mcu();
 
 	free_irq(client->irq, ihid);
 
@@ -1658,12 +1710,6 @@ static void i2c_hid_shutdown(struct i2c_client *client)
 {
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
 
-	if (!(ihid->quirks & I2C_HID_QUIRK_SHOULD_SKIP_SET_PWR)) {
-		if (!(ihid->quirks & I2C_HID_QUIRK_SET_PWR_ON_SHUTDOWN))
-			i2c_hid_set_power(client, I2C_HID_PWR_SLEEP);
-		else
-			i2c_hid_set_power(client, I2C_HID_PWR_SHUTDOWN);
-	}
 	kb_i2c_suspend();
 	free_irq(client->irq, ihid);
 }
@@ -1806,8 +1852,6 @@ noinline int kb_i2c_resume(void)
 {
 	int ret = 0;
 
-	if (!mcu_resume_gpio)
-		return -EINVAL;
 	if (!g_already_sleep)
 		return -1;
 
@@ -1828,30 +1872,26 @@ noinline int kb_i2c_resume(void)
 	return 0;
 }
 
-noinline int kb_i2c_suspend(void)
+noinline void kb_i2c_suspend(void)
 {
-	int ret = 0;
+	int ret;
 
-	if (!mcu_resume_gpio)
-		return -EINVAL;
 	if (g_already_sleep)
-		return -1;
+		return;
 
 	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_resume_gpio), 0);
-        if(ret) {
-                pr_err("%s: set mcu_resume_gpio failed\n", __func__);
-                return ret;
-        }
+	if (ret) {
+		pr_err("%s: set mcu_resume_gpio failed\n", __func__);
+		return;
+	}
 
 	ret = i2c_hid_set_power(g_client, I2C_HID_PWR_SLEEP);
 	if (ret) {
 		pr_err("%s: i2c set sleep fail\n", __func__);
-		return ret;
+		return;
 	}
 
 	g_already_sleep = true;
-
-	return 0;
 }
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
 
