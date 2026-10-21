@@ -115,6 +115,7 @@ static bool lenovo_i2c_kb_probe_done = false;
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 start*/
 int mcu_resume_gpio = 0;
 int mcu_rst_gpio = 0;
+struct regulator *ldo_keyboard;
 bool g_already_sleep = false;
 bool is_mcu_init = false;
 void kb_i2c_suspend(void);
@@ -1523,24 +1524,6 @@ static int i2c_hid_probe(struct i2c_client *client,
 	if (ret)
 		return ret;
 
-	ihid->pdata.supplies[0].supply = "vdd";
-	ihid->pdata.supplies[1].supply = "vddl";
-
-	ret = devm_regulator_bulk_get(&client->dev,
-				      ARRAY_SIZE(ihid->pdata.supplies),
-				      ihid->pdata.supplies);
-	if (ret) {
-		i2c_disable_mcu();
-		return ret;
-	}
-
-	ret = regulator_bulk_enable(ARRAY_SIZE(ihid->pdata.supplies),
-				    ihid->pdata.supplies);
-	if (ret < 0) {
-		i2c_disable_mcu();
-		return ret;
-	}
-
 	if (ihid->pdata.post_power_delay_ms)
 		msleep(ihid->pdata.post_power_delay_ms);
 
@@ -1666,6 +1649,24 @@ static int i2c_hid_probe(struct i2c_client *client,
 		lenovo_i2c_kb_probe_done = true;
 	}
 
+	/* Stock keeps the keyboard LDO as pm8150a_l10 and only force-disables
+	 * it in charger mode. */
+	ldo_keyboard = regulator_get(&hid->dev, "pm8150a_l10");
+	if (IS_ERR(ldo_keyboard)) {
+		dev_err(&client->dev, "failed to get pm8150a_l10: %ld\n",
+			PTR_ERR(ldo_keyboard));
+		ret = -ENODEV;
+		goto err_mem_free;
+	}
+	if (strstr(saved_command_line, "androidboot.mode=charger") &&
+	    regulator_is_enabled(ldo_keyboard)) {
+		regulator_force_disable(ldo_keyboard);
+		dev_info(&client->dev,
+			 "hid-keyboard,%s,Power off and charge,disable ldo\n",
+			 __func__);
+	}
+	regulator_put(ldo_keyboard);
+
 	return 0;
 
 err_mem_free:
@@ -1679,8 +1680,6 @@ err_pm:
 	pm_runtime_disable(&client->dev);
 
 err_regulator:
-	regulator_bulk_disable(ARRAY_SIZE(ihid->pdata.supplies),
-			       ihid->pdata.supplies);
 	i2c_disable_mcu();
 	i2c_hid_free_buffers(ihid);
 	return ret;
@@ -1718,9 +1717,6 @@ static int i2c_hid_remove(struct i2c_client *client)
 
 	if (ihid->bufsize)
 		i2c_hid_free_buffers(ihid);
-
-	regulator_bulk_disable(ARRAY_SIZE(ihid->pdata.supplies),
-			       ihid->pdata.supplies);
 
 	return 0;
 }
@@ -1773,9 +1769,6 @@ static int i2c_hid_suspend(struct device *dev)
 		else
 			hid_warn(hid, "Failed to enable irq wake: %d\n",
 				wake_status);
-	} else {
-		regulator_bulk_disable(ARRAY_SIZE(ihid->pdata.supplies),
-				       ihid->pdata.supplies);
 	}
 
 	return 0;
@@ -1790,11 +1783,6 @@ static int i2c_hid_resume(struct device *dev)
 	int wake_status;
 
 	if (!device_may_wakeup(&client->dev)) {
-		ret = regulator_bulk_enable(ARRAY_SIZE(ihid->pdata.supplies),
-					    ihid->pdata.supplies);
-		if (ret)
-			hid_warn(hid, "Failed to enable supplies: %d\n", ret);
-
 		if (ihid->pdata.post_power_delay_ms)
 			msleep(ihid->pdata.post_power_delay_ms);
 	} else if (ihid->irq_wake_enabled) {
