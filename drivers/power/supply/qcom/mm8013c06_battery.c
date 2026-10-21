@@ -46,10 +46,13 @@
 #define REG_CHARGE_COUNTER                 0x2e
 #define REG_CHARGE_FULL                    0x12
 #define REG_CHARGE_FULL_DESIGN             0x3c
+#define REG_NOMINAL_CAPACITY               0x0c
+#define REG_TIME_TO_EMPTY_AVG              0x16
 
 
 int last_temperature = 0;
 int last_cycle = 1;
+static int last_time_to_empty_avg;
 bool has_8013 = false;
 /*Linden code for JLINDEN-17 by kangkai4 at 20221128 start*/
 static int	fake_cycle_count;
@@ -79,6 +82,7 @@ static char battery_manufacturer[HQ_BATTERY_UNKNOW + 1][BATTERY_STRING_MAX] = {
 #define MM8013_DEFAULT_DAY              12
 #define MM8013_DEFAULT_HOUR             13
 #define MM8013_DEFAULT_CYCLE            1
+#define MM8013_STOCK_PROP_CHARGE_FULL   10200000
 
 struct mm8013_chip {
     struct i2c_client *client;
@@ -552,77 +556,130 @@ done:
 EXPORT_SYMBOL(mm8013_get_chg_voltage);
 
 /*
- * Extended properties reported by the stock mm8013 driver but missing here
- * (TASK-076). Register choices and scaling come from the disassembled stock
- * mm8013_get_property (see notes/NOTES-tb371fc-mm8013-stock-props-rea.md):
- *   CHARGE_FULL        <- reg 0x12, raw
- *   CHARGE_FULL_DESIGN <- reg 0x16, raw
- *   CHARGE_COUNTER     <- reg 0x2e, raw
+ * Stock exports and property-only helpers.  The stock Image exposes five
+ * exported capacity/health ABI functions, while its property path itself
+ * reports fixed 10.2Ah values for CHARGE_FULL/CHARGE_FULL_DESIGN and 100 for
+ * CHARGE_COUNTER on suspend/read failure.
  */
-int mm8013_charge_full(int *val)
+int mm8013_full_charge_capacity(int *val)
 {
-    int v;
+	int v = 10000;
 
-    mutex_lock(&chip->suspend_lock);
-    if (chip->suspended) {
-        *val = chip->charge_full;
-        goto done;
-    }
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_FULL);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_CHARGE_FULL, v);
+			v = 10000;
+		} else if (v > 10000) {
+			v -= 10000;
+		}
+	}
+	*val = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_full_charge_capacity);
 
-    if (has_8013) {
-        v = mm8013_read_reg(chip->client, REG_CHARGE_FULL);
-        *val = (v < 0) ? chip->charge_full : v;
-    } else {
-        *val = 0;
-    }
-    chip->charge_full = *val;
-done:
-    mutex_unlock(&chip->suspend_lock);
-    return 0;
+int mm8013_nominal_capacity(int *val)
+{
+	int v = 10000;
+
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_NOMINAL_CAPACITY);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_NOMINAL_CAPACITY, v);
+			v = 10000;
+		}
+	}
+	*val = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_nominal_capacity);
+
+int mm8013_design_capacity(int *val)
+{
+	int v = 10000;
+
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_FULL_DESIGN);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_CHARGE_FULL_DESIGN, v);
+			v = 10000;
+		}
+	}
+	*val = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_design_capacity);
+
+int mm8013_time_to_empty_avg(int *val)
+{
+	int v;
+
+	if (chip->suspended) {
+		v = last_time_to_empty_avg;
+	} else {
+		v = i2c_smbus_read_word_data(chip->client, REG_TIME_TO_EMPTY_AVG);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_TIME_TO_EMPTY_AVG, v);
+			v = last_time_to_empty_avg;
+		}
+	}
+	*val = v;
+	last_time_to_empty_avg = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_time_to_empty_avg);
+
+int mm8013_get_batt_state_of_health(int *val)
+{
+	int v = 100;
+
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_COUNTER);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_CHARGE_COUNTER, v);
+			v = 100;
+		}
+	}
+	*val = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_get_batt_state_of_health);
+
+static int mm8013_get_fixed_capacity(struct mm8013_chip *chip, u8 reg,
+				     int *val)
+{
+	int ret;
+
+	if (!chip->suspended) {
+		ret = i2c_smbus_read_word_data(chip->client, reg);
+		if (ret < 0)
+			dev_err(&chip->client->dev,
+				"mm8013_read_reg reg%02x: err %d\n", reg, ret);
+	}
+	*val = MM8013_STOCK_PROP_CHARGE_FULL;
+	return 0;
 }
 
-int mm8013_charge_full_design(int *val)
+static int mm8013_get_charge_counter(struct mm8013_chip *chip, int *val)
 {
-    int v;
+	int v = 100;
 
-    mutex_lock(&chip->suspend_lock);
-    if (chip->suspended) {
-        *val = chip->charge_full_design;
-        goto done;
-    }
-
-    if (has_8013) {
-        v = mm8013_read_reg(chip->client, REG_CHARGE_FULL_DESIGN);
-        *val = (v < 0) ? chip->charge_full_design : v;
-    } else {
-        *val = 0;
-    }
-    chip->charge_full_design = *val;
-done:
-    mutex_unlock(&chip->suspend_lock);
-    return 0;
-}
-
-int mm8013_charge_counter(int *val)
-{
-    int v;
-
-    mutex_lock(&chip->suspend_lock);
-    if (chip->suspended) {
-        *val = chip->charge_counter;
-        goto done;
-    }
-
-    if (has_8013) {
-        v = mm8013_read_reg(chip->client, REG_CHARGE_COUNTER);
-        *val = (v < 0) ? chip->charge_counter : v;
-    } else {
-        *val = 0;
-    }
-    chip->charge_counter = *val;
-done:
-    mutex_unlock(&chip->suspend_lock);
-    return 0;
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_COUNTER);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_CHARGE_COUNTER, v);
+			v = 100;
+		}
+	}
+	*val = v;
+	return 0;
 }
 
 static enum hq_batteryID mm8013_get_bat_id(struct mm8013_chip *chip)
@@ -741,10 +798,16 @@ static enum power_supply_property mm8013_battery_props[] = {
     POWER_SUPPLY_PROP_TEMP,
     POWER_SUPPLY_PROP_CYCLE_COUNT,
     POWER_SUPPLY_PROP_VOLTAGE_MAX,
-    /* Extended set, matching the stock driver's property table (TASK-076). */
     POWER_SUPPLY_PROP_CHARGE_FULL,
     POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+    POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT,
+    POWER_SUPPLY_PROP_VOLTAGE_OCV,
     POWER_SUPPLY_PROP_CHARGE_COUNTER,
+    POWER_SUPPLY_PROP_DEBUG_BATTERY,
+    POWER_SUPPLY_PROP_TIME_TO_FULL_AVG,
+    POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
+    POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG,
+    POWER_SUPPLY_PROP_VOLTAGE_AVG,
 };
 
 static int mm8013_get_property(struct power_supply *psy,
@@ -784,13 +847,27 @@ static int mm8013_get_property(struct power_supply *psy,
         ret = mm8013_get_chg_voltage(&val->intval);
         break;
     case POWER_SUPPLY_PROP_CHARGE_FULL:
-        ret = mm8013_charge_full(&val->intval);
+        ret = mm8013_get_fixed_capacity(chip, REG_CHARGE_FULL,
+                                        &val->intval);
         break;
     case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-        ret = mm8013_charge_full_design(&val->intval);
+        ret = mm8013_get_fixed_capacity(chip, REG_CHARGE_FULL_DESIGN,
+                                        &val->intval);
+        break;
+    case POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT:
+        ret = mm8013_soc(&val->intval);
+        break;
+    case POWER_SUPPLY_PROP_VOLTAGE_OCV:
+        ret = mm8013_voltage(&val->intval);
         break;
     case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-        ret = mm8013_charge_counter(&val->intval);
+        ret = mm8013_get_charge_counter(chip, &val->intval);
+        break;
+    case POWER_SUPPLY_PROP_DEBUG_BATTERY:
+        val->intval = 0;
+        break;
+    case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
+        ret = mm8013_time_to_empty_avg(&val->intval);
         break;
     default:
         return -EINVAL;
