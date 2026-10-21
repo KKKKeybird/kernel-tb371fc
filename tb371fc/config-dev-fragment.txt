@@ -6,3 +6,6 @@ CONFIG_SOFTLOCKUP_DETECTOR=y
 
 # Stock hq_register_hw_info provider used by NVT get_tp_info (TASK-081 D120)
 CONFIG_HQ_SYSFS_SUPPORT=y
+
+# 4.19 random.c BLAKE2s backport requires the library object
+CONFIG_CRYPTO_LIB_BLAKE2S=y

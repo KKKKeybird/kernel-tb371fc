@@ -96,10 +96,20 @@ static struct input_dev *kb_input_dev;
  * The inbuf[3] hall bit1 feeds ctx+8 in stock i2c_hid_irq
  * (0x8cb3c58-90). */
 static struct kobject *kb_status_kobj;
-static int kb_hall_value_g;
-static int kb_online_value_g;
-static int kb_pm_resume_flag;
 static int kb_report_power_key(void);
+static int report_special_key(int key, int value);
+struct i2c_hid;
+static bool handle_special_key_frame(struct i2c_hid *ihid);
+static bool spec_key_lockscreen;
+static bool spec_key_switchlanguage;
+static bool spec_key_micdisable;
+static bool spec_key_touchpanelmute;
+static bool spec_key_globalsearch;
+static bool spec_key_fullscreen;
+static bool spec_key_splitscreen;
+static bool spec_key_superintcon;
+static bool spec_key_customerapp1;
+static bool spec_key_customerapp2;
 static char versions_info[64] = "Not detected";
 static char kb_status = 0;
 static char KB_BT_MAC_info[64] = "00:00:00:00:00:00";
@@ -110,7 +120,7 @@ static bool lenovo_i2c_kb_probe_done = false;
 #define PID_KB_LENOVO 0x6127
 #define PID_KB_LENOVO_V04 0x6175
 #define VID_KB_LENOVO_TP 0x04f3
-#define PID_KB_LENOVO_TP 0x31f3
+#define PID_KB_LENOVO_TP 0x31a8
 
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 start*/
 int mcu_resume_gpio = 0;
@@ -225,6 +235,19 @@ struct i2c_hid {
 
 	unsigned long		sleep_delay;
 };
+
+/* stock i2c_hid_probe allocates a 0x98-byte object into the exported
+ * device_keyboard symbol. Only the fields consumed by this driver are
+ * modeled here; the remaining storage preserves the stock object size. */
+struct keyboard_device {
+	u8 status;
+	u8 reserved0[3];
+	int online;
+	int hall;
+	u8 reserved[0x98 - 12];
+};
+struct keyboard_device *device_keyboard;
+EXPORT_SYMBOL(device_keyboard);
 
 static const struct i2c_hid_quirks {
 	__u16 idVendor;
@@ -582,7 +605,8 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	int ret;
 	u32 ret_size;
 	int size = le16_to_cpu(ihid->hdesc.wMaxInputLength);
-    static bool hw_info_registed = false;
+	bool lenovo_kb;
+	static bool hw_info_registed = false;
 	static char last_tpd_status = 0;
 	static bool first_tpd_status_reported = false;
 	static char last_kbd_status = 0;
@@ -602,6 +626,13 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	}
 
 	ret_size = ihid->inbuf[0] | ihid->inbuf[1] << 8;
+	lenovo_kb = (ihid->hid->vendor == 0x17ef &&
+		     (ihid->hid->product == 0x6127 ||
+		      ihid->hid->product == 0x6175)) ||
+		    (ihid->hid->vendor == 0x04f3 &&
+		     ihid->hid->product == 0x31a8) ||
+		    (ihid->hid->vendor == 0x32cd &&
+		     ihid->hid->product == 0x003a);
 
 	if (!ret_size) {
 		/* host or device initiated RESET completed */
@@ -630,10 +661,7 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 
 	i2c_hid_dbg(ihid, "input: %*ph\n", ret_size, ihid->inbuf);
 
-	if(ihid->inbuf[2] == 0x06 && ihid->hid->vendor == VID_KB_LENOVO &&
-	    (ihid->hid->product == PID_KB_LENOVO ||
-	     ihid->hid->product == PID_KB_LENOVO_V04))
-	{
+	if (ihid->inbuf[2] == 0x06) {
 		int i = 0, max_try = 50;
 		for (i = 0; i < max_try; i++) {
 			if (likely(lenovo_i2c_kb_probe_done))
@@ -642,6 +670,13 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 				msleep(10);
 		}
 		kb_connect = ihid->inbuf[3] & 0x01;
+		kb_status = ihid->inbuf[3];
+		/* stock i2c_hid_irq 0x8cb3c94/0x8cb3ca8: update device_keyboard
+		 * online/hall from inbuf[3] before the power-key gate. */
+		if (device_keyboard) {
+			device_keyboard->online = ihid->inbuf[3] & 0x01;
+			device_keyboard->hall = (ihid->inbuf[3] >> 1) & 0x01;
+		}
 		if (kb_connect == 0 && lenovo_i2c_kb_registed) {
 			hidinput_disconnect(ihid->hid);
 		} else if (kb_connect == 1 && !lenovo_i2c_kb_registed) {
@@ -654,10 +689,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			char *status_event[2] = {NULL, NULL};
 			char curr_tpd_status = (ihid->inbuf[3] >> 6) & 0x01;
 			char curr_kbd_status = (ihid->inbuf[3] >> 4) & 0x03;
-			kb_status = ihid->inbuf[3];
-			/* stock 0x8cb3c88-90: hall = bit1, online = bit0 */
-			kb_hall_value_g = (ihid->inbuf[3] >> 1) & 0x01;
-			kb_online_value_g = ihid->inbuf[3] & 0x01;
 			status_event[0] = kzalloc(64, GFP_KERNEL);
 			if (status_event[0]) {
 				// Report the battery level
@@ -715,17 +746,32 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 		register_hardware_info("KB_INFO", versions_info);
 		hw_info_registed = true;
 		/* stock i2c_hid_irq 0xffffff8008cb3cdc-d8: inject the soft power
-		 * key when the frame reports online==1 and we did not just come
-		 * out of the resume path (resume flag gate). */
-		if (kb_connect == 1 && !kb_pm_resume_flag) {
+		 * key when the frame reports online==1 and g_screen_on==0. */
+		if (kb_connect == 1 && !g_screen_on) {
 			dev_err(&ihid->client->dev,
 				"hid-keyboard,%s,kb_report_power_key\n", __func__);
 			kb_report_power_key();
 		}
+	}
+
+	/* stock 0x8cb3dd8: a 0x07 frame with no keyboard input device would
+	 * execute input_event(NULL, ...). Keep the diagnostic guard instead of
+	 * reproducing that stock NULL-pointer crash. */
+	if (ihid->inbuf[2] == 0x07 && !kb_input_dev) {
+		pr_err("hid-keyboard,%s,kb_input_dev is NULL", __func__);
 		return;
 	}
-	
-    if (test_bit(I2C_HID_STARTED, &ihid->flags))
+
+	if (lenovo_kb) {
+		if (!test_bit(I2C_HID_STARTED, &ihid->flags))
+			return;
+		if (!device_keyboard || device_keyboard->online != 1)
+			return;
+		if (ihid->inbuf[2] == 0x05 && handle_special_key_frame(ihid))
+			return;
+	}
+
+	if (test_bit(I2C_HID_STARTED, &ihid->flags))
 		hid_input_report(ihid->hid, HID_INPUT_REPORT, ihid->inbuf + 2, ret_size - 2, 1);
 	return;
 }
@@ -1322,10 +1368,10 @@ static ssize_t hid_show_status(struct device *dev,
 /* Stock register_kb_wakeup_devices @0xffffff8008cb18c8. */
 static int register_kb_wakeup_devices(void)
 {
-	pr_info("hid-keyboard,%s\n", __func__);
+	printk("hid-keyboard,%s\n", __func__);
 	kb_input_dev = input_allocate_device();
 	if (!kb_input_dev) {
-		pr_err("hid-keyboard,%s,failed to input_allocate_device keyboard device\n",
+		printk("hid-keyboard,%s,failed to input_allocate_device keyboard device\n",
 		       __func__);
 		return -1;
 	}
@@ -1345,7 +1391,7 @@ static int register_kb_wakeup_devices(void)
 	input_set_capability(kb_input_dev, EV_KEY, 0x28b);
 	kb_input_dev->name = "keyboard_wakeup_devices";
 	if (input_register_device(kb_input_dev)) {
-		pr_err("hid-keyboard,%s,failed to register keyboard device\n",
+		printk("hid-keyboard,%s,failed to register keyboard device\n",
 		       __func__);
 		return -1;
 	}
@@ -1359,8 +1405,9 @@ static int kb_report_power_key(void)
 {
 	int ret;
 
+	printk(KERN_ALERT "3===%s===\n", __func__);
 	if (!kb_input_dev) {
-		pr_err("hid-keyboard: kb_report_power_key: input dev is NULL\n");
+		printk(KERN_ALERT "3kb_input_dev is NULL");
 		return -1;
 	}
 	input_report_key(kb_input_dev, KEY_POWER, 1);
@@ -1371,16 +1418,74 @@ static int kb_report_power_key(void)
 	return ret;
 }
 
+/* stock report_special_key @0xffffff8008cb1a18: log, require the wakeup
+ * input device, then emit EV_KEY plus EV_SYN. */
+static int report_special_key(int key, int value)
+{
+	printk("hid-keyboard,%s,key_value=%02x event=EV_KEY\n", __func__, key);
+	if (!kb_input_dev) {
+		printk("hid-keyboard,%s,kb_input_dev is NULL", __func__);
+		return -1;
+	}
+	input_event(kb_input_dev, EV_KEY, key, value & 0xff);
+	input_event(kb_input_dev, EV_SYN, 0, 0);
+	return 0;
+}
+
+static bool update_special_key(int key, bool pressed, bool *state)
+{
+	if (*state == pressed)
+		return false;
+	report_special_key(key, pressed ? 1 : 0);
+	*state = pressed;
+	return true;
+}
+
+/* stock 0x8cb3f24..0x8cb34684: first changed key wins; return true so the
+ * caller suppresses the normal HID report for a consumed 0x05 frame. */
+static bool handle_special_key_frame(struct i2c_hid *ihid)
+{
+	u8 b3 = ihid->inbuf[3];
+	u8 b4 = ihid->inbuf[4];
+	u8 b5 = ihid->inbuf[5];
+
+	if (update_special_key(0x280, !!(b3 & 0x40), &spec_key_lockscreen))
+		return true;
+	if (update_special_key(0x282, !!(b3 & 0x80), &spec_key_switchlanguage))
+		return true;
+	if (update_special_key(0x283, !!(b4 & 0x01), &spec_key_micdisable))
+		return true;
+	if (update_special_key(0x284, !!(b4 & 0x10), &spec_key_touchpanelmute))
+		return true;
+	if (update_special_key(0x285, !!(b5 & 0x02), &spec_key_globalsearch))
+		return true;
+	if (update_special_key(0x286, !!(b4 & 0x02), &spec_key_fullscreen))
+		return true;
+	if (update_special_key(0x287, !!(b4 & 0x04), &spec_key_splitscreen))
+		return true;
+	if (update_special_key(0x289, !!(b4 & 0x20), &spec_key_superintcon))
+		return true;
+	if (update_special_key(0x28a, !!(b4 & 0x40), &spec_key_customerapp1))
+		return true;
+	if (update_special_key(0x28b, !!(b4 & 0x80), &spec_key_customerapp2))
+		return true;
+	return false;
+}
+
 static ssize_t kb_sys_status_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%d\n", kb_online_value_g);
+	if (!device_keyboard)
+		return scnprintf(buf, PAGE_SIZE, "0\n");
+	return scnprintf(buf, PAGE_SIZE, "%d\n", device_keyboard->online);
 }
 
 static ssize_t kb_sys_hall_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%d\n", kb_hall_value_g);
+	if (!device_keyboard)
+		return scnprintf(buf, PAGE_SIZE, "0\n");
+	return scnprintf(buf, PAGE_SIZE, "%d\n", device_keyboard->hall);
 }
 
 static ssize_t kb_sys_vid_pid_show(struct device *dev,
@@ -1508,6 +1613,10 @@ static int i2c_hid_probe(struct i2c_client *client,
 
 	ihid = devm_kzalloc(&client->dev, sizeof(*ihid), GFP_KERNEL);
 	if (!ihid)
+		return -ENOMEM;
+
+	device_keyboard = kzalloc(sizeof(*device_keyboard), GFP_KERNEL);
+	if (!device_keyboard)
 		return -ENOMEM;
 
 	if (client->dev.of_node) {
@@ -1672,6 +1781,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 	}
 	regulator_put(ldo_keyboard);
 
+	device_keyboard->status = 1;
 	return 0;
 
 err_mem_free:
@@ -1952,9 +2062,6 @@ void kb_hid_resume(void)
 		printk("%s:report screen on cmd failed\n");
 	else
 		g_screen_on = 1;
-	/* stock kb resume path sets the 0xa4f8168 flag so the next 0x06
-	 * frame does not double-inject the power key (TASK-081 D86). */
-	kb_pm_resume_flag = 1;
 	/* Spruce code for OSPURCET-780 by sunft3 at 2023/01/18 end */
 	return;
 }
