@@ -186,18 +186,18 @@ static struct lock_class_key report_info_mutex_key;
  * dev_get_drvdata() inside uevent()/attrs yields &data->misc, not the
  * driver-private struct. Convert back with container_of().
  */
-static int ctn730_dev_uevent(struct device *dev, struct kobj_uevent_env *env);
+static int ctn730_uevent(struct device *dev, struct kobj_uevent_env *env);
 
 static struct device_type ctn730_dev_type = {
 	.name = "nfc_charger",
-	.uevent = ctn730_dev_uevent,
+	.uevent = ctn730_uevent,
 };
 
 static inline struct ctn730_data *ctn730_from_dev(struct device *dev)
 {
 	struct miscdevice *misc = dev_get_drvdata(dev);
 
-	if (!misc)
+	if (!misc || misc == (struct miscdevice *)0x10)
 		return NULL;
 	return container_of(misc, struct ctn730_data, misc);
 }
@@ -1658,11 +1658,6 @@ static struct device_attribute *ctn730_attrs[] = {
 	&dev_attr_cn_test,
 	NULL,
 };
-
-static int ctn730_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
-{
-	return ctn730_uevent(dev, env);
-}
 
 static int ctn730_suspend(struct device *dev)
 {
