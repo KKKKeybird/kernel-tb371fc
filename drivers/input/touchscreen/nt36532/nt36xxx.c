@@ -3684,7 +3684,7 @@ static void nvt_mp_print_selftest_result(int result, const u8 *record,
 		return;
 
 	if (result == 0) {
-		pr_info("Pass!\n");
+		pr_info(" PASS!\n");
 		return;
 	}
 	if (result == 1) {
@@ -4477,6 +4477,10 @@ static int nvt_selftest_show(struct seq_file *m, void *v)
 
 	if (!nvt_mp_test_result_printed) {
 		pr_info("Short Test");
+		if (nvt_mp_result_short == 0)
+			pr_info("Pass!\n");
+		else
+			pr_info("Fail!\n");
 		nvt_mp_print_selftest_result(nvt_mp_result_short,
 			(const u8 *)nvt_ts->mp_record_short,
 			nvt_ts->mp_rawdata_short,
@@ -4486,6 +4490,10 @@ static int nvt_selftest_show(struct seq_file *m, void *v)
 
 	if (!nvt_mp_test_result_printed) {
 		pr_info("Open Test");
+		if (nvt_mp_result_open == 0)
+			pr_info("Pass!\n");
+		else
+			pr_info("Fail!\n");
 		nvt_mp_print_selftest_result(nvt_mp_result_open,
 			(const u8 *)nvt_ts->mp_record_open,
 			nvt_ts->mp_rawdata_open,
@@ -4502,7 +4510,7 @@ static int nvt_selftest_show(struct seq_file *m, void *v)
 				nvt_ts->mp_rawdata_fw_rawdata,
 				nvt_mp_x_channel, nvt_mp_y_channel);
 		} else {
-			pr_info("Fail!\n");
+			pr_info("FAIL!\n");
 			if (nvt_mp_result_fw_rawdata == -1) {
 				pr_info("FW Rawdata");
 				nvt_mp_print_selftest_result(
@@ -4531,7 +4539,7 @@ static int nvt_selftest_show(struct seq_file *m, void *v)
 				nvt_ts->mp_rawdata_diff_max,
 				nvt_mp_x_channel, nvt_mp_y_channel);
 		} else {
-			pr_info("Fail!\n");
+			pr_info("FAIL!\n");
 			if (nvt_mp_result_fw_diff_max == -1) {
 				pr_info("FW Diff Max");
 				nvt_mp_print_selftest_result(
@@ -4553,14 +4561,14 @@ static int nvt_selftest_show(struct seq_file *m, void *v)
 	test_result_bmp[4] = nvt_mp_result_noise == 0 ? 'P' : 'F';
 	if (nvt_ts->pen_support && !nvt_mp_test_result_printed) {
 		pr_info("Pen FW Rawdata Test");
-		if (nvt_mp_result_pen_fw_raw == 0) {
-			pr_info("Pass!\n");
-			nvt_mp_print_selftest_result(nvt_mp_result_pen_tipx_raw,
+		if (nvt_mp_result_pen_fw_raw == 0 ||
+		    nvt_mp_result_pen_fw_raw == 1) {
+			nvt_mp_print_selftest_result(nvt_mp_result_pen_fw_raw,
 				(const u8 *)nvt_ts->mp_record_pen_tipx_raw,
 				nvt_ts->mp_raw_pen_tipx_raw,
 				nvt_ts->x_num, nvt_ts->y_gang_num);
 		} else {
-			pr_info("Fail!\n");
+			pr_info("FAIL!\n");
 			if (nvt_mp_result_pen_tipx_raw == -1) {
 				pr_info("Pen Tip X Raw");
 				nvt_mp_print_selftest_result(
@@ -4596,15 +4604,14 @@ static int nvt_selftest_show(struct seq_file *m, void *v)
 		}
 
 		pr_info("Pen Noise Test");
-		if (nvt_mp_result_pen_noise == 0) {
-			pr_info("Pass!\n");
-			nvt_mp_print_selftest_result(
-				nvt_mp_result_pen_tipx_diff_max,
+		if (nvt_mp_result_pen_noise == 0 ||
+		    nvt_mp_result_pen_noise == 1) {
+			nvt_mp_print_selftest_result(nvt_mp_result_pen_noise,
 				(const u8 *)nvt_ts->mp_record_pen_tipx_diff_max,
 				nvt_ts->mp_raw_pen_tipx_diff_max,
 				nvt_ts->x_num, nvt_ts->y_gang_num);
 		} else {
-			pr_info("Fail!\n");
+			pr_info("FAIL!\n");
 			if (nvt_mp_result_pen_tipx_diff_max == -1) {
 				pr_info("Pen Tip X Diff Max");
 				nvt_mp_print_selftest_result(
