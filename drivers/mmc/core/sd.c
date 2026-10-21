@@ -1283,6 +1283,20 @@ void bht_load(struct mmc_host *mmc_host, struct mmc_card *card)
 				bht_update_cfg(mmc_host,card, (u32*)data,sizeof(data));
 			}
 		}
+
+		/*
+		 * Stock bht_load tail: re-read/decode CSD, reselect the card
+		 * through the BHT recovery path, refresh SCR/switch caps, then
+		 * restore 1-bit bus width, ACMD42 and deselect the card.
+		 */
+		mmc_sd_get_csd(mmc_host, card);
+		bht_mmc_select_card_spec(host);
+		mmc_app_send_scr(card);
+		mmc_decode_scr(card);
+		mmc_read_switch(card);
+		mmc_app_set_bus_width(card, MMC_BUS_WIDTH_1);
+		mmc_app_acmd42(card);
+		driver_send_command(host);
 	}
 }
 #endif

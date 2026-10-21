@@ -359,6 +359,11 @@ static int gg_select_card_spec(struct sdhci_host *host)
 	return 0;
 }
 
+int bht_mmc_select_card_spec(struct sdhci_host *host)
+{
+	return gg_select_card_spec(host);
+}
+
 void dump_u32_buf(u8 * ptb, int len)
 {
 	int i = 0;
