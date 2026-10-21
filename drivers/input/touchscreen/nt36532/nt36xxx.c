@@ -3715,6 +3715,116 @@ static const struct file_operations nvt_selftest_fops = {
 	.release = single_release,
 };
 
+static void nvt_mp_buffer_deinit(void)
+{
+#define NVT_MP_FREE(field) do { \
+	kfree(nvt_ts->field); \
+	nvt_ts->field = NULL; \
+} while (0)
+
+	NVT_MP_FREE(mp_record_short);
+	NVT_MP_FREE(mp_record_open);
+	NVT_MP_FREE(mp_record_fw_rawdata);
+	NVT_MP_FREE(mp_record_fw_cc);
+	NVT_MP_FREE(mp_record_fw_diff_max);
+	NVT_MP_FREE(mp_record_fw_diff_min);
+	NVT_MP_FREE(mp_rawdata_short);
+	NVT_MP_FREE(mp_rawdata_open);
+	NVT_MP_FREE(mp_rawdata_diff);
+	NVT_MP_FREE(mp_rawdata_diff_min);
+	NVT_MP_FREE(mp_rawdata_diff_max);
+	NVT_MP_FREE(mp_rawdata_fw_rawdata);
+	NVT_MP_FREE(mp_rawdata_fw_cc);
+	NVT_MP_FREE(mp_record_pen_tipx_raw);
+	NVT_MP_FREE(mp_record_pen_tipy_raw);
+	NVT_MP_FREE(mp_record_pen_ringx_raw);
+	NVT_MP_FREE(mp_record_pen_ringy_raw);
+	NVT_MP_FREE(mp_record_pen_tipx_diff_max);
+	NVT_MP_FREE(mp_record_pen_tipx_diff_min);
+	NVT_MP_FREE(mp_record_pen_tipy_diff_max);
+	NVT_MP_FREE(mp_record_pen_tipy_diff_min);
+	NVT_MP_FREE(mp_record_pen_ringx_diff_max);
+	NVT_MP_FREE(mp_record_pen_ringx_diff_min);
+	NVT_MP_FREE(mp_record_pen_ringy_diff_max);
+	NVT_MP_FREE(mp_record_pen_ringy_diff_min);
+	NVT_MP_FREE(mp_raw_pen_tipx_raw);
+	NVT_MP_FREE(mp_raw_pen_tipy_raw);
+	NVT_MP_FREE(mp_raw_pen_ringx_raw);
+	NVT_MP_FREE(mp_raw_pen_ringy_raw);
+	NVT_MP_FREE(mp_raw_pen_tipx_diff_max);
+	NVT_MP_FREE(mp_raw_pen_tipx_diff_min);
+	NVT_MP_FREE(mp_raw_pen_tipy_diff_max);
+	NVT_MP_FREE(mp_raw_pen_tipy_diff_min);
+	NVT_MP_FREE(mp_raw_pen_ringx_diff_max);
+	NVT_MP_FREE(mp_raw_pen_ringx_diff_min);
+	NVT_MP_FREE(mp_raw_pen_ringy_diff_max);
+	NVT_MP_FREE(mp_raw_pen_ringy_diff_min);
+#undef NVT_MP_FREE
+}
+
+static int nvt_mp_buffer_init(void)
+{
+#define NVT_MP_ALLOC(field, size) do { \
+	nvt_ts->field = kzalloc((size), GFP_KERNEL); \
+	if (!nvt_ts->field) \
+		goto fail; \
+} while (0)
+
+	/* Stock nvt_mp_proc_init allocation order and sizes. */
+	NVT_MP_ALLOC(mp_record_short, 0x1004);
+	NVT_MP_ALLOC(mp_record_open, 0x1004);
+	NVT_MP_ALLOC(mp_record_fw_rawdata, 0x1004);
+	NVT_MP_ALLOC(mp_record_fw_cc, 0x1004);
+	NVT_MP_ALLOC(mp_record_fw_diff_max, 0x1004);
+	NVT_MP_ALLOC(mp_record_fw_diff_min, 0x1004);
+
+	if (nvt_ts->pen_support) {
+		NVT_MP_ALLOC(mp_record_pen_tipx_raw, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_tipy_raw, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_ringx_raw, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_ringy_raw, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_tipx_diff_max, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_tipx_diff_min, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_tipy_diff_max, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_tipy_diff_min, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_ringx_diff_max, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_ringx_diff_min, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_ringy_diff_max, 0x200);
+		NVT_MP_ALLOC(mp_record_pen_ringy_diff_min, 0x200);
+	}
+
+	NVT_MP_ALLOC(mp_rawdata_short, 0x4010);
+	NVT_MP_ALLOC(mp_rawdata_open, 0x4010);
+	NVT_MP_ALLOC(mp_rawdata_diff, 0x4010);
+	NVT_MP_ALLOC(mp_rawdata_diff_min, 0x4010);
+	NVT_MP_ALLOC(mp_rawdata_diff_max, 0x4010);
+	NVT_MP_ALLOC(mp_rawdata_fw_rawdata, 0x4010);
+	NVT_MP_ALLOC(mp_rawdata_fw_cc, 0x4010);
+
+	if (nvt_ts->pen_support) {
+		NVT_MP_ALLOC(mp_raw_pen_tipx_raw, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_tipy_raw, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_ringx_raw, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_ringy_raw, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_tipx_diff_max, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_tipx_diff_min, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_tipy_diff_max, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_tipy_diff_min, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_ringx_diff_max, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_ringx_diff_min, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_ringy_diff_max, 0x800);
+		NVT_MP_ALLOC(mp_raw_pen_ringy_diff_min, 0x800);
+	}
+#undef NVT_MP_ALLOC
+	return 0;
+
+fail:
+	pr_err("3[%s] %s %d: Allocate mp memory failed\n",
+	       __func__, __func__, 2737);
+	nvt_mp_buffer_deinit();
+	return -ENOMEM;
+}
+
 /* ---- nvt_mp_proc_init / nvt_mp_proc_deinit (stock @0x8ae3448/0x8ae3cf8) ---- */
 int nvt_mp_proc_init(void)
 {
@@ -3742,12 +3852,18 @@ int nvt_mp_proc_init(void)
 	}
 	nvt_ts->proc_self_test = e;
 
+	if (nvt_mp_buffer_init()) {
+		nvt_mp_proc_deinit();
+		return -ENOMEM;
+	}
+
 	pr_info("3[%s] %s %d: create proc/%s Succeeded!\n", "nvt_mp_proc_init", "nvt_mp_proc_init", 2741, "self_test");
 	return 0;
 }
 
 void nvt_mp_proc_deinit(void)
 {
+	nvt_mp_buffer_deinit();
 	if (nvt_ts->proc_self_test) {
 		proc_remove(nvt_ts->proc_self_test);
 		nvt_ts->proc_self_test = NULL;
@@ -4167,7 +4283,6 @@ static int nvt_ts_probe(struct spi_device *client)
 		ret = drm_panel_notifier_register(active_panel, &ts->drm_nb);
 		if (ret < 0) {
 			pr_err("3[%s] %s %d: register drm_panel_notifier failed. ret=%d\n", "nvt_ts_probe", "nvt_ts_probe", 2736, ret);
-			nvt_mp_proc_deinit();
 			goto err_mp_proc;
 		}
 	} else {
@@ -4215,6 +4330,7 @@ static int nvt_ts_probe(struct spi_device *client)
 	return 0;
 
 err_mp_proc:
+	nvt_mp_proc_deinit();
 	nvt_extra_proc_deinit();
 err_extra_proc:
 	if (NVT_proc_entry) {
