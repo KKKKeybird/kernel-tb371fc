@@ -135,6 +135,7 @@ int kb_i2c_resume(void);
 /* Spruce code for OSPURCET-780 by sunft3 at 2023/01/18 start */
 struct i2c_hid *g_ihid=NULL;
 struct i2c_client *g_client=NULL;
+struct hid_device *g_phid=NULL;
 /* Spruce code for OSPURCET-780 by sunft3 at 2023/01/18 end */
 
 /* Spruce code for OSPURCET-780 by sunft3 at 2023/01/18 start */
@@ -1522,17 +1523,12 @@ static ssize_t kb_sys_vid_pid_show(struct device *dev,
 	 * HID descriptor wVendorID (ihid+36) / wProductID (ihid+38) - the
 	 * same source as hid->vendor/product. Replace the D91 i2c-addr
 	 * placeholder. */
-	struct i2c_client *client = g_client;
-	struct i2c_hid *ihid;
+	struct hid_device *hid = g_phid;
 
-	if (!client)
-		return scnprintf(buf, PAGE_SIZE, "0 0\n");
-	ihid = i2c_get_clientdata(client);
-	if (!ihid)
+	if (!hid)
 		return scnprintf(buf, PAGE_SIZE, "0 0\n");
 	return scnprintf(buf, PAGE_SIZE, "%d %d\n",
-			le16_to_cpu(ihid->hdesc.wVendorID),
-			le16_to_cpu(ihid->hdesc.wProductID));
+			hid->vendor, hid->product);
 }
 
 static const struct device_attribute kb_dev_attr_status_value =
@@ -1714,6 +1710,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 	}
 
 	ihid->hid = hid;
+	g_phid = hid;
 
 	hid->driver_data = client;
 	hid->ll_driver = &i2c_hid_ll_driver;
