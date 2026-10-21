@@ -608,52 +608,57 @@ int nvt_ext_cmd_store(u8 mode, u8 value)
 	return ret;
 }
 
-/* D62: stock nvt_edge_grid_zone_set @0xffffff8008adf580 - same frame,
- * but set_page(mmap[0] | 0x50) once, 3 attempts, and the 9-byte
- * completion read with buf[1..8] prefilled 0xff, success buf[1] == 0x00.
+/* stock nvt_edge_grid_zone_set @0xffffff8008adf580:
+ * set_page(mmap[0]); up to 5 attempts; rebuild the 9-byte command frame
+ * before every attempt; completion read is {0x50, 0xff x8}, success is
+ * buf[1] == 0, and exhaustion returns -1.
  */
 int nvt_edge_grid_zone_set(u8 x1, u8 y1, u16 x2, u16 y2)
 {
-	u8 buf[9] = { 0x50, 0x7f, 0x01, x1, y1, x2 & 0xff, x2 >> 8, y2 & 0xff, y2 >> 8 };
-	int ret = -1;
+	u8 buf[9];
 	int attempt;
 
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
 	if (!bTouchIsAwake) {
 		pr_err("3[%s] %s %d: Touch is already suspend, ignore cmd\n",
-		       "nvt_edge_grid_zone_set", "nvt_edge_grid_zone_set", 1196);
+		       __func__, __func__, 1196);
 		mutex_unlock(&nvt_ts->lock);
 		return -1;
 	}
-	if (nvt_set_page(nvt_ts->mmap[0] | 0x50)) {
-		pr_err("NVT-ts: nvt_edge_grid_zone_set: set_page error\n");
-		mutex_unlock(&nvt_ts->lock);
-		return -1;
-	}
-	for (attempt = 0; attempt < 3; attempt++) {
+
+	nvt_set_page(nvt_ts->mmap[0]);
+	for (attempt = 0; attempt < 5; attempt++) {
+		buf[0] = 0x50;
+		buf[1] = 0x7f;
+		buf[2] = 0x01;
+		buf[3] = x1;
+		buf[4] = y1;
+		buf[5] = x2 & 0xff;
+		buf[6] = x2 >> 8;
+		buf[7] = y2 & 0xff;
+		buf[8] = y2 >> 8;
 		CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
 		msleep(20);
 		buf[0] = 0x50;
 		memset(&buf[1], 0xff, sizeof(buf) - 1);
 		CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf));
 		if (buf[1] == 0x00) {
-			ret = 0;
-			break;
+			pr_info("3[%s] %s %d: send Cmd 0x%02X 0x%02X success, tried %d times\n",
+				__func__, __func__, 1242, 0x7f, 0x01, attempt);
+			mutex_unlock(&nvt_ts->lock);
+			return 0;
 		}
 	}
-	if (ret)
-		pr_err("NVT-ts: nvt_edge_grid_zone_set: not ready, retry=%d\n", attempt);
-	else
-		pr_info("NVT-ts: nvt_edge_grid_zone_set: x1=%d, y1=%d, x2=%d, y2=%d\n",
-			x1, y1, x2, y2);
+
+	pr_err("3[%s] %s %d: send Cmd 0x%02X 0x%02X failed, buf[1]=0x%02X\n",
+	       __func__, __func__, 1237, 0x7f, 0x01, buf[1]);
 	mutex_unlock(&nvt_ts->lock);
-	return ret;
+	return -1;
 }
 
-/* D62: stock nvt_edge_reject_set @0xffffff8008adf548 - value > 3 -> 0,
- * else the jump-table byte 0xba/0xbb/0xbc/0xbd through the 2-byte
- * nvt_cmd_store frame. */
+/* stock nvt_edge_reject_set @0xffffff8008adf548: value > 3 -> 0;
+ * otherwise 0xbcbdbbba >> (value * 8) yields ba/bb/bd/bc. */
 int nvt_edge_reject_set(u8 value)
 {
 	if ((value & 0xff) >= 4)
@@ -808,16 +813,12 @@ int nvt_support_pen_set(u8 enable, u8 version)
 		mutex_unlock(&nvt_ts->lock);
 		return -1;
 	}
-	/* TASK-081 D93 (pen regression part 2): stock nvt_support_pen_set
-	 * (0x8adf9e8) writes a 4-byte frame {0x50, 0x7b, enable, version}
-	 * after nvt_set_page(mmap[0]) - NOT the old community protocol
-	 * {0x7b, 0x50, ...} with page mmap[0]|0x50 that our rebuild copied.
-	 * With the old frame the IC never executed the pen enable, which is
-	 * why the tip stayed dead even with pen_support fixed. Read back is
-	 * 4 bytes of {0x50, 0xff, 0xff, 0xff} requiring byte[1] == 0, five
-	 * retries. */
+	/* stock nvt_support_pen_set @0x8adf9e8: set_page(mmap[0]) once,
+	 * then up to 5 attempts of {0x50, 0x7b, enable, version}; each read is
+	 * {0x50, 0xff, 0xff, 0xff}, success is buf[1] == 0, and exhaustion
+	 * returns -1. */
+	nvt_set_page(nvt_ts->mmap[0]);
 	for (retry = 0; retry < 5; retry++) {
-		nvt_set_page(nvt_ts->mmap[0]);
 		buf[0] = 0x50;
 		buf[1] = 0x7b;
 		buf[2] = enable;
@@ -828,15 +829,18 @@ int nvt_support_pen_set(u8 enable, u8 version)
 		buf[1] = 0xff;
 		buf[2] = 0xff;
 		buf[3] = 0xff;
-		if (!CTP_SPI_READ(nvt_ts->client, buf, 4) && buf[1] == 0) {
+		CTP_SPI_READ(nvt_ts->client, buf, 4);
+		if (buf[1] == 0) {
+			pr_info("3[%s] %s %d: send Cmd 0x%02X 0x%02X 0x%02X success, tried %d times\n",
+				__func__, __func__, 1448, 0x7b, enable, version, retry);
 			mutex_unlock(&nvt_ts->lock);
 			return 0;
 		}
 	}
-	pr_err("NVT-ts: nvt_support_pen_set: failed enable=%d version=%d\n",
-	       enable, version);
+	pr_err("3[%s] %s %d: send Cmd 0x%02X 0x%02X 0x%02X failed, buf[1]=0x%02X\n",
+	       __func__, __func__, 1443, 0x7b, enable, version, buf[1]);
 	mutex_unlock(&nvt_ts->lock);
-	return -EIO;
+	return -1;
 }
 
 void nvt_support_pen_set_nfc(bool normal)
@@ -2592,16 +2596,15 @@ static ssize_t nvt_edge_grid_zone_store(struct file *file,
 
 	sscanf(data, "%d,%d,%d,%d", &x1, &y1, &x2, &y2);
 
-	mutex_lock(&nvt_ts->lock);
 	nvt_ts->edge_grid_x1 = x1;
 	nvt_ts->edge_grid_y1 = y1;
 	nvt_ts->edge_grid_x2 = x2;
 	nvt_ts->edge_grid_y2 = y2;
-	mutex_unlock(&nvt_ts->lock);
 
-	pr_info("NVT-ts: %s: x1=%d, y1=%d, x2=%d, y2=%d\n",
-		__func__, x1, y1, x2, y2);
-	nvt_edge_grid_zone_set((u8)x1, (u8)y1, (u16)x2, (u16)y2);
+	pr_info("3[%s] %s %d: cmd_parm = %d,%d,%d,%d\n",
+		__func__, __func__, 1270, x1, y1, x2, y2);
+	nvt_edge_grid_zone_set(nvt_ts->edge_grid_x1, nvt_ts->edge_grid_y1,
+			       nvt_ts->edge_grid_x2, nvt_ts->edge_grid_y2);
 	return count;
 }
 
