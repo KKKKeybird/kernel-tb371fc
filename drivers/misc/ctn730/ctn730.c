@@ -35,6 +35,7 @@ extern void nvt_support_pen_set_nfc(bool normal);
 
 int tp_state;
 static int is_hard_reset;
+int has_hard_reset;
 static struct ctn730_data *ctn730;
 static struct i2c_client *client_address;
 static struct device_node *ctn730_panel;
@@ -1196,17 +1197,48 @@ t80_dispatch:
 			is_hard_reset = 0;
 		}
 		goto shared_4_or_5;
-	case 20: /* 0x94: 0x888499c */
-		if (!payload[0])
-			goto app_chn_connected;
-		if (payload[0] != 1)
-			goto tail;
-		if (data->fw_status == 1) {
-			data->pen_mode_open = 1;
-		} else if (data->fw_status != 2) {
-			goto tail;
-		} else {
-			data->pen_mode_open = 0;
+	case 20: /* 0x94: table entry 0x888499c */
+		if (!payload[0]) {
+			has_hard_reset = 0;
+			alarm_start_relative(&data->alarm, ktime_set(5400, 0));
+			pr_info("ctn730: %s: charge_state %s\n",
+				"ctn730_parse_message",
+				ctn730_charge_state_text[1]);
+			if (tp_state == 1)
+				nvt_support_pen_set_nfc(false);
+			mutex_lock(&data->report_info_mutex);
+			data->need_report_info = 1;
+			if (!data->report_info && data->charging) {
+				data->fw_status = 17;
+				queue_delayed_work_on(8, system_wq,
+					&data->set_work, 0);
+			}
+			mutex_unlock(&data->report_info_mutex);
+			idx = 1;
+			goto update_charge_state;
+		}
+		if (payload[0] == 1) {
+			alarm_cancel(&data->alarm);
+			pr_info("ctn730: %s: charge_state %s\n",
+				"ctn730_parse_message",
+				ctn730_charge_state_text[2]);
+			idx = 2;
+			goto update_charge_state;
+		}
+		if (payload[0] == 2) {
+			pr_info("ctn730: %s: charge_state %s\n",
+				"ctn730_parse_message",
+				ctn730_charge_state_text[3]);
+			idx = 3;
+			goto update_charge_state;
+		}
+		goto tail;
+
+update_charge_state:
+		if (data->pending_event_index != idx) {
+			data->pending_event_index = idx;
+			kobject_uevent(&data->misc.this_device->kobj,
+				KOBJ_CHANGE);
 		}
 		goto tail;
 	case 21: /* 0x95: 0x88849dc */
