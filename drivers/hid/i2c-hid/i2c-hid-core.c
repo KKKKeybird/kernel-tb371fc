@@ -438,13 +438,15 @@ static int __i2c_hid_command(struct i2c_client *client,
 	 * RESET_PENDING when the reset completion arrives.
 	 */
 	if (wait) {
-		/* Stock wait entry print (Image-b 0x9bed09f4). */
+		/* Stock wait prints (Image-b 0x9bed09f4/0x9bed06e2/0x9bed06fe). */
+		printk("hid-keyboard,%s,waiting...\n", "i2c_hid_command");
 		printk("hid-keyboard,%s,1 i2c_wait=%d\n",
 		       "i2c_hid_command", wait);
 		if (ihid->quirks & I2C_HID_QUIRK_NO_IRQ_AFTER_RESET)
 			msleep(100);
 		else
 			ret = i2c_hid_wait_reset(ihid);
+		printk("hid-keyboard,%s,finished.\n", "i2c_hid_command");
 		/* Stock wait exit print (Image-b 0x9bed0a3d). */
 		printk("hid-keyboard,%s,2 i2c_wait=%d\n",
 		       "i2c_hid_command", wait);
@@ -704,9 +706,12 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 		if (ret < 0)
 			return;
 
-		/* Stock i2c_master_recv fail print (Image-b 0x9bed010c). */
+		/* Stock prints (Image-b 0x9bed010c for i2c fail,
+		 * 0x9bee013a for data length mismatch). */
 		printk("hid-keyboard,%s,ret < 0,i2c_master_recv fail\n",
 		       "i2c_hid_irq");
+		printk("hid-keyboard,%s,hid-keyboard,%s,get %d data instead of %d\n",
+		       "i2c_hid_irq", "i2c_hid_irq", ret, size);
 		return;
 	}
 
