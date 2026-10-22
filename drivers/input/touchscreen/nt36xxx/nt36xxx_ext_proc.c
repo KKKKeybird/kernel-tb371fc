@@ -28,6 +28,9 @@
 #define NVT_BASELINE "nvt_baseline"
 #define NVT_RAW "nvt_raw"
 #define NVT_DIFF "nvt_diff"
+#define NVT_EDGE_REJECT "nvt_edge_reject"
+
+extern void nvt_edge_reject_set(uint8_t edge);
 
 #define BUS_TRANSFER_LENGTH  64
 
@@ -521,6 +524,44 @@ Description:
 return:
 	Executive outcomes. 0---succeed. -12---failed.
 *******************************************************/
+
+static int32_t nvt_edge_reject_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t nvt_edge_reject_store(struct file *file,
+	const char __user *buffer, size_t count, loff_t *ppos)
+{
+	uint8_t edge = 0;
+	char buf[8] = {0};
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+
+	ret = kstrtou8(buf, 10, &edge);
+	if (ret)
+		return ret;
+
+	nvt_edge_reject_set(edge);
+	return count;
+}
+
+static ssize_t nvt_edge_reject_show(struct file *file,
+	char __user *buffer, size_t count, loff_t *ppos)
+{
+	return 0;
+}
+
+static const struct file_operations nvt_edge_reject_fops = {
+	.open = nvt_edge_reject_open,
+	.write = nvt_edge_reject_store,
+	.read = nvt_edge_reject_show,
+};
+
 int32_t nvt_extra_proc_init(void)
 {
 	NVT_proc_fw_version_entry = proc_create(NVT_FW_VERSION, 0444, NULL,&nvt_fw_version_fops);
@@ -548,6 +589,7 @@ int32_t nvt_extra_proc_init(void)
 	}
 
 	NVT_proc_diff_entry = proc_create(NVT_DIFF, 0444, NULL,&nvt_diff_fops);
+	NVT_proc_edge_reject_entry = proc_create(NVT_EDGE_REJECT, 0666, NULL, &nvt_edge_reject_fops);
 	if (NVT_proc_diff_entry == NULL) {
 		NVT_ERR("create proc/%s Failed!\n", NVT_DIFF);
 		return -ENOMEM;
