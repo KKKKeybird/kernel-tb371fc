@@ -115,7 +115,6 @@ static char versions_info[64] = "Not detected";
 static char kb_status = 0;
 static char KB_BT_MAC_info[64] = "00:00:00:00:00:00";
 extern unsigned int pm_wakeup_irq;
-static bool lenovo_i2c_kb_probe_done = false;
 #define VID_KB_LENOVO 0x17ef
 #define PID_KB_LENOVO 0x6127
 #define PID_KB_LENOVO_V04 0x6175
@@ -675,13 +674,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	i2c_hid_dbg(ihid, "input: %*ph\n", ret_size, ihid->inbuf);
 
 	if (ihid->inbuf[2] == 0x06) {
-		int i = 0, max_try = 50;
-		for (i = 0; i < max_try; i++) {
-			if (likely(lenovo_i2c_kb_probe_done))
-				break;
-			else
-				msleep(10);
-		}
 		kb_connect = ihid->inbuf[3] & 0x01;
 		kb_status = ihid->inbuf[3];
 		/* stock i2c_hid_irq 0x8cb3c94/0x8cb3ca8: update device_keyboard
@@ -1156,8 +1148,9 @@ static int i2c_hid_init_irq(struct i2c_client *client)
 
 		return ret;
 	}
-	
-i2c_hid_dbg(ihid, "hid dev init wakeup .\n");
+
+	irq_set_irq_wake(client->irq, 1);
+	i2c_hid_dbg(ihid, "hid dev init wakeup .\n");
 	ret = device_init_wakeup(&client->dev, true);
 	if(ret!=0)
 	{
@@ -1366,30 +1359,6 @@ static void i2c_hid_fwnode_probe(struct i2c_client *client,
 		pdata->post_power_delay_ms = val;
 }
 
-static ssize_t hid_show_version(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n",	versions_info);
-}
-
-static ssize_t hid_show_status(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	if (kb_connect) {
-		return snprintf(buf, PAGE_SIZE, "%d:%d:%d:%d:%d:%d:%d\n",
-			(kb_status >> 7) & 0x01,	// KB HALL status 1: close, 0: open
-			(kb_status >> 6) & 0x01,	// TP suspend status 1: suspend, 0: using
-			(kb_status >> 4) & 0x03,	// KB status 00: working, 01: sleeping, 0b10: stop
-			(kb_status >> 3) & 1, 		// Cralde status 1: connected, 0: disconnect
-			(kb_status >> 2) & 1, 		// Device2 status 1: connected, 0: disconnect
-			(kb_status >> 1) & 1, 		// BT New 1: BT mac report, 0: ignore bt mac
-			(kb_status) & 1 		// Online 1: connected, 0: disconnect
-			);
-	} else {
-		return snprintf(buf, PAGE_SIZE, "Not connected");
-	}
-}
-
 /* Stock register_kb_wakeup_devices @0xffffff8008cb18c8. */
 static int register_kb_wakeup_devices(void)
 {
@@ -1546,9 +1515,6 @@ static const struct attribute *kb_sys_attrs[] = {
 static const struct attribute_group kb_sys_attr_group = {
 	.attrs = (struct attribute **)kb_sys_attrs,
 };
-
-static DEVICE_ATTR(version, 0444, hid_show_version, NULL);
-static DEVICE_ATTR(kb_status, 0444, hid_show_status, NULL);
 
 static int i2c_enable_mcu(struct i2c_client *client)
 {
@@ -1735,6 +1701,9 @@ static int i2c_hid_probe(struct i2c_client *client,
 
 	ihid->quirks = i2c_hid_lookup_quirk(hid->vendor, hid->product);
 
+	if (!kb_input_dev)
+		register_kb_wakeup_devices();
+
 	ret = hid_add_device(hid);
 	if (ret) {
 		if (ret != -ENODEV)
@@ -1751,13 +1720,6 @@ static int i2c_hid_probe(struct i2c_client *client,
 	    (hid->vendor == VID_KB_LENOVO_TP && hid->product == PID_KB_LENOVO_TP) ||
 	    (hid->vendor == 0x32cd && hid->product == 0x003a)) {
 
-		ret = device_create_file(&hid->dev, &dev_attr_version);
-		if (ret)
-			hid_err(hid,"can't create version attribute err: %d\n",ret);
-		ret = device_create_file(&hid->dev, &dev_attr_kb_status);
-		if (ret)
-			hid_err(hid,"can't create status attribute err: %d\n",ret);
-
 		if (!kb_status_kobj) {
 			kb_status_kobj = kobject_create_and_add("kb_status",
 					NULL);
@@ -1771,13 +1733,6 @@ static int i2c_hid_probe(struct i2c_client *client,
 			}
 		}
 
-		if (ret)
-			hid_err(hid,"can't create status attribute err: %d\n",ret);
-
-		if (!kb_input_dev)
-			register_kb_wakeup_devices();
-
-		lenovo_i2c_kb_probe_done = true;
 	}
 
 	/* Stock keeps the keyboard LDO as pm8150a_l10 and only force-disables
@@ -1787,7 +1742,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 		dev_err(&client->dev, "failed to get pm8150a_l10: %ld\n",
 			PTR_ERR(ldo_keyboard));
 		ret = -ENODEV;
-		goto err_mem_free;
+		goto err_irq;
 	}
 	if (strstr(saved_command_line, "androidboot.mode=charger") &&
 	    regulator_is_enabled(ldo_keyboard)) {
@@ -1801,11 +1756,11 @@ static int i2c_hid_probe(struct i2c_client *client,
 	device_keyboard->status = 1;
 	return 0;
 
-err_mem_free:
-	hid_destroy_device(hid);
-
 err_irq:
 	free_irq(client->irq, ihid);
+
+err_mem_free:
+	hid_destroy_device(hid);
 
 err_pm:
 	pm_runtime_put_noidle(&client->dev);
