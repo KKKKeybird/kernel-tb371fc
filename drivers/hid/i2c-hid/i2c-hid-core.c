@@ -484,8 +484,8 @@ static int i2c_hid_get_report(struct i2c_client *client, u8 reportType,
 	ret = __i2c_hid_command(client, &hid_get_report_cmd, reportID,
 		reportType, args, args_len, buf_recv, data_len);
 	if (ret) {
-		dev_err(&client->dev,
-			"failed to retrieve report from device.\n");
+		printk("hid-keyboard,%s,failed to retrieve report from device.\n",
+		       "i2c_hid_get_raw_report");
 		return ret;
 	}
 
@@ -560,7 +560,8 @@ static int i2c_hid_set_or_send_report(struct i2c_client *client, u8 reportType,
 	ret = __i2c_hid_command(client, hidcmd, reportID,
 		reportType, args, args_len, NULL, 0);
 	if (ret) {
-		dev_err(&client->dev, "failed to set a report to device.\n");
+		printk("hid-keyboard,%s,failed to set a report to device.\n",
+		       "i2c_hid_output_raw_report");
 		return ret;
 	}
 
@@ -1145,6 +1146,8 @@ static int i2c_hid_parse(struct hid_device *hid)
 
 		ret = i2c_hid_command(client, &hid_report_descr_cmd,
 				      rdesc, rsize);
+		printk("hid-keyboard,%s,Report Descriptor: %*ph\n",
+		       "i2c_hid_parse", rsize, rdesc);
 		if (ret) {
 			printk("hid-keyboard,%s,reading report descriptor failed\n",
 		       "i2c_hid_parse");
@@ -1166,7 +1169,8 @@ static int i2c_hid_parse(struct hid_device *hid)
 		kfree(rdesc);
 
 	if (ret) {
-		dbg_hid("parsing report descriptor failed\n");
+		printk("hid-keyboard,%s,parsing report descriptor failed\n",
+		       "i2c_hid_parse");
 		return ret;
 	}
 
