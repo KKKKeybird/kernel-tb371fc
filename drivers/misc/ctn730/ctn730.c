@@ -1269,11 +1269,22 @@ update_charge_state:
 		goto tail;
 	case 35: /* 0xa3: 0x8884a90 */
 		goto tail;
-	case 36: /* 0xa4: 0x8884a54 */
-		if (payload[0] == 1)
+	case 36: /* 0xa4: table entry 0x8884a54 */
+		if (!payload[0]) {
+			pr_info("ctn730: %s: APP_CTRL_CHN_RECIVE_DATA more data\n",
+				"ctn730_parse_message");
 			goto tail;
-		if (payload[0])
+		}
+		if (payload[0] != 1)
 			goto tail;
+		pr_info("ctn730: %s: APP_CTRL_CHN_RECIVE_DATA last data\n",
+			"ctn730_parse_message");
+		data->fw_status = 15;
+		queue_delayed_work_on(8, system_wq, &data->set_work, 0);
+		data->pending_event =
+			(payload[1] == 0xaa && payload[2] == 0x55 &&
+			 payload[3] == 0xcc && payload[4] == 0x33) ? 2 : 1;
+		kobject_uevent(&data->misc.this_device->kobj, KOBJ_CHANGE);
 		goto tail;
 	default:
 		goto bad;
