@@ -445,7 +445,7 @@ static int32_t nvt_cmd_store(uint8_t cmd_val)
  * Level 0-3 maps to bytes from constant 0xBCBDBBBA:
  * level 0 → 0xBA, 1 → 0xBB, 2 → 0xBD, 3 → 0xBC.
  * Calls nvt_cmd_store to write the selected value. */
-static void nvt_edge_reject_set(uint8_t edge)
+void nvt_edge_reject_set(uint8_t edge)
 {
 	u32 mask = 0xBCBDBBBA;
 
@@ -453,6 +453,54 @@ static void nvt_edge_reject_set(uint8_t edge)
 		return;
 	nvt_cmd_store((mask >> (edge * 8)) & 0xFF);
 }
+EXPORT_SYMBOL(nvt_edge_reject_set);
+
+/* TASK-085-D1: stock nvt_ext_cmd_store (Image-b 0x8adf250).
+ * Extended command store: writes {offset, cmd_id, cmd_val} via
+ * nvt_set_page + CTP_I2C_WRITE, then msleep(20) + read-back verify.
+ * Similar to nvt_cmd_store but takes separate cmd_id and cmd_val. */
+static int32_t nvt_ext_cmd_store(uint8_t cmd_id, uint8_t cmd_val)
+{
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+
+	mutex_lock(&ts->lock);
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		return ret;
+	}
+
+	buf[0] = cmd_id;
+	buf[1] = cmd_val;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+
+	msleep(20);
+
+	buf[0] = cmd_id;
+	buf[1] = 0xFF;
+	CTP_I2C_READ(ts->client, I2C_FW_Address, buf, 2);
+
+	mutex_unlock(&ts->lock);
+	return buf[1];
+}
+
+/* TASK-085-D2: stock nvt_game_mode_set (Image-b 0x8adf920, 64 bytes).
+ * mode 0/1/2 selects a byte from constant 0x00010200 and writes it
+ * via nvt_ext_cmd_store(0x79, val). mode > 2 is ignored. */
+void nvt_game_mode_set(uint8_t mode)
+{
+	uint32_t mode_table = 0x00010200;
+
+	if (mode > 2)
+		return;
+
+	nvt_ext_cmd_store(0x79, (mode_table >> (mode * 8)) & 0xFF);
+}
+EXPORT_SYMBOL(nvt_game_mode_set);
+
 
 
 
