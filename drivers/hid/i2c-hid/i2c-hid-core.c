@@ -1880,6 +1880,10 @@ static int i2c_hid_remove(struct i2c_client *client)
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
 	struct hid_device *hid = ihid->hid;
 
+	/* Stock remove entry print (Image-b 0x8cb39b0; %s literal from
+	 * rodata 0x9bee358). */
+	printk("hid-keyboard,%s\n", "i2c_hid_remove");
+
 	if (!(ihid->quirks & I2C_HID_QUIRK_NO_RUNTIME_PM))
 		pm_runtime_get_sync(&client->dev);
 	pm_runtime_disable(&client->dev);
@@ -1893,8 +1897,13 @@ static int i2c_hid_remove(struct i2c_client *client)
 
 	free_irq(client->irq, ihid);
 
-	if (ihid->bufsize)
+	if (ihid->bufsize) {
 		i2c_hid_free_buffers(ihid);
+		/* Stock teardown print (Image-b 0x8cb3a88), verbatim: fmt
+		 * "hid-keyboard,%s" (no newline), argument string
+		 * "ard,=== %s ===\n" (0x9bee370) with an unsubstituted %s. */
+		printk("hid-keyboard,%s", "ard,=== %s ===\n");
+	}
 
 	return 0;
 }
@@ -1902,6 +1911,9 @@ static int i2c_hid_remove(struct i2c_client *client)
 static void i2c_hid_shutdown(struct i2c_client *client)
 {
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
+
+	/* Stock shutdown entry print (Image-b 0x8cb3ac0). */
+	printk("hid-keyboard,=== %s ===\n", "i2c_hid_shutdown");
 
 	kb_i2c_suspend();
 	free_irq(client->irq, ihid);
