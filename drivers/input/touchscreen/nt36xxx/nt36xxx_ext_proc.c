@@ -29,6 +29,9 @@
 #define NVT_RAW "nvt_raw"
 #define NVT_DIFF "nvt_diff"
 #define NVT_EDGE_REJECT "nvt_edge_reject"
+#define NVT_GAME_MODE "nvt_game_mode"
+#define NVT_SUPPORT_PEN "nvt_support_pen"
+extern void nvt_game_mode_set(uint8_t mode);
 
 extern void nvt_edge_reject_set(uint8_t edge);
 
@@ -562,6 +565,68 @@ static const struct file_operations nvt_edge_reject_fops = {
 	.read = nvt_edge_reject_show,
 };
 
+
+/* TASK-085-D3/D4/D5: game_mode procfs entry */
+static int32_t nvt_game_mode_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t nvt_game_mode_store(struct file *file,
+	const char __user *buffer, size_t count, loff_t *ppos)
+{
+	uint8_t mode = 0;
+	char buf[8] = {0};
+	int ret;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	ret = kstrtou8(buf, 10, &mode);
+	if (ret)
+		return ret;
+
+	nvt_game_mode_set(mode);
+	return count;
+}
+
+static ssize_t nvt_game_mode_show(struct file *file,
+	char __user *buffer, size_t count, loff_t *ppos)
+{
+	return 0;
+}
+
+static const struct file_operations nvt_game_mode_fops = {
+	.open = nvt_game_mode_open,
+	.write = nvt_game_mode_store,
+	.read = nvt_game_mode_show,
+};
+
+/* TASK-085-E1/E2/E3: support_pen procfs entry */
+static int32_t nvt_support_pen_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t nvt_support_pen_store(struct file *file,
+	const char __user *buffer, size_t count, loff_t *ppos)
+{
+	return count;
+}
+
+static ssize_t nvt_support_pen_show(struct file *file,
+	char __user *buffer, size_t count, loff_t *ppos)
+{
+	return 0;
+}
+
+static const struct file_operations nvt_support_pen_fops = {
+	.open = nvt_support_pen_open,
+	.write = nvt_support_pen_store,
+	.read = nvt_support_pen_show,
+};
+
 int32_t nvt_extra_proc_init(void)
 {
 	NVT_proc_fw_version_entry = proc_create(NVT_FW_VERSION, 0444, NULL,&nvt_fw_version_fops);
@@ -590,6 +655,8 @@ int32_t nvt_extra_proc_init(void)
 
 	NVT_proc_diff_entry = proc_create(NVT_DIFF, 0444, NULL,&nvt_diff_fops);
 	NVT_proc_edge_reject_entry = proc_create(NVT_EDGE_REJECT, 0666, NULL, &nvt_edge_reject_fops);
+	NVT_proc_game_mode_entry = proc_create(NVT_GAME_MODE, 0666, NULL, &nvt_game_mode_fops);
+	NVT_proc_support_pen_entry = proc_create(NVT_SUPPORT_PEN, 0666, NULL, &nvt_support_pen_fops);
 	if (NVT_proc_diff_entry == NULL) {
 		NVT_ERR("create proc/%s Failed!\n", NVT_DIFF);
 		return -ENOMEM;
