@@ -777,12 +777,10 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	}
 
 	/* stock 0x8cb3dd8: a 0x07 frame with no keyboard input device would
-	 * execute input_event(NULL, ...). Keep the diagnostic guard instead of
-	 * reproducing that stock NULL-pointer crash. */
-	if (ihid->inbuf[2] == 0x07 && !kb_input_dev) {
+	 * execute input_event(NULL, ...). Skip only the invalid event, then keep
+	 * the frame's normal identity/report continuation. */
+	if (ihid->inbuf[2] == 0x07 && !kb_input_dev)
 		pr_err("hid-keyboard,%s,kb_input_dev is NULL", __func__);
-		return;
-	}
 
 	if (lenovo_kb) {
 		if (!test_bit(I2C_HID_STARTED, &ihid->flags))
