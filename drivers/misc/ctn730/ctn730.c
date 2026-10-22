@@ -1212,16 +1212,21 @@ t80_dispatch:
 		data->has_mac = 1;
 		kobject_uevent(&data->misc.this_device->kobj, KOBJ_CHANGE);
 		goto tail;
-	case 34: /* 0xa2: 0x8885214 */
-		if (!payload[0])
-			goto app_chn_connected;
+	case 34: /* 0xa2: table entry 0x8884a1c */
+		if (!payload[0]) {
+			data->fw_status = 14;
+			pr_info("ctn730: %s: status %s\n",
+				"ctn730_parse_message",
+				ctn730_status_text[14]);
+			queue_delayed_work_on(8, system_wq,
+				&data->set_work, 0);
+			goto tail;
+		}
 		if (payload[0] != 1)
 			goto tail;
-		data->fw_status = 14;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
-			ctn730_status_text[14]);
-		queue_delayed_work_on(8, system_wq, &data->set_work,
-			msecs_to_jiffies(13));
+		data->fw_status = 4;
+		pr_info("ctn730: %s: app_chn_disconnected ,treat as status %s\n",
+			"ctn730_parse_message", ctn730_status_text[4]);
 		goto tail;
 	case 35: /* 0xa3: 0x8884a90 */
 		goto tail;
