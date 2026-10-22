@@ -244,6 +244,12 @@ struct i2c_hid {
 
 	unsigned long		sleep_delay;
 };
+_Static_assert(offsetof(struct i2c_hid, flags) == 0x58,
+	       "stock i2c-hid flags offset");
+_Static_assert(offsetof(struct i2c_hid, quirks) == 0x60,
+	       "stock i2c-hid quirks offset");
+_Static_assert(offsetof(struct i2c_hid, wait) == 0x68,
+	       "stock i2c-hid waitqueue offset");
 
 /* stock i2c_hid_probe allocates a 0x98-byte object into the exported
  * device_keyboard symbol. Only the fields consumed by this driver are
@@ -255,6 +261,12 @@ struct keyboard_device {
 	int hall;
 	u8 reserved[0x98 - 12];
 };
+_Static_assert(offsetof(struct keyboard_device, status) == 0x00,
+	       "stock keyboard status offset");
+_Static_assert(offsetof(struct keyboard_device, online) == 0x04,
+	       "stock keyboard online offset");
+_Static_assert(offsetof(struct keyboard_device, hall) == 0x08,
+	       "stock keyboard hall offset");
 struct keyboard_device *device_keyboard;
 EXPORT_SYMBOL(device_keyboard);
 
