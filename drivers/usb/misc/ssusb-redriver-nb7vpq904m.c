@@ -63,42 +63,48 @@ static const u8 ps5169_USB_seq[] = {
 	0x90, 0x01, 0x00,	/* reg 0x90 = 0x01 delay 0 */
 	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
 };
-#define PS5169_USB_SEQ_LEN 4
+/* stock applies only the first 3 entries (gen_dev_set 0x8a798f0 loop) */
+#define PS5169_USB_SEQ_LEN 3
 static const u8 ps5169_USB_FLIP_seq[] = {
 	0x40, 0xd0, 0x00,	/* reg 0x40 = 0xd0 delay 0 */
 	0x8d, 0x01, 0x00,	/* reg 0x8d = 0x01 delay 0 */
 	0x90, 0x01, 0x00,	/* reg 0x90 = 0x01 delay 0 */
 	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
 };
-#define PS5169_USB_FLIP_SEQ_LEN 4
+/* stock applies only the first 3 entries (gen_dev_set 0x8a798f0 loop) */
+#define PS5169_USB_FLIP_SEQ_LEN 3
 static const u8 ps5169_USB_remove_seq[] = {
 	0x40, 0x80, 0x00,	/* reg 0x40 = 0x80 delay 0 */
 	0x8d, 0x00, 0x00,	/* reg 0x8d = 0x00 delay 0 */
 	0x90, 0x00, 0x00,	/* reg 0x90 = 0x00 delay 0 */
 	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
 };
-#define PS5169_USB_REMOVE_SEQ_LEN 4
+/* stock applies only the first 3 entries (gen_dev_set 0x8a798f0 loop) */
+#define PS5169_USB_REMOVE_SEQ_LEN 3
 static const u8 ps5169_DP_seq[] = {
 	0x40, 0xa0, 0x00,	/* reg 0x40 = 0xa0 delay 0 */
 	0xa0, 0x00, 0x00,	/* reg 0xa0 = 0x00 delay 0 */
 	0xa1, 0x04, 0x00,	/* reg 0xa1 = 0x04 delay 0 */
 	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
 };
-#define PS5169_DP_SEQ_LEN 4
+/* stock applies only the first 3 entries (gen_dev_set 0x8a798f0 loop) */
+#define PS5169_DP_SEQ_LEN 3
 static const u8 ps5169_DP_FLIP_seq[] = {
 	0x40, 0xb0, 0x00,	/* reg 0x40 = 0xb0 delay 0 */
 	0xa0, 0x00, 0x00,	/* reg 0xa0 = 0x00 delay 0 */
 	0xa1, 0x04, 0x00,	/* reg 0xa1 = 0x04 delay 0 */
 	0x00, 0x00, 0x00,	/* reg 0x00 = 0x00 delay 0 */
 };
-#define PS5169_DP_FLIP_SEQ_LEN 4
+/* stock applies only the first 3 entries (gen_dev_set 0x8a798f0 loop) */
+#define PS5169_DP_FLIP_SEQ_LEN 3
 static const u8 ps5169_DP_remove_seq[] = {
 	0x40, 0x80, 0x00,	/* reg 0x40 = 0x80 delay 0 */
 	0xa0, 0x02, 0x00,	/* reg 0xa0 = 0x02 delay 0 */
 	0xa1, 0x00, 0x00,	/* reg 0xa1 = 0x00 delay 0 */
-	0x40, 0xe0, 0x00,	/* reg 0x40 = 0xe0 delay 0 */
 };
-#define PS5169_DP_REMOVE_SEQ_LEN 4
+/* Stock applies only the first 3 entries (gen_dev_set 0x8a798f0 loop);
+ * stock DP_remove rodata @0xa30e060 holds exactly 3 entries. */
+#define PS5169_DP_REMOVE_SEQ_LEN 3
 static const u8 ps5169_USB_AND_DP_seq[] = {
 	0x40, 0xe0, 0x00,	/* reg 0x40 = 0xe0 delay 0 */
 	0x8d, 0x01, 0x00,	/* reg 0x8d = 0x01 delay 0 */
@@ -131,51 +137,22 @@ static const u8 ps5169_USB_AND_DP_remove_seq[] = {
 
 /* Registers Address */
 #define GEN_DEV_SET_REG			0x00
-#define CHIP_VERSION_REG		0x17
 
 #define REDRIVER_REG_MAX		0x1f
 
-#define EQ_SET_REG_BASE			0x01
-#define FLAT_GAIN_REG_BASE		0x18
-#define OUT_COMP_AND_POL_REG_BASE	0x02
-#define LOSS_MATCH_REG_BASE		0x19
 
-#define AUX_SWITCH_REG			0x09
-#define AUX_NORMAL_VAL			0
-#define AUX_FLIP_VAL			1
-#define AUX_DISABLE_VAL			2
 
 /* Default Register Value */
 #define GEN_DEV_SET_REG_DEFAULT		0xFB
 
 /* Register bits */
 /* General Device Settings Register Bits */
-#define CHIP_EN		BIT(0)
-#define CHNA_EN		BIT(4)
-#define CHNB_EN		BIT(5)
-#define CHNC_EN		BIT(6)
-#define CHND_EN		BIT(7)
 
-#define CHANNEL_NUM		4
 
-#define OP_MODE_SHIFT		1
 
-#define EQ_SETTING_MASK			0x07
-#define OUTPUT_COMPRESSION_MASK		0x03
-#define LOSS_MATCH_MASK			0x03
-#define FLAT_GAIN_MASK			0x03
 
-#define EQ_SETTING_SHIFT		0x01
-#define OUTPUT_COMPRESSION_SHIFT	0x01
-#define LOSS_MATCH_SHIFT		0x00
-#define FLAT_GAIN_SHIFT			0x00
 
-#define CHNA_INDEX		0
-#define CHNB_INDEX		1
-#define CHNC_INDEX		2
-#define CHND_INDEX		3
 
-#define CHAN_MODE_NUM		2
 
 /* for type c cable */
 enum plug_orientation {
@@ -194,16 +171,6 @@ enum operation_mode {
 	OP_MODE_USB,	/* One/Two ports of USB */
 	OP_MODE_DP,		/* DP 4 Lane and DP 2 Lane */
 	OP_MODE_USB_AND_DP, /* One port of USB and DP 2 Lane */
-};
-
-/*
- * USB redriver channel mode:
- *  - USB mode
- *  - DP mode
- */
-enum channel_mode {
-	CHAN_MODE_USB,
-	CHAN_MODE_DP,
 };
 
 /**
@@ -225,28 +192,10 @@ enum channel_mode {
  * @id_nb: used for id event reception
  * @dp_nb: used for DP event reception
  * @panic_nb: used for panic event reception
- * @chan_mode: used to indicate re-driver's channel mode
- * @eq: equalization register value.
- *      eq[0] - eq[3]: Channel A-D parameter for USB
- *      eq[4] - eq[7]: Channel A-D parameter for DP
- * @output_comp: output compression register value
- *      output_comp[0] - output_comp[3]: Channel A-D parameter for USB
- *      output_comp[4] - output_comp[7]: Channel A-D parameter for DP
- * @loss_match: loss profile matching control register value
- *      loss_match[0] - loss_match[3]: Channel A-D parameter for USB
- *      loss_match[4] - loss_match[7]: Channel A-D parameter for DP
- * @flat_gain: flat gain control register value
- *      flat_gain[0] - flat_gain[3]: Channel A-D parameter for USB
- *      flat_gain[4] - flat_gain[7]: Channel A-D parameter for DP
  * @debug_root: debugfs entry for this context
  */
-enum ssusb_redriver_chip {
-	CHIP_NB7VPQ904M,
-	CHIP_PS5169,
-};
 struct ssusb_redriver {
 	struct device		*dev;
-	enum ssusb_redriver_chip chip;
 	struct regmap		*regmap;
 	struct i2c_client	*client;
 
@@ -257,7 +206,6 @@ struct ssusb_redriver {
 	bool host_active;
 	bool vbus_active;
 	bool is_usb3;
-	bool is_set_aux;
 	enum plug_orientation typec_orientation;
 	enum operation_mode op_mode;
 
@@ -269,14 +217,8 @@ struct ssusb_redriver {
 
 	struct notifier_block	panic_nb;
 
-	enum	channel_mode chan_mode[CHANNEL_NUM];
 
-	u8	eq[CHAN_MODE_NUM][CHANNEL_NUM];
-	u8	output_comp[CHAN_MODE_NUM][CHANNEL_NUM];
-	u8	loss_match[CHAN_MODE_NUM][CHANNEL_NUM];
-	u8	flat_gain[CHAN_MODE_NUM][CHANNEL_NUM];
 
-	u8	gen_dev_val;
 
 	struct dentry	*debug_root;
 };
@@ -320,27 +262,7 @@ static int ps5169_apply_seq(struct ssusb_redriver *redriver,
 }
 
 
-static int ssusb_redriver_channel_update(struct ssusb_redriver *redriver);
 static void ssusb_redriver_debugfs_entries(struct ssusb_redriver *redriver);
-
-static int redriver_i2c_reg_get(struct ssusb_redriver *redriver,
-		u8 reg, u8 *val)
-{
-	int ret;
-	unsigned int val_tmp;
-
-	ret = regmap_read(redriver->regmap, (unsigned int)reg, &val_tmp);
-	if (ret < 0) {
-		dev_err(redriver->dev, "reading reg 0x%02x failure\n", reg);
-		return ret;
-	}
-
-	*val = (u8)val_tmp;
-
-	dev_dbg(redriver->dev, "reading reg 0x%02x=0x%02x\n", reg, *val);
-
-	return 0;
-}
 
 static int redriver_i2c_reg_set(struct ssusb_redriver *redriver,
 		u8 reg, u8 val)
@@ -373,130 +295,70 @@ static int redriver_i2c_reg_set(struct ssusb_redriver *redriver,
 static void ssusb_redriver_gen_dev_set(
 		struct ssusb_redriver *redriver, bool on)
 {
-	int ret;
-	u8 val, oldval;
-	u8 aux_val = AUX_DISABLE_VAL;
-	val = 0;
-
-	/* TASK-081 D89 (Round3 audit 1.13.5): PS5169 parts are driven by the
-	 * stock hard-coded sequences instead of the NB7VPQ904M register field
-	 * math below. Stock ssusb_redriver_gen_dev_set (0xa79588) selects by
-	 * op_mode (0=USB 1=DP 2=USB_AND_DP - same values as our enum), the
-	 * connect/remove bit (param_2 bit0; our !connect), and the typec
-	 * orientation (1=normal 2=flip):
-	 *   USB:  remove 0xa30e03c | flip 0xa30e030 | norm 0xa30e024 (4 each)
-	 *   DP:   remove 0xa30e060 | flip 0xa30e054 | norm 0xa30e048 (4 each)
-	 *   U+DP: remove 0xa30e087 | flip 0xa30e078 | norm 0xa30e069 (5 each)
-	 * An unset orientation takes the stock dev_err path. */
-	if (redriver->chip == CHIP_PS5169) {
-		const u8 *seq = NULL;
-		size_t len = 0;
-		bool remove = !on;
-
-		switch (redriver->op_mode) {
-		case OP_MODE_USB:
-			if (remove) {
-				seq = ps5169_USB_remove_seq;
-				len = PS5169_USB_REMOVE_SEQ_LEN;
-			} else if (redriver->typec_orientation
-					== ORIENTATION_CC2) {
-				seq = ps5169_USB_FLIP_seq;
-				len = PS5169_USB_FLIP_SEQ_LEN;
-			} else {
-				seq = ps5169_USB_seq;
-				len = PS5169_USB_SEQ_LEN;
-			}
-			break;
-		case OP_MODE_DP:
-			if (remove) {
-				seq = ps5169_DP_remove_seq;
-				len = PS5169_DP_REMOVE_SEQ_LEN;
-			} else if (redriver->typec_orientation
-					== ORIENTATION_CC2) {
-				seq = ps5169_DP_FLIP_seq;
-				len = PS5169_DP_FLIP_SEQ_LEN;
-			} else {
-				seq = ps5169_DP_seq;
-				len = PS5169_DP_SEQ_LEN;
-			}
-			break;
-		case OP_MODE_USB_AND_DP:
-			if (remove) {
-				seq = ps5169_USB_AND_DP_remove_seq;
-				len = PS5169_USB_AND_DP_REMOVE_SEQ_LEN;
-			} else if (redriver->typec_orientation
-					== ORIENTATION_CC2) {
-				seq = ps5169_USB_AND_DP_FLIP_seq;
-				len = PS5169_USB_AND_DP_FLIP_SEQ_LEN;
-			} else {
-				seq = ps5169_USB_AND_DP_seq;
-				len = PS5169_USB_AND_DP_SEQ_LEN;
-			}
-			break;
-		default:
-			dev_err(redriver->dev,
-				"%s: op mode: %d, vbus: %d, host: %d\n",
-				__func__, redriver->op_mode,
-				redriver->vbus_active, redriver->host_active);
-			return;
-		}
-		if (seq)
-			ps5169_apply_seq(redriver, seq, len);
-		return;
-	}
+	/* Stock gen_dev_set (Image-b 0x8a79588-0x8a79a48, all call targets
+	 * kallsyms-verified): op_mode x orientation x enable selects one of
+	 * the hard-coded ps5169 sequence tables; the apply loop writes the
+	 * first 3 entries for USB/DP paths (0x8a798f0) and 5 entries for
+	 * USB_AND_DP paths (cmp x25,#0x5); an unset orientation prints
+	 * "UNKNOWN_CC" with the per-mode helper name and line (rodata
+	 * 0x9b8c392 + 0x9b8c3af/0x9b8c3c5/0x9b8c3da, lines 357/373/389),
+	 * an unknown op_mode prints "Error: op mode: ..." (0x9b8c324) and
+	 * both error paths then print "failure to (%s) the redriver chip,
+	 * ..." (0x9b8c34d, %s = ENABLE/DISABLE). Success returns silently
+	 * (0x8a79714). */
+	const char *mode_name = NULL;
+	int cc_line = 0;
+	const u8 *seq = NULL;
+	size_t len = 0;
+	int ret = -EINVAL;
 
 	switch (redriver->op_mode) {
 	case OP_MODE_USB:
-		/* Use source side I/O mapping */
-		if (redriver->typec_orientation
-				== ORIENTATION_CC1) {
-			/* Enable channel C and D */
-			val &= ~(CHNA_EN | CHNB_EN);
-			val |= (CHNC_EN | CHND_EN);
+		mode_name = "redriver_set_USB_mode";
+		cc_line = 357;
+		if (!on) {
+			seq = ps5169_USB_remove_seq;
+			len = PS5169_USB_REMOVE_SEQ_LEN;
 		} else if (redriver->typec_orientation
 				== ORIENTATION_CC2) {
-			/* Enable channel A and B*/
-			val |= (CHNA_EN | CHNB_EN);
-			val &= ~(CHNC_EN | CHND_EN);
-		} else {
-			/* Enable channel A, B, C and D */
-			val |= (CHNA_EN | CHNB_EN);
-			val |= (CHNC_EN | CHND_EN);
+			seq = ps5169_USB_FLIP_seq;
+			len = PS5169_USB_FLIP_SEQ_LEN;
+		} else if (redriver->typec_orientation
+				== ORIENTATION_CC1) {
+			seq = ps5169_USB_seq;
+			len = PS5169_USB_SEQ_LEN;
 		}
-
-		/* Set to default USB Mode */
-		val |= (0x5 << OP_MODE_SHIFT);
-
 		break;
 	case OP_MODE_DP:
-		/* Enable channel A, B, C and D */
-		val |= (CHNA_EN | CHNB_EN);
-		val |= (CHNC_EN | CHND_EN);
-
-		/* Set to DP 4 Lane Mode (OP Mode 2) */
-		val |= (0x2 << OP_MODE_SHIFT);
-
-		if (redriver->typec_orientation
-			== ORIENTATION_CC1) {
-			aux_val = AUX_NORMAL_VAL;
-		} else {
-			aux_val = AUX_FLIP_VAL;
+		mode_name = "redriver_set_DP_mode";
+		cc_line = 373;
+		if (!on) {
+			seq = ps5169_DP_remove_seq;
+			len = PS5169_DP_REMOVE_SEQ_LEN;
+		} else if (redriver->typec_orientation
+				== ORIENTATION_CC2) {
+			seq = ps5169_DP_FLIP_seq;
+			len = PS5169_DP_FLIP_SEQ_LEN;
+		} else if (redriver->typec_orientation
+				== ORIENTATION_CC1) {
+			seq = ps5169_DP_seq;
+			len = PS5169_DP_SEQ_LEN;
 		}
 		break;
 	case OP_MODE_USB_AND_DP:
-		/* Enable channel A, B, C and D */
-		val |= (CHNA_EN | CHNB_EN);
-		val |= (CHNC_EN | CHND_EN);
-
-		if (redriver->typec_orientation
+		mode_name = "redriver_set_USB_AND_DP_mode";
+		cc_line = 389;
+		if (!on) {
+			seq = ps5169_USB_AND_DP_remove_seq;
+			len = PS5169_USB_AND_DP_REMOVE_SEQ_LEN;
+		} else if (redriver->typec_orientation
+				== ORIENTATION_CC2) {
+			seq = ps5169_USB_AND_DP_FLIP_seq;
+			len = PS5169_USB_AND_DP_FLIP_SEQ_LEN;
+		} else if (redriver->typec_orientation
 				== ORIENTATION_CC1) {
-			/* Set to DP 4 Lane Mode (OP Mode 1) */
-			val |= (0x1 << OP_MODE_SHIFT);
-			aux_val = AUX_NORMAL_VAL;
-		} else {
-			/* Set to DP 4 Lane Mode (OP Mode 0) */
-			val |= (0x0 << OP_MODE_SHIFT);
-			aux_val = AUX_FLIP_VAL;
+			seq = ps5169_USB_AND_DP_seq;
+			len = PS5169_USB_AND_DP_SEQ_LEN;
 		}
 		break;
 	default:
@@ -504,52 +366,23 @@ static void ssusb_redriver_gen_dev_set(
 			"Error: op mode: %d, vbus: %d, host: %d.\n",
 			redriver->op_mode, redriver->vbus_active,
 			redriver->host_active);
-		goto err_exit;
+		break;
 	}
 
-	/* exit/enter deep-sleep power mode */
-	oldval = redriver->gen_dev_val;
-	if (on) {
-		val |= CHIP_EN;
-		if (val == oldval)
-			return;
-	} else {
-		/* no operation if already disabled */
-		if (oldval && !(oldval & CHIP_EN))
-			return;
-
-		val &= ~CHIP_EN;
+	if (mode_name && !seq) {
+		dev_err(redriver->dev, "%s:%d unknow cc orientation\n",
+			mode_name, cc_line);
+		ret = -EINVAL;
+	} else if (seq) {
+		ret = ps5169_apply_seq(redriver, seq, len);
 	}
-	ret = redriver_i2c_reg_set(redriver, GEN_DEV_SET_REG, val);
+
 	if (ret < 0)
-		goto err_exit;
-
-	dev_dbg(redriver->dev,
-		"successfully (%s) the redriver chip, reg 0x00 = 0x%x\n",
-		on ? "ENABLE":"DISABLE", val);
-
-	redriver->gen_dev_val = val;
-
-	if (redriver->is_set_aux) {
-		ret = redriver_i2c_reg_set(redriver, AUX_SWITCH_REG, aux_val);
-		if (ret < 0) {
-			dev_err(redriver->dev,
-			"failure to %s set AUX, aux_val = 0x%x\n",
-			on ? "ENABLE":"DISABLE", val, aux_val);
-			return;
-		}
-
-		dev_dbg(redriver->dev,
-		"successfully (%s) set AUX, aux_val = 0x%x\n",
-		on ? "ENABLE":"DISABLE", aux_val);
-	}
-
-	return;
-
-err_exit:
-	dev_err(redriver->dev,
-		"failure to (%s) the redriver chip, reg 0x00 = 0x%x\n",
-		on ? "ENABLE":"DISABLE", val);
+		dev_err(redriver->dev,
+			"failure to (%s) the redriver chip, op mode: %d, vbus: %d, host: %d.\n",
+			on ? "ENABLE" : "DISABLE",
+			redriver->op_mode, redriver->vbus_active,
+			redriver->host_active);
 }
 
 static void ssusb_redriver_config_work(struct work_struct *w)
@@ -634,7 +467,6 @@ static int ssusb_redriver_dp_notifier(struct notifier_block *nb,
 	struct ssusb_redriver *redriver = container_of(nb,
 			struct ssusb_redriver, dp_nb);
 	enum operation_mode op_mode;
-	int ret = 0;
 
 	dev_dbg(redriver->dev,
 		"redriver op mode change: %ld event received\n", dp_lane);
@@ -642,31 +474,12 @@ static int ssusb_redriver_dp_notifier(struct notifier_block *nb,
 	switch (dp_lane) {
 	case 0:
 		op_mode = OP_MODE_USB;
-		redriver->chan_mode[CHNA_INDEX] = CHAN_MODE_USB;
-		redriver->chan_mode[CHNB_INDEX] = CHAN_MODE_USB;
-		redriver->chan_mode[CHNC_INDEX] = CHAN_MODE_USB;
-		redriver->chan_mode[CHND_INDEX] = CHAN_MODE_USB;
 		break;
 	case 2:
 		op_mode = OP_MODE_USB_AND_DP;
-		if (redriver->typec_orientation == ORIENTATION_CC1) {
-			redriver->chan_mode[CHNA_INDEX] = CHAN_MODE_DP;
-			redriver->chan_mode[CHNB_INDEX] = CHAN_MODE_DP;
-			redriver->chan_mode[CHNC_INDEX] = CHAN_MODE_USB;
-			redriver->chan_mode[CHND_INDEX] = CHAN_MODE_USB;
-		} else {
-			redriver->chan_mode[CHNA_INDEX] = CHAN_MODE_USB;
-			redriver->chan_mode[CHNB_INDEX] = CHAN_MODE_USB;
-			redriver->chan_mode[CHNC_INDEX] = CHAN_MODE_DP;
-			redriver->chan_mode[CHND_INDEX] = CHAN_MODE_DP;
-		}
 		break;
 	case 4:
 		op_mode = OP_MODE_DP;
-		redriver->chan_mode[CHNA_INDEX] = CHAN_MODE_DP;
-		redriver->chan_mode[CHNB_INDEX] = CHAN_MODE_DP;
-		redriver->chan_mode[CHNC_INDEX] = CHAN_MODE_DP;
-		redriver->chan_mode[CHND_INDEX] = CHAN_MODE_DP;
 		break;
 	default:
 		return 0;
@@ -676,11 +489,6 @@ static int ssusb_redriver_dp_notifier(struct notifier_block *nb,
 		return 0;
 
 	redriver->op_mode = op_mode;
-
-	ret = ssusb_redriver_channel_update(redriver);
-	if (ret)
-		dev_dbg(redriver->dev,
-			"redriver channel mode change will continue\n");
 
 	queue_work(redriver->redriver_wq, &redriver->config_work);
 
@@ -825,200 +633,6 @@ static void ssusb_redriver_extcon_unregister(
 	}
 }
 
-static int ssusb_redriver_param_config(struct ssusb_redriver *redriver,
-		u8 reg_base, u8 channel, u8 mask, u8 shift, u8 val,
-		u8 (*stored_val)[CHANNEL_NUM])
-{
-	int i, j, ret = -EINVAL;
-	u8 reg_addr, reg_val, real_channel, chan_mode;
-
-	if (channel == CHANNEL_NUM * CHAN_MODE_NUM) {
-		for (i = 0; i < CHAN_MODE_NUM; i++)
-			for (j = 0; j < CHANNEL_NUM; j++) {
-				if (redriver->chan_mode[j] == i) {
-					reg_addr = reg_base + (j << 1);
-
-					ret = redriver_i2c_reg_get(redriver,
-							reg_addr, &reg_val);
-					if (ret < 0)
-						return ret;
-
-					reg_val &= ~(mask << shift);
-					reg_val |= (val << shift);
-
-					ret = redriver_i2c_reg_set(redriver,
-							reg_addr, reg_val);
-					if (ret < 0)
-						return ret;
-				}
-
-				stored_val[i][j] = val;
-			}
-	} else if (channel < CHANNEL_NUM * CHAN_MODE_NUM) {
-		real_channel = channel % CHANNEL_NUM;
-		chan_mode = channel / CHANNEL_NUM;
-
-		if (redriver->chan_mode[real_channel] == chan_mode) {
-			reg_addr = reg_base + (real_channel << 1);
-
-			ret = redriver_i2c_reg_get(redriver,
-					reg_addr, &reg_val);
-			if (ret < 0)
-				return ret;
-
-			reg_val &= ~(mask << shift);
-			reg_val |= (val << shift);
-
-			ret = redriver_i2c_reg_set(redriver,
-					reg_addr, reg_val);
-			if (ret < 0)
-				return ret;
-		}
-
-		stored_val[chan_mode][real_channel] = val;
-	} else {
-		dev_err(redriver->dev, "error channel value.\n");
-		return ret;
-	}
-
-	return 0;
-}
-
-static int ssusb_redriver_eq_config(
-		struct ssusb_redriver *redriver, u8 channel, u8 val)
-{
-	if (val <= EQ_SETTING_MASK)
-		return ssusb_redriver_param_config(redriver,
-				EQ_SET_REG_BASE, channel, EQ_SETTING_MASK,
-				EQ_SETTING_SHIFT, val, redriver->eq);
-	else
-		return -EINVAL;
-}
-
-static int ssusb_redriver_flat_gain_config(
-		struct ssusb_redriver *redriver, u8 channel, u8 val)
-{
-	if (val <= FLAT_GAIN_MASK)
-		return ssusb_redriver_param_config(redriver,
-				FLAT_GAIN_REG_BASE, channel, FLAT_GAIN_MASK,
-				FLAT_GAIN_SHIFT, val, redriver->flat_gain);
-	else
-		return -EINVAL;
-}
-
-static int ssusb_redriver_output_comp_config(
-		struct ssusb_redriver *redriver, u8 channel, u8 val)
-{
-	if (val <= OUTPUT_COMPRESSION_MASK)
-		return ssusb_redriver_param_config(redriver,
-				OUT_COMP_AND_POL_REG_BASE, channel,
-				OUTPUT_COMPRESSION_MASK,
-				OUTPUT_COMPRESSION_SHIFT, val,
-				redriver->output_comp);
-	else
-		return -EINVAL;
-}
-
-static int ssusb_redriver_loss_match_config(
-		struct ssusb_redriver *redriver, u8 channel, u8 val)
-{
-	if (val <= LOSS_MATCH_MASK)
-		return ssusb_redriver_param_config(redriver,
-				LOSS_MATCH_REG_BASE, channel, LOSS_MATCH_MASK,
-				LOSS_MATCH_SHIFT, val, redriver->loss_match);
-	else
-		return -EINVAL;
-}
-
-static int ssusb_redriver_channel_update(struct ssusb_redriver *redriver)
-{
-	int ret = 0, i = 0, pos = 0;
-	u8 chan_mode;
-
-	for (i = 0; i < CHANNEL_NUM; i++) {
-		chan_mode = redriver->chan_mode[i];
-		pos = i + chan_mode * CHANNEL_NUM;
-
-		ret = ssusb_redriver_eq_config(redriver, pos,
-				redriver->eq[chan_mode][i]);
-		if (ret)
-			goto err;
-
-		ret = ssusb_redriver_flat_gain_config(redriver, pos,
-				redriver->flat_gain[chan_mode][i]);
-		if (ret)
-			goto err;
-
-		ret = ssusb_redriver_output_comp_config(redriver, pos,
-				redriver->output_comp[chan_mode][i]);
-		if (ret)
-			goto err;
-
-		ret = ssusb_redriver_loss_match_config(redriver, pos,
-				redriver->loss_match[chan_mode][i]);
-		if (ret)
-			goto err;
-	}
-
-	dev_dbg(redriver->dev, "redriver channel parameters updated.\n");
-
-	return 0;
-
-err:
-	dev_err(redriver->dev, "channel parameters update failure.\n");
-	return ret;
-}
-
-static int ssusb_redriver_default_config(struct ssusb_redriver *redriver)
-{
-	struct device_node *node = redriver->dev->of_node;
-	int ret = 0;
-
-	if (of_find_property(node, "eq", NULL)) {
-		ret = of_property_read_u8_array(node, "eq",
-				redriver->eq[0], sizeof(redriver->eq));
-		if (ret)
-			goto err;
-	}
-
-	if (of_find_property(node, "flat-gain", NULL)) {
-		ret = of_property_read_u8_array(node,
-				"flat-gain", redriver->flat_gain[0],
-				sizeof(redriver->flat_gain));
-		if (ret)
-			goto err;
-	}
-
-	if (of_find_property(node, "output-comp", NULL)) {
-		ret = of_property_read_u8_array(node,
-				"output-comp", redriver->output_comp[0],
-				sizeof(redriver->output_comp));
-		if (ret)
-			goto err;
-	}
-
-	if (of_find_property(node, "loss-match", NULL)) {
-		ret = of_property_read_u8_array(node,
-				"loss-match", redriver->loss_match[0],
-				sizeof(redriver->loss_match));
-		if (ret)
-			goto err;
-	}
-
-	redriver->is_set_aux = of_property_read_bool(node, "set-aux-enable");
-
-	ret = ssusb_redriver_channel_update(redriver);
-	if (ret)
-		goto err;
-
-	return 0;
-
-err:
-	dev_err(redriver->dev,
-			"%s: set default parameters failure.\n", __func__);
-	return ret;
-}
-
 static int ssusb_redriver_panic_notifier(struct notifier_block *this,
 		unsigned long event, void *ptr)
 {
@@ -1079,59 +693,51 @@ static int redriver_i2c_probe(struct i2c_client *client,
 	redriver->client = client;
 	i2c_set_clientdata(client, redriver);
 
-	redriver->chip = (enum ssusb_redriver_chip)(uintptr_t)of_device_get_match_data(&client->dev);
+	/* Stock probe (Image-b 0x8a78e20) is a single path - no chip-type
+	 * check and no of_device_get_match_data call; the match table holds
+	 * only "hq_redriver,ps5169" with a NULL data pointer.
+	 * 0x8a78efc-0x8a78f98: read the four config echoes
+	 * 0xad/0xac/0xae/0xaf, then apply the 28-entry
+	 * ps5169_default_seq. */
+	static const u8 echo_regs[4] = { 0xad, 0xac, 0xae, 0xaf };
+	u8 echo[4];
+	unsigned int k;
 
-	if (redriver->chip == CHIP_PS5169) {
-		/* Stock probe 0xffffff8008a78efc-0x8a78f98: read the four
-		 * config echoes 0xad/0xac/0xae/0xaf and log them (diagnostic
-		 * only - stock prints with _dev_err and never gates on the
-		 * values), then apply the 28-entry ps5169_default_seq. The
-		 * DT eq/flat-gain path below belongs to NB7VPQ904M. */
-		static const u8 echo_regs[4] = { 0xad, 0xac, 0xae, 0xaf };
-		u8 echo[4];
-		unsigned int k;
+	for (k = 0; k < 4; k++) {
+		unsigned int val_tmp;
 
-		for (k = 0; k < 4; k++) {
-			unsigned int val_tmp;
-
-			ret = regmap_read(redriver->regmap, echo_regs[k],
-					  &val_tmp);
-			if (ret < 0) {
-				dev_err(redriver->dev,
-					"reading reg 0x%02x failure\n",
-					echo_regs[k]);
-				break;
-			}
-			echo[k] = (u8)val_tmp;
-		}
+		ret = regmap_read(redriver->regmap, echo_regs[k],
+				  &val_tmp);
 		if (ret < 0) {
-			/* Stock forces -EINVAL regardless of the i2c error
-			 * and fails the probe (Image-b 0xa79098-0xa790b8). */
-			ret = -EINVAL;
 			dev_err(redriver->dev,
-				"Failed to get chip id: %d\n", ret);
-			goto destroy_wq;
+				"reading reg 0x%02x failure\n",
+				echo_regs[k]);
+			break;
 		}
+		echo[k] = (u8)val_tmp;
+	}
+	if (ret < 0) {
+		/* Stock forces -EINVAL regardless of the i2c error
+		 * and fails the probe (Image-b 0xa79098-0xa790b8). */
+		ret = -EINVAL;
 		dev_err(redriver->dev,
-			"get chip id: id_1 = 0x%02x, id_2 = 0x%02x, revision_1 = 0x%02x, revision_2 = 0x%02x\n",
-			echo[0], echo[1], echo[2], echo[3]);
-		redriver_exist = true;
+			"Failed to get chip id: %d\n", ret);
+		goto destroy_wq;
+	}
+	dev_err(redriver->dev,
+		"get chip id: id_1 = 0x%02x, id_2 = 0x%02x, revision_1 = 0x%02x, revision_2 = 0x%02x\n",
+		echo[0], echo[1], echo[2], echo[3]);
+	redriver_exist = true;
 
-		redriver->host_active = false;
-		redriver->vbus_active = false;
+	redriver->host_active = false;
+	redriver->vbus_active = false;
 
-		ret = ps5169_apply_seq(redriver, ps5169_default_seq,
-				       PS5169_DEFAULT_SEQ_LEN);
-		if (ret < 0) {
-			dev_err(redriver->dev,
-				"Failed to set default mode: %d\n", ret);
-			goto destroy_wq;
-		}
-	} else {
-		/* Set default parameters for A/B/C/D channels. */
-		ret = ssusb_redriver_default_config(redriver);
-		if (ret < 0)
-			goto destroy_wq;
+	ret = ps5169_apply_seq(redriver, ps5169_default_seq,
+			       PS5169_DEFAULT_SEQ_LEN);
+	if (ret < 0) {
+		dev_err(redriver->dev,
+			"Failed to set default mode: %d\n", ret);
+		goto destroy_wq;
 	}
 
 	/* Set id_state as float by default*/
@@ -1195,270 +801,15 @@ static int redriver_i2c_remove(struct i2c_client *client)
 	return 0;
 }
 
-static ssize_t channel_config_write(struct file *file,
-		const char __user *ubuf, size_t count, loff_t *ppos,
-		int (*config_func)(struct ssusb_redriver *redriver,
-			u8 channel, u8 val))
-{
-	struct seq_file *s = file->private_data;
-	struct ssusb_redriver *redriver = s->private;
-	char buf[40];
-	char *token_chan, *token_val, *this_buf;
-	int store_offset = 0, ret = 0;
-
-	memset(buf, 0, sizeof(buf));
-
-	this_buf = buf;
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
-		return -EFAULT;
-
-	if (isdigit(buf[0])) {
-		ret = config_func(redriver, CHANNEL_NUM * CHAN_MODE_NUM,
-				buf[0] - '0');
-		if (ret < 0)
-			goto err;
-	} else if (isalpha(buf[0])) {
-		while ((token_chan = strsep(&this_buf, " ")) != NULL) {
-			switch (*token_chan) {
-			case 'A':
-			case 'B':
-			case 'C':
-			case 'D':
-				store_offset = *token_chan - 'A';
-				token_val = strsep(&this_buf, " ");
-				if (!isdigit(*token_val))
-					goto err;
-				break;
-			case 'a':
-			case 'b':
-			case 'c':
-			case 'd':
-				store_offset = *token_chan - 'a'
-					+ CHANNEL_NUM;
-				token_val = strsep(&this_buf, " ");
-				if (!isdigit(*token_val))
-					goto err;
-				break;
-			default:
-				goto err;
-			}
-
-			ret = config_func(redriver, store_offset,
-					*token_val - '0');
-			if (ret < 0)
-				goto err;
-		}
-	} else
-		goto err;
-
-
-	return count;
-
-err:
-	pr_err("Used to config redriver A/B/C/D channels' parameters\n"
-		"A/B/C/D represent for re-driver parameters for USB\n"
-		"a/b/c/d represent for re-driver parameters for DP\n"
-		"1. Set all channels to same value(both USB and DP)\n"
-		"echo n > [eq|output_comp|flat_gain|loss_match]\n"
-		"- eq: Equalization, range 0-7\n"
-		"- output_comp: Output Compression, range 0-3\n"
-		"- loss_match: LOSS Profile Matching, range 0-3\n"
-		"- flat_gain: Flat Gain, range 0-3\n"
-		"Example: Set all channels to same EQ value\n"
-		"echo 1 > eq\n"
-		"2. Set two channels to different values leave others unchanged\n"
-		"echo [A|B|C|D] n [A|B|C|D] n > [eq|output_comp|flat_gain|loss_match]\n"
-		"Example2: USB mode: set channel B flat gain to 2, set channel C flat gain to 3\n"
-		"echo B 2 C 3 > flat_gain\n"
-		"Example3: DP mode: set channel A equalization to 6, set channel B equalization to 4\n"
-		"echo a 6 b 4 > eq\n");
-
-	return -EFAULT;
-}
-
-static int eq_status(struct seq_file *s, void *p)
-{
-	struct ssusb_redriver *redriver = s->private;
-
-	seq_puts(s, "\t\t\t A(USB)\t B(USB)\t C(USB)\t D(USB)\t"
-			"A(DP)\t B(DP)\t C(DP)\t D(DP)\n");
-	seq_printf(s, "Equalization:\t\t %d\t %d\t %d\t %d\t"
-			"%d\t %d\t %d\t %d\n",
-			redriver->eq[CHAN_MODE_USB][CHNA_INDEX],
-			redriver->eq[CHAN_MODE_USB][CHNB_INDEX],
-			redriver->eq[CHAN_MODE_USB][CHNC_INDEX],
-			redriver->eq[CHAN_MODE_USB][CHND_INDEX],
-			redriver->eq[CHAN_MODE_DP][CHNA_INDEX],
-			redriver->eq[CHAN_MODE_DP][CHNB_INDEX],
-			redriver->eq[CHAN_MODE_DP][CHNC_INDEX],
-			redriver->eq[CHAN_MODE_DP][CHND_INDEX]);
-	return 0;
-}
-
-static int eq_status_open(struct inode *inode,
-		struct file *file)
-{
-	return single_open(file, eq_status, inode->i_private);
-}
-
-static ssize_t eq_write(struct file *file,
-		const char __user *ubuf, size_t count, loff_t *ppos)
-{
-	return channel_config_write(file, ubuf, count, ppos,
-			ssusb_redriver_eq_config);
-}
-
-static const struct file_operations eq_ops = {
-	.open	= eq_status_open,
-	.read	= seq_read,
-	.write	= eq_write,
-};
-
-static int flat_gain_status(struct seq_file *s, void *p)
-{
-	struct ssusb_redriver *redriver = s->private;
-
-	seq_puts(s, "\t\t\t A(USB)\t B(USB)\t C(USB)\t D(USB)\t"
-			"A(DP)\t B(DP)\t C(DP)\t D(DP)\n");
-	seq_printf(s, "TX/RX Flat Gain:\t %d\t %d\t %d\t %d\t"
-			"%d\t %d\t %d\t %d\n",
-			redriver->flat_gain[CHAN_MODE_USB][CHNA_INDEX],
-			redriver->flat_gain[CHAN_MODE_USB][CHNB_INDEX],
-			redriver->flat_gain[CHAN_MODE_USB][CHNC_INDEX],
-			redriver->flat_gain[CHAN_MODE_USB][CHND_INDEX],
-			redriver->flat_gain[CHAN_MODE_DP][CHNA_INDEX],
-			redriver->flat_gain[CHAN_MODE_DP][CHNB_INDEX],
-			redriver->flat_gain[CHAN_MODE_DP][CHNC_INDEX],
-			redriver->flat_gain[CHAN_MODE_DP][CHND_INDEX]);
-	return 0;
-}
-
-static int flat_gain_status_open(struct inode *inode,
-		struct file *file)
-{
-	return single_open(file, flat_gain_status, inode->i_private);
-}
-
-static ssize_t flat_gain_write(struct file *file,
-		const char __user *ubuf, size_t count, loff_t *ppos)
-{
-	return channel_config_write(file, ubuf, count, ppos,
-			ssusb_redriver_flat_gain_config);
-}
-
-static const struct file_operations flat_gain_ops = {
-	.open	= flat_gain_status_open,
-	.read	= seq_read,
-	.write	= flat_gain_write,
-};
-
-static int output_comp_status(struct seq_file *s, void *p)
-{
-	struct ssusb_redriver *redriver = s->private;
-
-	seq_puts(s, "\t\t\t A(USB)\t B(USB)\t C(USB)\t D(USB)\t"
-			"A(DP)\t B(DP)\t C(DP)\t D(DP)\n");
-	seq_printf(s, "Output Compression:\t %d\t %d\t %d\t %d\t"
-			"%d\t %d\t %d\t %d\n",
-			redriver->output_comp[CHAN_MODE_USB][CHNA_INDEX],
-			redriver->output_comp[CHAN_MODE_USB][CHNB_INDEX],
-			redriver->output_comp[CHAN_MODE_USB][CHNC_INDEX],
-			redriver->output_comp[CHAN_MODE_USB][CHND_INDEX],
-			redriver->output_comp[CHAN_MODE_DP][CHNA_INDEX],
-			redriver->output_comp[CHAN_MODE_DP][CHNB_INDEX],
-			redriver->output_comp[CHAN_MODE_DP][CHNC_INDEX],
-			redriver->output_comp[CHAN_MODE_DP][CHND_INDEX]);
-	return 0;
-}
-
-static int output_comp_status_open(struct inode *inode,
-		struct file *file)
-{
-	return single_open(file, output_comp_status, inode->i_private);
-}
-
-static ssize_t output_comp_write(struct file *file,
-		const char __user *ubuf, size_t count, loff_t *ppos)
-{
-	return channel_config_write(file, ubuf, count, ppos,
-			ssusb_redriver_output_comp_config);
-}
-
-static const struct file_operations output_comp_ops = {
-	.open	= output_comp_status_open,
-	.read	= seq_read,
-	.write	= output_comp_write,
-};
-
-static int loss_match_status(struct seq_file *s, void *p)
-{
-	struct ssusb_redriver *redriver = s->private;
-
-	seq_puts(s, "\t\t\t A(USB)\t B(USB)\t C(USB)\t D(USB)\t"
-			"A(DP)\t B(DP)\t C(DP)\t D(DP)\n");
-	seq_printf(s, "Loss Profile Match:\t %d\t %d\t %d\t %d\t"
-			"%d\t %d\t %d\t %d\n",
-			redriver->loss_match[CHAN_MODE_USB][CHNA_INDEX],
-			redriver->loss_match[CHAN_MODE_USB][CHNB_INDEX],
-			redriver->loss_match[CHAN_MODE_USB][CHNC_INDEX],
-			redriver->loss_match[CHAN_MODE_USB][CHND_INDEX],
-			redriver->loss_match[CHAN_MODE_DP][CHNA_INDEX],
-			redriver->loss_match[CHAN_MODE_DP][CHNB_INDEX],
-			redriver->loss_match[CHAN_MODE_DP][CHNC_INDEX],
-			redriver->loss_match[CHAN_MODE_DP][CHND_INDEX]);
-	return 0;
-}
-
-static int loss_match_status_open(struct inode *inode,
-		struct file *file)
-{
-	return single_open(file, loss_match_status, inode->i_private);
-}
-
-static ssize_t loss_match_write(struct file *file,
-		const char __user *ubuf, size_t count, loff_t *ppos)
-{
-	return channel_config_write(file, ubuf, count, ppos,
-			ssusb_redriver_loss_match_config);
-}
-
-static const struct file_operations loss_match_ops = {
-	.open	= loss_match_status_open,
-	.read	= seq_read,
-	.write	= loss_match_write,
-};
-
 static void ssusb_redriver_debugfs_entries(
 		struct ssusb_redriver *redriver)
 {
-	struct dentry *ent;
-
 	redriver->debug_root = debugfs_create_dir("ssusb_redriver", NULL);
 	if (!redriver->debug_root) {
 		dev_warn(redriver->dev, "Couldn't create debug dir\n");
 		return;
 	}
 
-	ent = debugfs_create_file("eq", 0600,
-			redriver->debug_root, redriver, &eq_ops);
-	if (IS_ERR_OR_NULL(ent))
-		dev_warn(redriver->dev, "Couldn't create eq file\n");
-
-	ent = debugfs_create_file("flat_gain", 0600,
-			redriver->debug_root, redriver, &flat_gain_ops);
-	if (IS_ERR_OR_NULL(ent))
-		dev_warn(redriver->dev, "Couldn't create flat_gain file\n");
-
-	ent = debugfs_create_file("output_comp", 0600,
-			redriver->debug_root, redriver, &output_comp_ops);
-	if (IS_ERR_OR_NULL(ent))
-		dev_warn(redriver->dev, "Couldn't create output_comp file\n");
-
-	ent = debugfs_create_file("loss_match", 0600,
-			redriver->debug_root, redriver, &loss_match_ops);
-	if (IS_ERR_OR_NULL(ent))
-		dev_warn(redriver->dev, "Couldn't create loss_match file\n");
 }
 
 static int __maybe_unused redriver_i2c_suspend(struct device *dev)
@@ -1520,8 +871,7 @@ static void redriver_i2c_shutdown(struct i2c_client *client)
 }
 
 static const struct of_device_id redriver_match_table[] = {
-	{ .compatible = "onnn,redriver", .data = (void *)CHIP_NB7VPQ904M },
-	{ .compatible = "hq_redriver,ps5169", .data = (void *)CHIP_PS5169 },
+	{ .compatible = "hq_redriver,ps5169" },
 	{ },
 };
 
