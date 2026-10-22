@@ -1689,7 +1689,9 @@ static int i2c_hid_probe(struct i2c_client *client,
 	__u16 hidRegister;
 	struct i2c_hid_platform_data *platform_data = client->dev.platform_data;
 
-	dbg_hid("HID probe called for i2c 0x%02x\n", client->addr);
+	/* Stock entry print (Image-b 0x8cb2eb0-0x8cb2eb8, 0x9bed08cc). */
+	printk("hid-keyboard,%s,HID probe called for i2c 0x%02x\n",
+	       "i2c_hid_probe", client->addr);
 
 	if (!client->irq) {
 		dev_err(&client->dev,
@@ -1819,8 +1821,18 @@ static int i2c_hid_probe(struct i2c_client *client,
 
 	ihid->quirks = i2c_hid_lookup_quirk(hid->vendor, hid->product);
 
+	/* Stock VID/PID prints (Image-b 0x9bed0cf + 0x9bed0ab8). */
+	printk("hid-keyboard,%s,get VID=0x%x,get PID=0x%x\n",
+	       "i2c_hid_probe", hid->vendor, hid->product);
+	printk("hid-keyboard,%s,VID:[0x%x],PID:[0x%x]\n",
+	       "i2c_hid_probe", hid->vendor, hid->product);
+
 	if (!kb_input_dev)
 		register_kb_wakeup_devices();
+
+	/* Stock hid_add_device print (Image-b 0x9bed0c3a). */
+	printk("hid-keyboard,%s,hid_add_device,end,start i2c_hid_init_irq\n",
+	       "i2c_hid_probe");
 
 	ret = hid_add_device(hid);
 	if (ret) {
@@ -1857,9 +1869,14 @@ static int i2c_hid_probe(struct i2c_client *client,
 	}
 	regulator_put(ldo_keyboard);
 
+	/* Stock probe success print (Image-b 0x9bed0d02). */
+	printk("hid-keyboard,%s,probe,success\n", "i2c_hid_probe");
+
 	return 0;
 
 err_irq:
+	/* Stock probe-fail print (Image-b 0x9bed0981). */
+	printk("hid-keyboard,%s,HID probe failed\n", "i2c_hid_probe");
 	free_irq(client->irq, ihid);
 
 err_mem_free:
