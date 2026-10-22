@@ -1089,12 +1089,19 @@ static int redriver_i2c_probe(struct i2c_client *client,
 			ret = regmap_read(redriver->regmap, echo_regs[k],
 					  &val_tmp);
 			if (ret < 0)
-				goto destroy_wq;
+				break;
 			echo[k] = (u8)val_tmp;
 		}
-		dev_err(redriver->dev, "%s: echo %02x %02x %02x %02x\n",
-			__func__, echo[0], echo[1], echo[2], echo[3]);
-		redriver_exist = true;
+		if (ret < 0) {
+			/* Stock logs the chip-id failure and continues with the
+			 * default configuration; do not fail probe on this read. */
+			dev_warn(redriver->dev,
+				 "Failed to get chip id: %d, continue\n", ret);
+		} else {
+			dev_info(redriver->dev, "%s: echo %02x %02x %02x %02x\n",
+				 __func__, echo[0], echo[1], echo[2], echo[3]);
+			redriver_exist = true;
+		}
 
 		redriver->host_active = false;
 		redriver->vbus_active = false;
