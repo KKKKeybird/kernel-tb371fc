@@ -1791,20 +1791,11 @@ static int i2c_hid_remove(struct i2c_client *client)
 	pm_runtime_disable(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
 	pm_runtime_put_noidle(&client->dev);
-	if (kb_input_dev) {
-		input_unregister_device(kb_input_dev);
-		kb_input_dev = NULL;
-	}
-
-	if (kb_status_kobj) {
-		sysfs_remove_group(kb_status_kobj, &kb_sys_attr_group);
-		kobject_put(kb_status_kobj);
-		kb_status_kobj = NULL;
-	}
 
 	hid_destroy_device(hid);
 
-	i2c_disable_mcu();
+	gpio_free(mcu_rst_gpio);
+	gpio_free(mcu_resume_gpio);
 
 	free_irq(client->irq, ihid);
 
