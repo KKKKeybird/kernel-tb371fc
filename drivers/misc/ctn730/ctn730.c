@@ -719,7 +719,7 @@ static void update_firmware_work(struct work_struct *work)
 			ctn730_set_ven(data, 1);
 		data->enabled = 1;
 		enable_irq(data->irq);
-		data->err_count = 0;
+		data->fw_section_count = 0;
 		return;
 	}
 	if (data->fw_status - 0x15 > 2)
@@ -734,7 +734,7 @@ static void update_firmware_work(struct work_struct *work)
 		return;
 	}
 	if (data->fw_status == 1) {
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x03;
 		buf[1] = 0x02;
 		memcpy(&buf[2], &data->fw_len, sizeof(data->fw_len));
@@ -764,7 +764,7 @@ static void update_firmware_work(struct work_struct *work)
 	} else {
 		if (count != len2)
 			return;
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x04;
 		buf[1] = 0x04;
 		buf[2] = (data->fw_crc_val >> 24) & 0xff;
@@ -775,7 +775,7 @@ static void update_firmware_work(struct work_struct *work)
 			data->fw_section_count++;
 		return;
 	}
-	memset(buf, 0, sizeof(buf));
+	memset(buf, 0, 0xa);
 	memcpy(buf + 5, src, 0x80);
 	buf[0] = 0x05;
 	buf[1] = 0x83;
@@ -885,7 +885,7 @@ static enum alarmtimer_restart charging_alarmtimer_function(struct alarm *alarm,
 		pr_info("ctn730: %s: no ctn730_dev\n", "ctn730_dev");
 		return ALARMTIMER_NORESTART;
 	}
-	if (data->charging) {
+	if (data->suspended) {
 		pm_stay_awake(data->dev);
 		data->err_count++;
 	}
