@@ -113,9 +113,9 @@ struct ctn730_data {
 	struct delayed_work check_static_charge_work;	/* 0x338 */
 	struct delayed_work check_pen_lost;	/* 0x3c0 */
 	struct alarm alarm;			/* 0x448 */
-	u8 mac_or_param[8];			/* 0x4c8 */
-	u8 pen_uid[8];				/* 0x4d0 */
-	u8 rsv6[8];				/* 0x4d8 */
+	ktime_t attach_prev_ktime;		/* 0x4c8 */
+	ktime_t attach_curr_ktime;		/* 0x4d0 */
+	s64 attach_delta_sec;			/* 0x4d8 */
 	struct notifier_block drm_nb;		/* 0x4e0 */
 	struct mutex bist_mutex;		/* 0x4f8 */
 	struct mutex report_info_mutex;		/* 0x518 */
@@ -166,8 +166,8 @@ _Static_assert(offsetof(struct ctn730_data, rf_on_work) == 0x2b0, "rf_on_work");
 _Static_assert(offsetof(struct ctn730_data, check_static_charge_work) == 0x338, "stat_chg");
 _Static_assert(offsetof(struct ctn730_data, check_pen_lost) == 0x3c0, "pen_lost");
 _Static_assert(offsetof(struct ctn730_data, alarm) == 0x448, "alarm");
-_Static_assert(offsetof(struct ctn730_data, mac_or_param) == 0x4c8, "mac_or_param");
-_Static_assert(offsetof(struct ctn730_data, pen_uid) == 0x4d0, "pen_uid");
+_Static_assert(offsetof(struct ctn730_data, attach_prev_ktime) == 0x4c8, "attach_prev");
+_Static_assert(offsetof(struct ctn730_data, attach_curr_ktime) == 0x4d0, "attach_curr");
 _Static_assert(offsetof(struct ctn730_data, drm_nb) == 0x4e0, "drm_nb");
 _Static_assert(offsetof(struct ctn730_data, bist_mutex) == 0x4f8, "bist_mutex");
 _Static_assert(offsetof(struct ctn730_data, report_info_mutex) == 0x518, "rep_mutex");
@@ -992,6 +992,7 @@ static void ctn730_parse_message(struct ctn730_data *data, u8 cmd, u8 len,
 {
 	u8 sub;
 	int idx;
+	ktime_t delta;
 
 	if ((cmd & 0xc0) == 0x40) {
 		sub = cmd & 0x3f;
@@ -1116,29 +1117,19 @@ t80_dispatch:
 		if (!payload[0])
 			goto t80_init_block;
 		if (payload[0] == 1) {
-			/* 0x88847ac: csinc eq->wzr+1=1, ne->25 */
 			data->fw_status = data->detected ? 25 : 1;
 			goto resched_tail;
-		}
-		if (payload[0] == 2 && !data->detected) {
-			data->fw_status = 3;
-			pr_info("ctn730: %s: charge_state %s\n",
-				"ctn730_parse_message",
-				ctn730_charge_state_text[3]);
-			goto tail;
-		}
-		if (payload[0] != data->fw_status) {
-			data->fw_status = 1;
-			kobject_uevent(&data->misc.this_device->kobj,
-				KOBJ_CHANGE);
 		}
 		goto resched_tail;
 	case 17: /* 0x91: 0x8884854 */
 		if (!payload[0]) {
-			data->fw_status = 9;
+			data->fw_status = 8;
+			data->has_ext_cmd = 1;
+			queue_delayed_work_on(8, system_wq, &data->set_work,
+				msecs_to_jiffies(13));
 			pr_info("ctn730: %s: status %s\n",
 				"ctn730_parse_message",
-				ctn730_status_text[9]);
+				ctn730_status_text[8]);
 			goto tail;
 		}
 		if (payload[0] != 1)
@@ -1152,9 +1143,9 @@ t80_dispatch:
 			cancel_delayed_work_sync(
 				&data->check_static_charge_work);
 			data->pen_info_attached = 1;
-			memcpy(data->pen_uid, payload + 1, 7);
+			memcpy(data->pen_info_buf, payload + 1, 7);
 			pr_info("ctn730: %s: pen_uid:%*ph\n",
-				"ctn730_parse_message", 8, data->pen_uid);
+				"ctn730_parse_message", 8, data->pen_info_buf);
 			ctn730_queue_failure_work(data, 0);
 			ctn730_notifier_call_chain(data,
 				data->pen_info_attached, NULL);
@@ -1283,15 +1274,27 @@ update_charge_state:
 	}
 
 shared_4_or_5:
-	data->fw_status = 4;
+	data->attach_curr_ktime = ktime_get();
+	delta = ktime_sub(data->attach_curr_ktime, data->attach_prev_ktime);
+	data->attach_delta_sec = div_s64(ktime_to_ns(delta), NSEC_PER_SEC);
+	if (ktime_to_ns(delta) <= 7503359) {
+		cancel_delayed_work_sync(&data->check_pen_lost);
+		pr_info("ctn730: %s:  cancel check pen lost\n",
+			"ctn730_parse_message");
+	}
+	memset(&data->attach_curr_ktime, 0, sizeof(data->attach_curr_ktime));
+	memset(&data->attach_prev_ktime, 0, sizeof(data->attach_prev_ktime));
+	if (!data->pen_info_attached) {
+		data->pen_info_attached = 1;
+		ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
+		ctn730_uevent_change(data);
+	}
 	cancel_delayed_work_sync(&data->check_static_charge_work);
-	queue_delayed_work_on(8, system_wq,
-		&data->check_static_charge_work, msecs_to_jiffies(125));
-	data->pen_info_attached = 1;
-	data->has_mac = 1;
-	memcpy(data->pen_uid, payload + 1, 7);
-	pr_info("ctn730: %s: pen_uid:%*ph\n", "ctn730_parse_message",
-		8, data->pen_uid);
+	queue_delayed_work_on(8, system_wq, &data->check_static_charge_work,
+		msecs_to_jiffies(125));
+	ctn730_queue_failure_work(data, 0);
+	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
+	ctn730_uevent_change(data);
 	goto tail;
 
 t40_init_block:
@@ -1357,7 +1360,7 @@ t80_init_block:
 		nvt_support_pen_set_nfc(true);
 	}
 	memset(data->mac, 0, 6);
-	memset(data->pen_uid, 0, 8);
+	memset(data->pen_info_buf, 0, 8);
 	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
 	if (!is_hard_reset)
 		kobject_uevent(&data->misc.this_device->kobj, KOBJ_CHANGE);
@@ -1378,8 +1381,11 @@ app_chn_connected:
 	has_hard_reset = 0;
 	err_count = 0;
 	alarm_cancel(&data->alarm);
-	memset(data->pen_uid, 0, 8);
-	memset(data->mac, 0, 8);
+	data->attach_curr_ktime = 0;
+	data->attach_prev_ktime = 0;
+	data->attach_prev_ktime = ktime_get();
+	memset(data->mac, 0, 6);
+	memset(data->pen_info_buf, 0, 8);
 	pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
 		ctn730_status_text[6]);
 	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
