@@ -1717,15 +1717,13 @@ static int i2c_hid_probe(struct i2c_client *client,
 	       "i2c_hid_probe", client->addr);
 
 	if (!client->irq) {
-		dev_err(&client->dev,
-			"HID over i2c has not been provided an Int IRQ\n");
+		printk("hid-keyboard,%s,HID over i2c has not been provided an Int IRQ\n", "i2c_hid_probe");
 		return -EINVAL;
 	}
 
 	if (client->irq < 0) {
 		if (client->irq != -EPROBE_DEFER)
-			dev_err(&client->dev,
-				"HID over i2c doesn't have a valid IRQ\n");
+			printk("hid-keyboard,%s,HID over i2c doesn't have a valid IRQ\n", "i2c_hid_probe");
 		return client->irq;
 	}
 
@@ -1764,6 +1762,8 @@ static int i2c_hid_probe(struct i2c_client *client,
 	ihid->client = client;
 
 	hidRegister = ihid->pdata.hid_descriptor_address;
+	if (!hidRegister)
+		printk("hid-keyboard,%s,HID register address not provided\n", "i2c_hid_probe");
 	ihid->wHIDDescRegister = cpu_to_le16(hidRegister);
 
 	init_waitqueue_head(&ihid->wait);
@@ -1786,11 +1786,12 @@ static int i2c_hid_probe(struct i2c_client *client,
 	/* Make sure there is something at this address */
 	ret = i2c_smbus_read_byte(client);
 	if (ret < 0) {
-		dev_dbg(&client->dev, "nothing at this address: %d\n", ret);
+		printk("hid-keyboard,%s,nothing at this address.\n", "i2c_hid_probe");
 		ret = -ENXIO;
 		goto err_pm;
 	}
 
+	printk("hid-keyboard,%s,Fetching the HID descriptor\n", "i2c_hid_probe");
 	ret = i2c_hid_fetch_hid_descriptor(ihid);
 	if (ret < 0)
 		goto err_pm;
@@ -1880,7 +1881,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 	ret = hid_add_device(hid);
 	if (ret) {
 		if (ret != -ENODEV)
-			hid_err(client, "can't add hid device: %d\n", ret);
+			printk("hid-keyboard,%s,can't add hid device: %d\n", "i2c_hid_probe", ret);
 		goto err_mem_free;
 	}
 
