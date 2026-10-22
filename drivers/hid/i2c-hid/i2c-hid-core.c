@@ -63,7 +63,9 @@
 
 /* flags */
 #define I2C_HID_STARTED		0
+/* bit index 1, i.e. mask 0x2 in stock flags@0x60 */
 #define I2C_HID_RESET_PENDING	1
+/* bit index 2, i.e. mask 0x4 for data-bearing commands */
 #define I2C_HID_COMMAND_IN_PROGRESS	2
 
 #define I2C_HID_PWR_ON		0x00
@@ -303,6 +305,32 @@ static u32 i2c_hid_lookup_quirk(const u16 idVendor, const u16 idProduct)
 	return quirks;
 }
 
+static int i2c_hid_wait_reset(struct i2c_hid *ihid)
+{
+	struct wait_queue_entry wait;
+	long timeout;
+
+	init_wait_entry(&wait, 0);
+	prepare_to_wait_event(&ihid->wait, &wait, TASK_UNINTERRUPTIBLE);
+	if (!test_bit(I2C_HID_RESET_PENDING, &ihid->flags)) {
+		finish_wait(&ihid->wait, &wait);
+		return 0;
+	}
+
+	for (;;) {
+		timeout = schedule_timeout(1250);
+		prepare_to_wait_event(&ihid->wait, &wait, TASK_UNINTERRUPTIBLE);
+		if (!test_bit(I2C_HID_RESET_PENDING, &ihid->flags)) {
+			finish_wait(&ihid->wait, &wait);
+			return 0;
+		}
+		if (!timeout) {
+			finish_wait(&ihid->wait, &wait);
+			return -ENODATA;
+		}
+	}
+}
+
 static int __i2c_hid_command(struct i2c_client *client,
 		const struct i2c_hid_cmd *command, u8 reportID,
 		u8 reportType, u8 *args, int args_len,
@@ -368,23 +396,17 @@ static int __i2c_hid_command(struct i2c_client *client,
 	ret = 0;
 
 	/*
-	 * Stock's wait path: if the device has not acknowledged by the time the
-	 * transfer returns, sleep one 100ms quantum and return success.  The IRQ
-	 * clears RESET_PENDING when it does arrive.  This is deliberately not a
-	 * 5s wait_event timeout: the stock driver permits hid_add_device before
-	 * the IRQ is registered.
+	 * Stock wait path: an unacknowledged transfer sleeps one 100ms quantum;
+	 * an acknowledged transfer uses init_wait_entry/prepare_to_wait_event
+	 * with a 1250-jiffy schedule_timeout loop.  The IRQ clears
+	 * RESET_PENDING when the reset completion arrives.
 	 */
 	if (wait) {
 		i2c_hid_dbg(ihid, "%s: wait flags=%lx\n", __func__, ihid->flags);
-		if (test_bit(I2C_HID_RESET_PENDING, &ihid->flags)) {
+		if (test_bit(I2C_HID_RESET_PENDING, &ihid->flags))
 			msleep(100);
-		} else {
-			/* Stock 0x8cb25a8..0x8cb263c: wait for the IRQ race to settle. */
-			if (!wait_event_timeout(ihid->wait,
-					!test_bit(I2C_HID_RESET_PENDING, &ihid->flags),
-					1250))
-				ret = -ENODATA;
-		}
+		else
+			ret = i2c_hid_wait_reset(ihid);
 	}
 
 	return ret;
@@ -936,18 +958,16 @@ static int i2c_hid_output_raw_report(struct hid_device *hid, __u8 *buf,
 
 	mutex_lock(&ihid->reset_lock);
 
-	/*
-	 * Note that both numbered and unnumbered reports passed here
-	 * are supposed to have report ID stored in the 1st byte of the
-	 * buffer, so we strip it off unconditionally before passing payload
-	 * to i2c_hid_set_or_send_report which takes care of encoding
-	 * everything properly.
-	 */
+	if (report_id) {
+		buf++;
+		count--;
+	}
+
 	ret = i2c_hid_set_or_send_report(client,
 				report_type == HID_FEATURE_REPORT ? 0x03 : 0x02,
-				report_id, buf + 1, count - 1, use_data);
+				report_id, buf, count, use_data);
 
-	if (ret >= 0)
+	if (report_id && ret >= 0)
 		ret++; /* add report_id to the number of transferred bytes */
 
 	mutex_unlock(&ihid->reset_lock);
@@ -997,14 +1017,40 @@ static int i2c_hid_parse(struct hid_device *hid)
 		return -EINVAL;
 	}
 
-	do {
-		ret = i2c_hid_hwreset(client);
-		if (ret)
-			msleep(1000);
-	} while (tries-- > 0 && ret);
+	/*
+	 * Stock only resumes and resets a keyboard that was put to sleep.
+	 * A normally-powered keyboard skips this path entirely.
+	 */
+	if (g_already_sleep) {
+		for (;;) {
+			mutex_lock(&ihid->reset_lock);
+			ret = kb_i2c_resume();
+			if (ret) {
+				dev_err(&client->dev, "failed to resume keyboard\n");
+				kb_i2c_suspend();
+				mutex_unlock(&ihid->reset_lock);
+				msleep(1000);
+				if (tries-- == 0)
+					return ret;
+				continue;
+			}
 
-	if (ret)
-		return ret;
+			usleep_range(1000, 5000);
+			ret = __i2c_hid_command(client, &hid_reset_cmd, 0, 0,
+						NULL, 0, NULL, 0);
+			if (!ret) {
+				mutex_unlock(&ihid->reset_lock);
+				break;
+			}
+
+			dev_err(&client->dev, "failed to reset device.\n");
+			kb_i2c_suspend();
+			mutex_unlock(&ihid->reset_lock);
+			msleep(1000);
+			if (tries-- == 0)
+				return ret;
+		}
+	}
 
 	use_override = i2c_hid_get_dmi_hid_report_desc_override(client->name,
 								&rsize);
@@ -1672,6 +1718,21 @@ static int i2c_hid_probe(struct i2c_client *client,
 	if (ret < 0)
 		goto err_pm;
 
+	if (client->dev.of_node && mcu_resume_gpio >= 0 &&
+	    mcu_rst_gpio >= 0) {
+		if (!kb_status_kobj) {
+			kb_status_kobj = kobject_create_and_add("kb_status", NULL);
+			if (!kb_status_kobj) {
+				dev_err(&client->dev, "kb_status kobject failed\n");
+			} else if (sysfs_create_group(kb_status_kobj,
+					&kb_sys_attr_group)) {
+				dev_err(&client->dev, "kb_status sysfs group failed\n");
+				kobject_put(kb_status_kobj);
+				kb_status_kobj = NULL;
+			}
+		}
+	}
+
 	hid = hid_allocate_device();
 	if (IS_ERR(hid)) {
 		ret = PTR_ERR(hid);
@@ -1720,29 +1781,11 @@ static int i2c_hid_probe(struct i2c_client *client,
 	if (ret)
 		goto err_mem_free;
 
+	if (device_keyboard)
+		device_keyboard->status = 1;
+
 	if (!(ihid->quirks & I2C_HID_QUIRK_NO_RUNTIME_PM))
 		pm_runtime_put(&client->dev);
-    /* Set the keyboard to disconnect by default and register wakeup device*/
-	if ((hid->vendor == VID_KB_LENOVO &&
-		(hid->product == PID_KB_LENOVO ||
-		 hid->product == PID_KB_LENOVO_V04)) ||
-	    (hid->vendor == VID_KB_LENOVO_TP && hid->product == PID_KB_LENOVO_TP) ||
-	    (hid->vendor == 0x32cd && hid->product == 0x003a)) {
-
-		if (!kb_status_kobj) {
-			kb_status_kobj = kobject_create_and_add("kb_status",
-					NULL);
-			if (!kb_status_kobj) {
-				hid_err(hid, "kb_status kobject failed\n");
-			} else if (sysfs_create_group(kb_status_kobj,
-					&kb_sys_attr_group)) {
-				hid_err(hid, "kb_status sysfs group failed\n");
-				kobject_put(kb_status_kobj);
-				kb_status_kobj = NULL;
-			}
-		}
-
-	}
 
 	/* Stock keeps the keyboard LDO as pm8150a_l10 and only force-disables
 	 * it in charger mode. */
@@ -1762,7 +1805,6 @@ static int i2c_hid_probe(struct i2c_client *client,
 	}
 	regulator_put(ldo_keyboard);
 
-	device_keyboard->status = 1;
 	return 0;
 
 err_irq:

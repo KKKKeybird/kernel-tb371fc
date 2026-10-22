@@ -706,8 +706,6 @@ static void update_firmware_work(struct work_struct *work)
 						struct ctn730_data,
 						update_fw_work);
 	u8 buf[280];
-	unsigned int count, len1, len2, addr;
-	u8 *src;
 
 	if (!data) {
 		pr_info("ctn730: %s: no ctn730_dev\n", "update_firmware_work");
@@ -722,8 +720,6 @@ static void update_firmware_work(struct work_struct *work)
 		data->fw_section_count = 0;
 		return;
 	}
-	if (data->fw_status - 0x15 > 2)
-		return;
 	if (data->fw_status == 0x17) {
 		data->fw_section_count = 0;
 		data->fw_status = 1;
@@ -751,39 +747,6 @@ static void update_firmware_work(struct work_struct *work)
 			"ctn730_disable");
 	}
 	data->enabled = 0;
-
-	count = data->fw_section_count;
-	len1 = data->fw_section_len >> 7;
-	len2 = data->fw_section_len2 >> 7;
-	if (count < len1) {
-		src = data->fw_section_data + count * 0x80;
-		addr = data->fw_data_addr + count * 0x80;
-	} else if (count < len2) {
-		src = data->fw_section_data + count * 0x80;
-		addr = data->fw_data2_addr + (count - len1) * 0x80;
-	} else {
-		if (count != len2)
-			return;
-		memset(buf, 0, 0xa);
-		buf[0] = 0x04;
-		buf[1] = 0x04;
-		buf[2] = (data->fw_crc_val >> 24) & 0xff;
-		buf[3] = (data->fw_crc_val >> 16) & 0xff;
-		buf[4] = (data->fw_crc_val >> 8) & 0xff;
-		buf[5] = data->fw_crc_val & 0xff;
-		if (ctn730_i2c_send(data, buf, 6) >= 0)
-			data->fw_section_count++;
-		return;
-	}
-	memset(buf, 0, 0xa);
-	memcpy(buf + 5, src, 0x80);
-	buf[0] = 0x05;
-	buf[1] = 0x83;
-	buf[2] = addr & 0xff;
-	buf[3] = (addr >> 8) & 0xff;
-	buf[4] = (addr >> 16) & 0xff;
-	if (ctn730_i2c_send(data, buf, 0x85) >= 0)
-		data->fw_section_count++;
 }
 
 static void rf_on_work(struct work_struct *work)

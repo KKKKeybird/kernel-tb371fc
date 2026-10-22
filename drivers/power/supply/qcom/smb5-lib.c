@@ -5709,9 +5709,10 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 			smblib_err(chg, "Couldn't start SW thermal regulation WA, rc=%d\n",
 				rc);
 
-		cancel_delayed_work(&chg->hq_conn_thermal_work);
 		queue_delayed_work_on(8, system_wq,
-					&chg->hq_conn_temp_high_work, 250);
+					&chg->thermal_regulation_work, 0);
+		queue_delayed_work_on(8, system_wq,
+					&chg->hq_conn_thermal_work, 250);
 
 		/* Remove FCC_STEPPER 1.5A init vote to allow FCC ramp up */
 		if (chg->fcc_stepper_enable)
@@ -5739,8 +5740,11 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 			smblib_err(chg, "Couldn't stop SW thermal regulation WA, rc=%d\n",
 				rc);
 
+		if (chg->wa_flags & SW_THERM_REGULATION_WA)
+			cancel_delayed_work_sync(&chg->thermal_regulation_work);
+		cancel_delayed_work(&chg->hq_conn_thermal_work);
 		queue_delayed_work_on(8, system_wq,
-					&chg->hq_conn_thermal_work, 250);
+					&chg->hq_conn_temp_high_work, 250);
 
 		if (chg->wa_flags & BOOST_BACK_WA) {
 			data = chg->irq_info[SWITCHER_POWER_OK_IRQ].irq_data;

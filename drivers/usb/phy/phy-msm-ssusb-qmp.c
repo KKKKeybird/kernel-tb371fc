@@ -17,6 +17,10 @@
 #include <linux/extcon.h>
 #include <linux/reset.h>
 
+#if IS_BUILTIN(CONFIG_USB_REDRIVER_NB7VPQ904M)
+extern bool get_redriver_exist(void);
+#endif
+
 enum core_ldo_levels {
 	CORE_LEVEL_NONE = 0,
 	CORE_LEVEL_MIN,
@@ -484,6 +488,19 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		dev_err(uphy->dev, "Failed the main PHY configuration\n");
 		goto fail;
 	}
+
+#if IS_BUILTIN(CONFIG_USB_REDRIVER_NB7VPQ904M)
+	if (get_redriver_exist() &&
+	    phy->phy.type == USB_PHY_TYPE_USB3_AND_DP) {
+		dev_info(uphy->dev, "Get redriver ic! update usb param\n");
+		writel_relaxed(0x30, phy->base + 0x1214);
+		writel_relaxed(0x30, phy->base + 0x1614);
+		writel_relaxed(0x00, phy->base + 0x1308);
+		writel_relaxed(0x00, phy->base + 0x1708);
+		writel_relaxed(0x00, phy->base + 0x120c);
+		writel_relaxed(0x00, phy->base + 0x160c);
+	}
+#endif
 
 	/* perform software reset of PHY common logic */
 	if (phy->phy.type == USB_PHY_TYPE_USB3_AND_DP &&

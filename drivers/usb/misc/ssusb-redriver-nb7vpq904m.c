@@ -18,6 +18,14 @@
 /* PS5169 sequences, stock Image-b .data; starts = the addresses stock
  * gen_dev_set/probe actually dereference. Entry = {reg, val, delay_ms}:
  * delay==0 -> regmap_write, else msleep(delay). */
+static bool redriver_exist;
+
+bool get_redriver_exist(void)
+{
+	return redriver_exist;
+}
+EXPORT_SYMBOL(get_redriver_exist);
+
 static const u8 ps5169_default_seq[] = {
 	0x9d, 0x80, 0x00,	/* reg 0x9d = 0x80 delay 0 */
 	0x00, 0x00, 0x0a,	/* reg 0x00 = 0x00 delay 10 */
@@ -1019,6 +1027,7 @@ static int redriver_i2c_probe(struct i2c_client *client,
 	union power_supply_propval pval = {0};
 	int ret;
 
+	redriver_exist = false;
 	redriver = devm_kzalloc(&client->dev, sizeof(struct ssusb_redriver),
 			GFP_KERNEL);
 	if (!redriver)
@@ -1071,6 +1080,7 @@ static int redriver_i2c_probe(struct i2c_client *client,
 		}
 		dev_err(redriver->dev, "%s: echo %02x %02x %02x %02x\n",
 			__func__, echo[0], echo[1], echo[2], echo[3]);
+		redriver_exist = true;
 
 		redriver->host_active = false;
 		redriver->vbus_active = false;
@@ -1123,6 +1133,7 @@ put_psy:
 		power_supply_put(redriver->usb_psy);
 
 destroy_wq:
+	redriver_exist = false;
 	destroy_workqueue(redriver->redriver_wq);
 
 	return ret;
@@ -1140,6 +1151,7 @@ static int redriver_i2c_remove(struct i2c_client *client)
 		power_supply_put(redriver->usb_psy);
 
 	destroy_workqueue(redriver->redriver_wq);
+	redriver_exist = false;
 
 	return 0;
 }
