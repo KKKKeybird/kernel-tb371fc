@@ -1157,31 +1157,38 @@ t80_dispatch:
 		pr_info("ctn730: %s: disable_chg due to overtemp\n",
 			"ctn730_parse_message");
 		goto tail;
-	case 18: /* 0x92: 0x8884870 */
+	case 18: /* 0x92: table entry 0x8884870 */
 		if (!payload[0]) {
 			data->fw_status = 4;
-			queue_delayed_work_on(8, system_wq,
-				&data->check_static_charge_work,
-				msecs_to_jiffies(500));
+			cancel_delayed_work_sync(
+				&data->check_static_charge_work);
 			data->pen_info_attached = 1;
-			data->has_mac = 1;
-			memset(data->pen_uid, 0, 8);
-			memset(data->mac_or_param, 0, 8);
-			if (!data->level) {
-				data->level = 1;
-				ctn730_notifier_call_chain(data, data->level, NULL);
-				kobject_uevent(&data->misc.this_device->kobj,
-					KOBJ_CHANGE);
-			}
-			queue_delayed_work_on(8, system_wq,
-				&data->check_static_charge_work,
-				msecs_to_jiffies(125));
+			memcpy(data->pen_uid, payload + 1, 7);
+			pr_info("ctn730: %s: pen_uid:%*ph\n",
+				"ctn730_parse_message", 8, data->pen_uid);
+			ctn730_queue_failure_work(data, 0);
+			ctn730_notifier_call_chain(data,
+				data->pen_info_attached, NULL);
+			kobject_uevent(&data->misc.this_device->kobj,
+				KOBJ_CHANGE);
 			goto tail;
 		}
-		if (payload[0] == 1)
-			goto app_chn_connected;
+		if (payload[0] == 1) {
+			data->fw_status = 5;
+			pr_info("ctn730: %s: status %s\n",
+				"ctn730_parse_message",
+				ctn730_status_text[5]);
+			goto tail;
+		}
 		if (payload[0] == 2)
-			goto deactived;
+			goto app_chn_connected;
+		if (payload[0] == 3) {
+			data->fw_status = 7;
+			pr_info("ctn730: %s: status %s\n",
+				"ctn730_parse_message",
+				ctn730_status_text[7]);
+			goto tail;
+		}
 		if ((payload[0] & 0xfe) != 4)
 			goto tail;
 		if (payload[0] == 5) {
@@ -1242,6 +1249,7 @@ t80_dispatch:
 
 shared_4_or_5:
 	data->fw_status = 4;
+	cancel_delayed_work_sync(&data->check_static_charge_work);
 	queue_delayed_work_on(8, system_wq,
 		&data->check_static_charge_work, msecs_to_jiffies(125));
 	data->pen_info_attached = 1;
