@@ -1697,6 +1697,11 @@ static int32_t nvt_ts_late_probe(struct i2c_client *client,
 
 	nvt_irq_enable(true);
 
+	/* TASK-085-A2/A3: register charger notifier and init work queue */
+	INIT_WORK(&nvt_charger_work, nvt_charger_notify_work);
+	nvt_charger_work_q = create_singlethread_workqueue("nvt_chg_wq");
+	power_supply_reg_notifier(&nvt_charger_nb);
+
 	return 0;
 
 #if NVT_TOUCH_MP
