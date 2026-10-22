@@ -704,8 +704,9 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 		if (ret < 0)
 			return;
 
-		dev_err(&ihid->client->dev, "%s: got %d data instead of %d\n",
-			__func__, ret, size);
+		/* Stock i2c_master_recv fail print (Image-b 0x9bed010c). */
+		printk("hid-keyboard,%s,ret < 0,i2c_master_recv fail\n",
+		       "i2c_hid_irq");
 		return;
 	}
 
@@ -737,15 +738,19 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			ihid->inbuf[1] = size >> 8;
 			ret_size = size;
 		} else {
-			dev_err(&ihid->client->dev, "%s: incomplete report (%d/%d)\n",
-				__func__, size, ret_size);
+			printk("hid-keyboard,%s,incomplete report (%d/%d)\n",
+			       "i2c_hid_irq", size, ret_size);
 			return;
 		}
 	}
 
-	i2c_hid_dbg(ihid, "input: %*ph\n", ret_size, ihid->inbuf);
+	/* Stock input dump (Image-b 0x9bed01d5). */
+	printk("hid-keyboard,%s,ret_size=%d,input=%*ph\n",
+	       "i2c_hid_irq", ret_size, ret_size, ihid->inbuf);
 
+	/* Stock report type print (Image-b 0x9bed01fd for 0x06 / 0x9bed02e1 for 0x07). */
 	if (ihid->inbuf[2] == 0x06) {
+		printk("hid-keyboard,%s,0x06\n", "i2c_hid_irq");
 		kb_connect = ihid->inbuf[3] & 0x01;
 		kb_status = ihid->inbuf[3];
 		/* stock i2c_hid_irq 0x8cb3c94/0x8cb3ca8: update device_keyboard
@@ -1783,7 +1788,8 @@ static int i2c_hid_probe(struct i2c_client *client,
 		if (!kb_status_kobj) {
 			kb_status_kobj = kobject_create_and_add("kb_status", NULL);
 			if (!kb_status_kobj) {
-				dev_err(&client->dev, "kb_status kobject failed\n");
+				printk("hid-keyboard,%s,failed to create kb_status\n",
+				       "i2c_hid_probe");
 			} else if (sysfs_create_group(kb_status_kobj,
 					&kb_sys_attr_group)) {
 				dev_err(&client->dev, "kb_status sysfs group failed\n");
@@ -2103,7 +2109,7 @@ noinline int kb_i2c_resume(void)
 
 	ret = i2c_hid_set_power(g_client, I2C_HID_PWR_ON);
 	if (ret) {
-		pr_err("%s: i2c set power on fail\n", __func__);
+		printk("hid-keyboard,%s,i2c set power on fail\n", __func__);
 		return ret;
 	}
 
@@ -2123,13 +2129,14 @@ noinline void kb_i2c_suspend(void)
 
 	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_resume_gpio), 0);
 	if (ret) {
-		pr_err("%s: set mcu_resume_gpio failed\n", __func__);
+		printk("hid-keyboard,%s,set mcu_resume_gpio failed\n",
+		       __func__);
 		return;
 	}
 
 	ret = i2c_hid_set_power(g_client, I2C_HID_PWR_SLEEP);
 	if (ret) {
-		pr_err("%s: i2c set sleep fail\n", __func__);
+		printk("hid-keyboard,%s,i2c set sleep fail\n", __func__);
 		return;
 	}
 
@@ -2152,7 +2159,8 @@ int ret = 0;
 	ret = __i2c_hid_command(g_client, &hid_set_report_cmd, 2, 2, args, args_len,
 				NULL, 0);
 	if (ret)
-		printk("%s:report screen off cmd failed\n");
+		printk("hid-keyboard,%s,report screen off cmd failed\n",
+		       "kb_hid_suspend");
 	else
 		g_screen_on = 0;
 
@@ -2179,7 +2187,8 @@ void kb_hid_resume(void)
 	ret = __i2c_hid_command(g_client, &hid_set_report_cmd, 2, 2, args, args_len,
 				NULL, 0);
 	if (ret)
-		printk("%s:report screen on cmd failed\n");
+		printk("hid-keyboard,%s,report screen on cmd failed\n",
+		       "kb_hid_resume");
 	else
 		g_screen_on = 1;
 	/* Spruce code for OSPURCET-780 by sunft3 at 2023/01/18 end */
