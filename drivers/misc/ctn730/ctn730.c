@@ -515,15 +515,14 @@ static void set_work(struct work_struct *work)
 
 	/*
 	 * stock: switch (data->fw_status) keys 1..26, jump table at
-	 * 0xffffff80097da770, base 0xffffff8008884080.
-	 * Keys 3/5/6/7/12/13/21/22/23/24/25 fall through to 0x4328,
-	 * i.e. they reach the key 18 stack-clear path but take no command
-	 * action and return with the stack cookie check.
+	 * 0xffffff80097da770, base 0xffffff8008884080. Key 20 aliases
+	 * key 11 at 0x4080; keys 3/5/6/7/12/13/21..25 land on 0x43a8
+	 * and return without issuing a command.
 	 */
 	switch (data->fw_status) {
 	case 1:		/* key 1, stock 0xffffff800888409c */
 	case 0x1a:	/* key 26, stock 0xffffff800888409c */
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x00;
 		buf[1] = 0x01;
 		buf[2] = 0x00;
@@ -532,7 +531,7 @@ static void set_work(struct work_struct *work)
 			data->detected = 1;	/* stock [x19,#263] */
 		break;
 	case 2:		/* key 2, stock 0xffffff80088840fc */
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x10;
 		buf[1] = 0x02;
 		buf[2] = 0xf4;
@@ -542,14 +541,14 @@ static void set_work(struct work_struct *work)
 	case 4:		/* key 4, stock 0xffffff8008884134 */
 		if (data->charging)
 			break;
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x11;
 		buf[1] = 0x00;
 		ctn730_i2c_send(data, buf, 2);
 		data->pen_status = 1;	/* stock [x19,#259] */
 		break;
 	case 8:		/* key 8, stock 0xffffff8008884170 */
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x06;
 		buf[1] = 0x01;
 		buf[2] = 0x01;
@@ -562,7 +561,7 @@ static void set_work(struct work_struct *work)
 	case 9:		/* key 9, stock 0xffffff80088841b8 */
 		if (data->charging)
 			break;
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x06;
 		buf[1] = 0x03;
 		buf[2] = 0x09;
@@ -576,7 +575,7 @@ static void set_work(struct work_struct *work)
 		mutex_unlock(&data->bist_mutex);
 		break;
 	case 10:	/* key 10, stock 0xffffff8008884230 */
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x10;
 		buf[1] = 0x02;
 		buf[2] = 0xf4;
@@ -585,7 +584,8 @@ static void set_work(struct work_struct *work)
 		data->pen_status = 0;	/* stock [x19,#259] = 0 */
 		break;
 	case 11:	/* key 11, stock 0xffffff8008884080 */
-		memset(buf, 0, sizeof(buf));
+	case 20:	/* key 20, jump table alias of key 11 */
+		memset(buf, 0, 0xa);
 		buf[0] = 0x06;
 		buf[1] = 0x01;
 		buf[2] = 0x02;
@@ -604,19 +604,19 @@ static void set_work(struct work_struct *work)
 		ctn730_i2c_send(data, buf, data->cmd_delay + 3);
 		break;
 	case 15:	/* key 15, stock 0xffffff80088842c0 */
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x21;
 		buf[1] = 0x00;
 		ctn730_i2c_send(data, buf, 2);
 		break;
 	case 16:	/* key 16, stock 0xffffff80088842d8 */
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x20;
 		buf[1] = 0x00;
 		ctn730_i2c_send(data, buf, 2);
 		break;
 	case 17:	/* key 17, stock 0xffffff80088842f0 */
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x07;
 		buf[1] = 0x02;
 		buf[2] = 0x00;
@@ -629,23 +629,7 @@ static void set_work(struct work_struct *work)
 		}
 		break;
 	case 18:	/* key 18, stock 0xffffff8008884338 */
-	/*
-	 * stock keys 3/5/6/7/12/13/21/22/23/24/25 enter this branch after
-	 * its stack clear and take no further action before the cookie
-	 * check/return.
-	 */
-	case 3:
-	case 5:
-	case 6:
-	case 7:
-	case 12:
-	case 13:
-	case 21:
-	case 22:
-	case 23:
-	case 24:
-	case 25:
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x07;
 		buf[1] = 0x02;
 		buf[2] = 0x00;
@@ -657,8 +641,21 @@ static void set_work(struct work_struct *work)
 			mutex_unlock(&data->report_info_mutex);
 		}
 		break;
+	case 3:
+	case 5:
+	case 6:
+	case 7:
+	case 12:
+	case 13:
+	case 21:
+	case 22:
+	case 23:
+	case 24:
+	case 25:
+		/* stock jump table target 0x88843a8: direct return. */
+		break;
 	case 19:	/* key 19, stock 0xffffff8008884380 */
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 0xa);
 		buf[0] = 0x11;
 		buf[1] = 0x00;
 		ctn730_i2c_send(data, buf, 2);
