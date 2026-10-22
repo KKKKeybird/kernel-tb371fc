@@ -802,6 +802,20 @@ err:
 	return ret;
 }
 
+static void ssusb_redriver_extcon_unregister(
+		struct ssusb_redriver *redriver)
+{
+	if (redriver->extcon_dp)
+		extcon_unregister_blocking_notifier(redriver->extcon_dp,
+			EXTCON_DISP_DP, &redriver->dp_nb);
+	if (redriver->extcon_usb) {
+		extcon_unregister_notifier(redriver->extcon_usb, EXTCON_USB_HOST,
+			&redriver->id_nb);
+		extcon_unregister_notifier(redriver->extcon_usb, EXTCON_USB,
+			&redriver->vbus_nb);
+	}
+}
+
 static int ssusb_redriver_param_config(struct ssusb_redriver *redriver,
 		u8 reg_base, u8 channel, u8 mask, u8 shift, u8 val,
 		u8 (*stored_val)[CHANNEL_NUM])
@@ -1143,9 +1157,11 @@ static int redriver_i2c_remove(struct i2c_client *client)
 {
 	struct ssusb_redriver *redriver = i2c_get_clientdata(client);
 
-	debugfs_remove(redriver->debug_root);
+	debugfs_remove_recursive(redriver->debug_root);
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 			&redriver->panic_nb);
+	ssusb_redriver_extcon_unregister(redriver);
+	cancel_work_sync(&redriver->config_work);
 
 	if (redriver->usb_psy)
 		power_supply_put(redriver->usb_psy);
