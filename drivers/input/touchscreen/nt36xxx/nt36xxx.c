@@ -255,6 +255,18 @@ void nvt_sw_reset_idle(void)
 
 /* TASK-085: stock nvt_sw_reset (Image-b 0x8ad87a8) - write 0x55 to
  * SW reset register then msleep(10). */
+/* TASK-085: stock nvt_write_addr (Image-b 0x8ad8090) - convenience
+ * function: nvt_set_page(addr) then CTP_I2C_WRITE at addr & 0x7F. */
+void nvt_write_addr(uint32_t addr, uint8_t value)
+{
+	uint8_t buf[2] = {0};
+
+	nvt_set_page(I2C_FW_Address, addr);
+	buf[0] = addr & 0x7F;
+	buf[1] = value;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+}
+
 void nvt_sw_reset(void)
 {
 	uint8_t buf[8] = {0};
