@@ -136,14 +136,12 @@ static const u8 ps5169_USB_AND_DP_remove_seq[] = {
 #define NOTIFIER_PRIORITY		1
 
 /* Registers Address */
-#define GEN_DEV_SET_REG			0x00
 
 #define REDRIVER_REG_MAX		0x1f
 
 
 
 /* Default Register Value */
-#define GEN_DEV_SET_REG_DEFAULT		0xFB
 
 /* Register bits */
 /* General Device Settings Register Bits */
@@ -263,23 +261,6 @@ static int ps5169_apply_seq(struct ssusb_redriver *redriver,
 
 
 static void ssusb_redriver_debugfs_entries(struct ssusb_redriver *redriver);
-
-static int redriver_i2c_reg_set(struct ssusb_redriver *redriver,
-		u8 reg, u8 val)
-{
-	int ret;
-
-	ret = regmap_write(redriver->regmap, (unsigned int)reg,
-			(unsigned int)val);
-	if (ret < 0) {
-		dev_err(redriver->dev, "writing reg 0x%02x failure\n", reg);
-		return ret;
-	}
-
-	dev_dbg(redriver->dev, "writing reg 0x%02x=0x%02x\n", reg, val);
-
-	return 0;
-}
 
 /**
  * Handle Re-driver chip operation mode and channel settings.
@@ -619,20 +600,6 @@ err:
 	return ret;
 }
 
-static void ssusb_redriver_extcon_unregister(
-		struct ssusb_redriver *redriver)
-{
-	if (redriver->extcon_dp)
-		extcon_unregister_blocking_notifier(redriver->extcon_dp,
-			EXTCON_DISP_DP, &redriver->dp_nb);
-	if (redriver->extcon_usb) {
-		extcon_unregister_notifier(redriver->extcon_usb, EXTCON_USB_HOST,
-			&redriver->id_nb);
-		extcon_unregister_notifier(redriver->extcon_usb, EXTCON_USB,
-			&redriver->vbus_nb);
-	}
-}
-
 static int ssusb_redriver_panic_notifier(struct notifier_block *this,
 		unsigned long event, void *ptr)
 {
@@ -784,19 +751,20 @@ destroy_wq:
 
 static int redriver_i2c_remove(struct i2c_client *client)
 {
+	/* Stock remove (Image-b 0x8a793e8-0x8a79428, pseudo
+	 * redriver_i2c_remove.c): only three operations - unregister the
+	 * panic notifier, drop the usb power supply reference, destroy the
+	 * workqueue.  No extcon unregisters, no cancel_work_sync, no
+	 * debugfs teardown, and redriver_exist is left untouched. */
 	struct ssusb_redriver *redriver = i2c_get_clientdata(client);
 
-	debugfs_remove_recursive(redriver->debug_root);
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 			&redriver->panic_nb);
-	ssusb_redriver_extcon_unregister(redriver);
-	cancel_work_sync(&redriver->config_work);
 
 	if (redriver->usb_psy)
 		power_supply_put(redriver->usb_psy);
 
 	destroy_workqueue(redriver->redriver_wq);
-	redriver_exist = false;
 
 	return 0;
 }
@@ -854,20 +822,8 @@ static SIMPLE_DEV_PM_OPS(redriver_i2c_pm, redriver_i2c_suspend,
 
 static void redriver_i2c_shutdown(struct i2c_client *client)
 {
-	struct ssusb_redriver *redriver = i2c_get_clientdata(client);
-	int ret;
-
-	/* Set back to USB mode with four channel enabled */
-	ret = redriver_i2c_reg_set(redriver, GEN_DEV_SET_REG,
-			GEN_DEV_SET_REG_DEFAULT);
-	if (ret < 0)
-		dev_err(&client->dev,
-			"%s: fail to set USB mode with 4 channel enabled.\n",
-			__func__);
-	else
-		dev_dbg(&client->dev,
-			"%s: successfully set back to USB mode.\n",
-			__func__);
+	/* Stock shutdown (Image-b 0x8a79430) compiles to an empty
+	 * nop + ret - no register writes, no prints. */
 }
 
 static const struct of_device_id redriver_match_table[] = {
