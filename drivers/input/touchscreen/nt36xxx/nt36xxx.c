@@ -253,6 +253,48 @@ void nvt_sw_reset_idle(void)
 	msleep(15);
 }
 
+/* D263: stock nvt_set_charger (Image-b 0x8adfcb8) - decoded from
+ * assembly. Writes charger mode to reg 0x50 after page switch.
+ * charger_on=1 -> 0x53, charger_on=0 -> 0x51. */
+void nvt_set_charger(uint8_t charger_on)
+{
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+
+	printk("hid-keyboard,%s,nvt set charger: %d\n",
+	       "nvt_set_charger", charger_on);
+
+	msleep(20);
+
+	mutex_lock(&ts->lock);
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		printk("hid-keyboard,%s,nvt set page failed: %d\n",
+		       "nvt_set_charger", ret);
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	mutex_unlock(&ts->lock);
+
+	if (charger_on == 1) {
+		buf[0] = 0x50;
+		buf[1] = 0x53;
+	} else if (charger_on == 0) {
+		buf[0] = 0x50;
+		buf[1] = 0x51;
+	} else {
+		printk("hid-keyboard,%s,unknow charger mode\n",
+		       "nvt_set_charger");
+		return;
+	}
+
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+}
+EXPORT_SYMBOL(nvt_set_charger);
+
 /*******************************************************
  * Description:
  *     Novatek touchscreen reset MCU (boot) function.
