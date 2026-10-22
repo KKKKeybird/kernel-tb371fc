@@ -1044,11 +1044,14 @@ static int i2c_hid_parse(struct hid_device *hid)
 	int tries = 3;
 	char *use_override;
 
-	i2c_hid_dbg(ihid, "entering %s\n", __func__);
+	/* Stock prints unconditionally (Image-b 0x8cb1e98:
+	 * "hid-keyboard,=== %s ====", %s = "i2c_hid_parse"). */
+	pr_info("hid-keyboard,=== %s ====\n", "i2c_hid_parse");
 
 	rsize = le16_to_cpu(hdesc->wReportDescLength);
 	if (!rsize || rsize > HID_MAX_DESCRIPTOR_SIZE) {
-		dbg_hid("weird size of report descriptor (%u)\n", rsize);
+		pr_info("hid-keyboard,%s,weird size of report descriptor (%u)\n",
+			"i2c_hid_parse", rsize);
 		return -EINVAL;
 	}
 
@@ -1114,7 +1117,8 @@ static int i2c_hid_parse(struct hid_device *hid)
 			return -ENOMEM;
 		}
 
-		i2c_hid_dbg(ihid, "asking HID report descriptor\n");
+		pr_info("hid-keyboard,%s,asking HID report descriptor\n",
+			"i2c_hid_parse");
 
 		ret = i2c_hid_command(client, &hid_report_descr_cmd,
 				      rdesc, rsize);
