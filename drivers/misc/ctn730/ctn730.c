@@ -1222,10 +1222,14 @@ t80_dispatch:
 			goto update_charge_state;
 		}
 		if (payload[0] == 2) {
-			pr_info("ctn730: %s: charge_state %s\n",
-				"ctn730_parse_message",
-				ctn730_charge_state_text[3]);
-			idx = 3;
+			if (!data->pen_status) {
+				pr_info("ctn730: %s: charge_state %s\n",
+					"ctn730_parse_message",
+					ctn730_charge_state_text[3]);
+				idx = 3;
+			} else {
+				idx = 1;
+			}
 			goto update_charge_state;
 		}
 		goto tail;
