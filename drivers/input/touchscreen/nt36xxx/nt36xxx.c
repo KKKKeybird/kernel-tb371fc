@@ -253,6 +253,19 @@ void nvt_sw_reset_idle(void)
 	msleep(15);
 }
 
+/* TASK-085: stock nvt_sw_reset (Image-b 0x8ad87a8) - write 0x55 to
+ * SW reset register then msleep(10). */
+void nvt_sw_reset(void)
+{
+	uint8_t buf[8] = {0};
+
+	buf[0] = 0x00;
+	buf[1] = 0x55;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+
+	msleep(10);
+}
+
 /* D263: stock nvt_set_charger (Image-b 0x8adfcb8) - decoded from
  * assembly. Writes charger mode to reg 0x50 after page switch.
  * charger_on=1 -> 0x53, charger_on=0 -> 0x51. */
