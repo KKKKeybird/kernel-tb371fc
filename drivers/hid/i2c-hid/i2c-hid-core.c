@@ -349,9 +349,9 @@ static int __i2c_hid_command(struct i2c_client *client,
 		msg_num = 2;
 	}
 
-	/* stock sets RESET_PENDING only for wait commands without a response
-	 * buffer; commands with data_len >= 1 use the bit2 in-progress gate. */
-	if (wait && data_len <= 0)
+	/* Stock sets RESET_PENDING for every wait command; data-bearing
+	 * commands also hold the bit2 in-progress gate while the transfer runs. */
+	if (wait)
 		set_bit(I2C_HID_RESET_PENDING, &ihid->flags);
 
 	if (data_len > 0)
@@ -367,15 +367,17 @@ static int __i2c_hid_command(struct i2c_client *client,
 
 	ret = 0;
 
-	if (wait && (ihid->quirks & I2C_HID_QUIRK_NO_IRQ_AFTER_RESET)) {
-		msleep(100);
-	} else if (wait) {
-		i2c_hid_dbg(ihid, "%s: waiting...\n", __func__);
-		if (!wait_event_timeout(ihid->wait,
-				!test_bit(I2C_HID_RESET_PENDING, &ihid->flags),
-				msecs_to_jiffies(5000)))
-			ret = -ENODATA;
-		i2c_hid_dbg(ihid, "%s: finished.\n", __func__);
+	/*
+	 * Stock's wait path: if the device has not acknowledged by the time the
+	 * transfer returns, sleep one 100ms quantum and return success.  The IRQ
+	 * clears RESET_PENDING when it does arrive.  This is deliberately not a
+	 * 5s wait_event timeout: the stock driver permits hid_add_device before
+	 * the IRQ is registered.
+	 */
+	if (wait) {
+		i2c_hid_dbg(ihid, "%s: wait flags=%lx\n", __func__, ihid->flags);
+		if (test_bit(I2C_HID_RESET_PENDING, &ihid->flags))
+			msleep(100);
 	}
 
 	return ret;
@@ -1663,10 +1665,6 @@ static int i2c_hid_probe(struct i2c_client *client,
 	if (ret < 0)
 		goto err_pm;
 
-	ret = i2c_hid_init_irq(client);
-	if (ret < 0)
-		goto err_pm;
-
 	hid = hid_allocate_device();
 	if (IS_ERR(hid)) {
 		ret = PTR_ERR(hid);
@@ -1710,6 +1708,10 @@ static int i2c_hid_probe(struct i2c_client *client,
 			hid_err(client, "can't add hid device: %d\n", ret);
 		goto err_mem_free;
 	}
+
+	ret = i2c_hid_init_irq(client);
+	if (ret)
+		goto err_mem_free;
 
 	if (!(ihid->quirks & I2C_HID_QUIRK_NO_RUNTIME_PM))
 		pm_runtime_put(&client->dev);
