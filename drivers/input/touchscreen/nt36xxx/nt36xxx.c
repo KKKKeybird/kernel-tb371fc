@@ -267,6 +267,18 @@ void nvt_write_addr(uint32_t addr, uint8_t value)
 	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
 }
 
+/* TASK-085: stock nvt_eng_reset (Image-b 0x8ad8778) - writes 0x5A to
+ * the engine reset register via nvt_write_addr, then udelay(~12ms).
+ * TODO: the eng_reset register address comes from the stock mmap table
+ * (offset that we do not have in our nvt_ts_mem_map). Use a placeholder
+ * until the mmap table is expanded. */
+void nvt_eng_reset(void)
+{
+	uint32_t eng_reset_addr = 0x3F100; /* placeholder from stock pattern */
+	nvt_write_addr(eng_reset_addr, 0x5A);
+	udelay(12000);
+}
+
 void nvt_sw_reset(void)
 {
 	uint8_t buf[8] = {0};
