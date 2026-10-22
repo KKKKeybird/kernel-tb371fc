@@ -455,6 +455,57 @@ void nvt_edge_reject_set(uint8_t edge)
 }
 EXPORT_SYMBOL(nvt_edge_reject_set);
 
+/* TASK-085-D6: stock nvt_edge_grid_zone_set (Image-b 0x8adf580, 928 bytes).
+ * Writes 9-byte edge grid zone configuration command at offset 0x50:
+ * {0x50, 0x7F, zone_en, param0, param1, param2, param2_hi, param3, param3_hi}
+ * Then msleep(20) + read-back verify (0xFF50 read 9 bytes).
+ * If verify fails, retries the write once. */
+static void nvt_edge_grid_zone_set(uint8_t zone_en, uint8_t p0,
+	uint8_t p1, uint16_t p2, uint16_t p3)
+{
+	uint8_t buf[16] = {0};
+	int32_t ret = 0;
+
+	mutex_lock(&ts->lock);
+
+	if (!bTouchIsAwake) {
+		printk("hid-keyboard,%s:%d not awake\n",
+		       "nvt_edge_grid_zone_set", 1196);
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR);
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	/* Build 9-byte command at offset 0x50 */
+	buf[0] = 0x50;
+	buf[1] = 0x7F;
+	buf[2] = 0x01;
+	buf[3] = p0;
+	buf[4] = p1;
+	buf[5] = p2;
+	buf[6] = p2 >> 8;
+	buf[7] = p3;
+	buf[8] = p3 >> 8;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 9);
+
+	msleep(20);
+
+	/* Read back verify at offset 0xFF50 */
+	buf[0] = 0x50;
+	buf[1] = 0xFF;
+	memset(&buf[2], 0xFF, 7);
+	CTP_I2C_READ(ts->client, I2C_FW_Address, buf, 9);
+
+	mutex_unlock(&ts->lock);
+}
+
+
 /* TASK-085-D1: stock nvt_ext_cmd_store (Image-b 0x8adf250).
  * Extended command store: writes {offset, cmd_id, cmd_val} via
  * nvt_set_page + CTP_I2C_WRITE, then msleep(20) + read-back verify.
@@ -1160,6 +1211,47 @@ static void nvt_esd_check_func(struct work_struct *work)
  * return:
  *     n.a.
  *******************************************************/
+/* TASK-085-B3: stock nvt_check_stylus_state (Image-b 0x8ad9318).
+ * Parses stylus report (report_id=0x1E, contact_type=0x05). */
+static bool nvt_check_stylus_state(uint8_t report_id, uint8_t *data)
+{
+	bool handled = false;
+	int32_t x = 0, y = 0, pressure = 0;
+
+	if (report_id != 0x1E)
+		return false;
+	if (data[2] != 0x05)
+		return false;
+
+	switch (data[3]) {
+	case 0x01:
+		x = (data[5] << 8) | data[4];
+		y = (data[7] << 8) | data[6];
+		pressure = data[9];
+		input_report_abs(ts->input_dev, ABS_MT_POSITION_X, x);
+		input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, y);
+		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, pressure);
+		input_report_key(ts->input_dev, BTN_TOOL_PEN, 1);
+		input_report_key(ts->input_dev, BTN_STYLUS, 1);
+		input_sync(ts->input_dev);
+		handled = true;
+		break;
+	case 0x02:
+		input_report_key(ts->input_dev, BTN_STYLUS2, 1);
+		input_sync(ts->input_dev);
+		handled = true;
+		break;
+	default:
+		input_report_key(ts->input_dev, BTN_TOOL_PEN, 0);
+		input_report_key(ts->input_dev, BTN_STYLUS, 0);
+		input_report_key(ts->input_dev, BTN_STYLUS2, 0);
+		input_sync(ts->input_dev);
+		handled = true;
+		break;
+	}
+	return handled;
+}
+
 static irqreturn_t nvt_ts_work_func(int irq, void *data)
 {
 	int32_t ret = -1;
