@@ -1123,7 +1123,8 @@ static int i2c_hid_parse(struct hid_device *hid)
 		ret = i2c_hid_command(client, &hid_report_descr_cmd,
 				      rdesc, rsize);
 		if (ret) {
-			hid_err(hid, "reading report descriptor failed\n");
+			printk("hid-keyboard,%s,reading report descriptor failed\n",
+		       "i2c_hid_parse");
 			kfree(rdesc);
 			return -EIO;
 		}
@@ -1299,21 +1300,21 @@ if (ihid->pdata.preset_descriptors && le16_to_cpu(hdesc->wHIDDescLength) != 0x00
 	 * bytes 2-3 -> bcdVersion (has to be 1.00) */
 	/* check bcdVersion == 1.0 */
 	if (le16_to_cpu(hdesc->bcdVersion) != 0x0100) {
-		dev_err(&client->dev,
-			"unexpected HID descriptor bcdVersion (0x%04hx)\n",
-			le16_to_cpu(hdesc->bcdVersion));
+		printk("hid-keyboard,%s,unexpected HID descriptor bcdVersion (0x%04hx)\n",
+		       "i2c_hid_fetch_hid_descriptor",
+		       le16_to_cpu(hdesc->bcdVersion));
 		return -ENODEV;
 	}
 
 	/* Descriptor length should be 30 bytes as per the specification */
 	dsize = le16_to_cpu(hdesc->wHIDDescLength);
 	if (dsize != sizeof(struct i2c_hid_desc)) {
-		dev_err(&client->dev, "weird size of HID descriptor (%u)\n",
-			dsize);
+		printk("hid-keyboard,%s,weird size of HID descriptor (%u)\n",
+		       "i2c_hid_fetch_hid_descriptor", dsize);
 		return -ENODEV;
 	}
-	//i2c_hid_dbg(ihid, "HID Descriptor: %*ph\n", dsize, ihid->hdesc_buffer);
-	dev_printk(KERN_DEBUG, &(ihid)->client->dev, "HID Descriptor: %*ph\n", dsize, ihid->hdesc_buffer);
+	printk("hid-keyboard,%s,dsize=%d,HID Descriptor: %*ph\n",
+	       "i2c_hid_fetch_hid_descriptor", dsize, dsize, ihid->hdesc_buffer);
 	return 0;
 }
 
@@ -1803,6 +1804,25 @@ static int i2c_hid_probe(struct i2c_client *client,
 	hid->version = le16_to_cpu(ihid->hdesc.bcdVersion);
 	hid->vendor = le16_to_cpu(ihid->hdesc.wVendorID);
 	hid->product = le16_to_cpu(ihid->hdesc.wProductID);
+
+	/* Stock FW version check prints (Image-b 0x8cb35e0-0x8cb36xx).
+	 * The %s argument is the literal rodata func name. */
+	printk("hid-keyboard,%s,VID:[0x%x],PID:[0x%x]\n",
+	       "i2c_hid_probe", hid->vendor, hid->product);
+	if (hid->vendor == VID_KB_LENOVO && hid->product == PID_KB_LENOVO_V04) {
+		printk("hid-keyboard,%s,V04 FW\n", "i2c_hid_probe");
+	} else if (hid->vendor == VID_KB_LENOVO &&
+		   (hid->product == PID_KB_LENOVO)) {
+		if ((le16_to_cpu(ihid->hdesc.bcdVersion) & 0xFF00) == 0x0200 ||
+		    (le16_to_cpu(ihid->hdesc.bcdVersion) & 0xFF00) == 0x0300)
+			printk("hid-keyboard,%s,V02 or V03 FW\n", "i2c_hid_probe");
+		else
+			printk("hid-keyboard,%s,others devices\n", "i2c_hid_probe");
+	} else {
+		printk("hid-keyboard,%s,others devices\n", "i2c_hid_probe");
+	}
+	printk("hid-keyboard,%s,hid->version_id=0x%x\n",
+	       "i2c_hid_probe", le16_to_cpu(ihid->hdesc.bcdVersion));
 	if ((hid->vendor == VID_KB_LENOVO &&
 	     (hid->product == PID_KB_LENOVO || hid->product == PID_KB_LENOVO_V04)) ||
 	    (hid->vendor == VID_KB_LENOVO_TP && hid->product == PID_KB_LENOVO_TP) ||
