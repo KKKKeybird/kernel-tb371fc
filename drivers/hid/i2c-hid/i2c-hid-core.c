@@ -1645,22 +1645,23 @@ static int i2c_enable_mcu(struct i2c_client *client)
 
 	ret = gpio_request(mcu_resume_gpio, "mcu_resume_gpio");
 	if (ret) {
-		dev_err(&client->dev,
-			"request mcu_resume_gpio failed: %d\n", ret);
+		printk("hid-keyboard,%s,request mcu_resume_gpio failed\n",
+		       "i2c_enable_mcu");
 		return ret;
 	}
 
 	ret = gpio_request(mcu_rst_gpio, "mcu_rst_gpio");
 	if (ret) {
-		dev_err(&client->dev,
-			"request mcu_rst_gpio failed: %d\n", ret);
+		printk("hid-keyboard,%s,request mcu_rst_gpio failed\n",
+		       "i2c_enable_mcu");
 		gpio_free(mcu_resume_gpio);
 		return ret;
 	}
 
 	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_rst_gpio), 1);
 	if (ret) {
-		dev_err(&client->dev, "set mcu_rst_gpio failed: %d\n", ret);
+		printk("hid-keyboard,%s,set mcu_rst_gpio failed\n",
+		       "i2c_enable_mcu");
 		gpio_free(mcu_rst_gpio);
 		gpio_free(mcu_resume_gpio);
 		return ret;
@@ -1671,9 +1672,8 @@ static int i2c_enable_mcu(struct i2c_client *client)
 		int rst_value = gpiod_get_raw_value(gpio_to_desc(mcu_rst_gpio));
 		int resume_value = gpiod_get_raw_value(gpio_to_desc(mcu_resume_gpio));
 
-		dev_info(&client->dev,
-			 "hid-keyboard,%s,after setting: MCU_HWRESET_PIN=%d,MCU_WAKEUP_PIN=%d\n",
-			 __func__, rst_value, resume_value);
+		printk("hid-keyboard,%s,mcu_rst_gpio=%d,mcu_resume_gpio=%d\n",
+		       "i2c_enable_mcu", mcu_rst_gpio, mcu_resume_gpio);
 	}
 	return 0;
 }
@@ -1886,17 +1886,16 @@ static int i2c_hid_probe(struct i2c_client *client,
 	 * it in charger mode. */
 	ldo_keyboard = regulator_get(&hid->dev, "pm8150a_l10");
 	if (IS_ERR(ldo_keyboard)) {
-		dev_err(&client->dev, "failed to get pm8150a_l10: %ld\n",
-			PTR_ERR(ldo_keyboard));
+		printk("hid-keyboard,%s,could not get pm8150a_l10, rc = %ld\n",
+		       "i2c_hid_probe", PTR_ERR(ldo_keyboard));
 		ret = -ENODEV;
 		goto err_irq;
 	}
 	if (strstr(saved_command_line, "androidboot.mode=charger") &&
 	    regulator_is_enabled(ldo_keyboard)) {
 		regulator_force_disable(ldo_keyboard);
-		dev_info(&client->dev,
-			 "hid-keyboard,%s,Power off and charge,disable ldo\n",
-			 __func__);
+		printk("hid-keyboard,%s,Power off and charge,disable ldo\n",
+		       "i2c_hid_probe");
 	}
 	regulator_put(ldo_keyboard);
 
@@ -2098,8 +2097,13 @@ noinline int kb_i2c_resume(void)
 	int ret = 0;
 
 	pr_info("hid-keyboard,=== %s === start\n", __func__);
-	if (!g_already_sleep)
+	if (!g_already_sleep) {
+		printk("hid-keyboard,%s,Device was already activated\n",
+		       "kb_i2c_resume");
 		return -1;
+	}
+	printk("hid-keyboard,%s,send out one cmd to wakeup\n",
+	       "kb_i2c_resume");
 
 	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_resume_gpio), 1);
         if(ret) {
