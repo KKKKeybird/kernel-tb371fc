@@ -396,7 +396,9 @@ static int __i2c_hid_command(struct i2c_client *client,
 	memcpy(cmd->data + length, args, args_len);
 	length += args_len;
 
-	i2c_hid_dbg(ihid, "%s: cmd=%*ph\n", __func__, length, cmd->data);
+	/* Stock cmd dump (Image-b 0x9bed06ac). */
+	printk("hid-keyboard,%s,length=%d,cmd=%*ph\n",
+	       "i2c_hid_command", length, length, cmd->data);
 
 	msg[0].addr = client->addr;
 	msg[0].flags = client->flags & I2C_M_TEN;
@@ -436,12 +438,16 @@ static int __i2c_hid_command(struct i2c_client *client,
 	 * RESET_PENDING when the reset completion arrives.
 	 */
 	if (wait) {
-		i2c_hid_dbg(ihid, "%s: wait flags=%lx quirks=%lx\n",
-			__func__, ihid->flags, ihid->quirks);
+		/* Stock wait entry print (Image-b 0x9bed09f4). */
+		printk("hid-keyboard,%s,1 i2c_wait=%d\n",
+		       "i2c_hid_command", wait);
 		if (ihid->quirks & I2C_HID_QUIRK_NO_IRQ_AFTER_RESET)
 			msleep(100);
 		else
 			ret = i2c_hid_wait_reset(ihid);
+		/* Stock wait exit print (Image-b 0x9bed0a3d). */
+		printk("hid-keyboard,%s,2 i2c_wait=%d\n",
+		       "i2c_hid_command", wait);
 	}
 
 	return ret;
@@ -1241,7 +1247,9 @@ static int i2c_hid_init_irq(struct i2c_client *client)
 	unsigned long irqflags = 0;
 	int ret;
 
-	dev_dbg(&client->dev, "Requesting IRQ: %d\n", client->irq);
+	/* Stock IRQ request print (Image-b 0x9bed0e20). */
+	printk("hid-keyboard,%s,Requesting IRQ=%d\n",
+	       "i2c_hid_init_irq", client->irq);
 
 	if (!irq_get_trigger_type(client->irq))
 		irqflags = IRQF_TRIGGER_LOW;
@@ -1249,20 +1257,17 @@ static int i2c_hid_init_irq(struct i2c_client *client)
 	ret = request_threaded_irq(client->irq, NULL, i2c_hid_irq,
 				   irqflags | IRQF_ONESHOT, client->name, ihid);
 	if (ret < 0) {
-		dev_warn(&client->dev,
-			"Could not register for %s interrupt, irq = %d,"
-			" ret = %d\n",
-			client->name, client->irq, ret);
+		printk("hid-keyboard,%s,Could not register for %s interrupt, irq = %d, ret = %d\n",
+		       "i2c_hid_init_irq", client->name, client->irq, ret);
 
 		return ret;
 	}
 
 	irq_set_irq_wake(client->irq, 1);
-	i2c_hid_dbg(ihid, "hid dev init wakeup .\n");
+	printk("hid-keyboard,%s,wake_up\n", "i2c_hid_init_irq");
 	ret = device_init_wakeup(&client->dev, true);
-	if(ret!=0)
-	{
-		i2c_hid_dbg(ihid,"hid device_init_wakeup failed: %d\n", client->irq);
+	if (ret != 0) {
+		printk("hid-keyboard,%s,no wake_up\n", "i2c_hid_init_irq");
 	}
 
 	return 0;
