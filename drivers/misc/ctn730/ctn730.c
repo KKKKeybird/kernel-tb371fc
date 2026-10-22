@@ -1114,7 +1114,7 @@ t45_err:
 			"ctn730_parse_message");
 		goto tail;
 t35_notok:
-		data->pen_info_attached = 1;
+		data->pending_event = 1;
 		kobject_uevent(&data->misc.this_device->kobj, KOBJ_CHANGE);
 		goto tail;
 	default:
