@@ -376,8 +376,15 @@ static int __i2c_hid_command(struct i2c_client *client,
 	 */
 	if (wait) {
 		i2c_hid_dbg(ihid, "%s: wait flags=%lx\n", __func__, ihid->flags);
-		if (test_bit(I2C_HID_RESET_PENDING, &ihid->flags))
+		if (test_bit(I2C_HID_RESET_PENDING, &ihid->flags)) {
 			msleep(100);
+		} else {
+			/* Stock 0x8cb25a8..0x8cb263c: wait for the IRQ race to settle. */
+			if (!wait_event_timeout(ihid->wait,
+					!test_bit(I2C_HID_RESET_PENDING, &ihid->flags),
+					1250))
+				ret = -ENODATA;
+		}
 	}
 
 	return ret;
