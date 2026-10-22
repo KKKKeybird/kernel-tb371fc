@@ -63,7 +63,7 @@
 
 /* flags */
 #define I2C_HID_STARTED		0
-/* bit index 1, i.e. mask 0x2 in stock flags@0x60 */
+/* bit index 1, i.e. mask 0x2 in stock flags@0x58 */
 #define I2C_HID_RESET_PENDING	1
 /* bit index 2, i.e. mask 0x4 for data-bearing commands */
 #define I2C_HID_COMMAND_IN_PROGRESS	2
@@ -294,12 +294,27 @@ static const struct i2c_hid_quirks {
 		 I2C_HID_QUIRK_RESET_ON_RESUME },
 	{ USB_VENDOR_ID_ITE, I2C_DEVICE_ID_ITE_LENOVO_LEGION_Y720,
 		I2C_HID_QUIRK_BAD_INPUT_SIZE },
+		/* Stock quirks decision tree (Image-b 0x8cb36e8-0x8cb3774,
+		 * Unicorn sweep quirks_sweep6.py): 0x17ef/0x6127 does NOT hit
+		 * the 0x7 entry on stock; the extra masks below are our own
+		 * extensions pending per-bit rulings (ROUND6 C8). */
 		{ VID_KB_LENOVO, PID_KB_LENOVO,
 		 I2C_HID_QUIRK_SET_PWR_ON_SHUTDOWN | I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_WAKE_UP_SYS},
+	/* 0x17ef/0x6175 and 0x04f3/0x31a8: stock quirks = 0x7 (bit0|bit1|bit2) */
 	{ VID_KB_LENOVO, PID_KB_LENOVO_V04,
+		 I2C_HID_QUIRK_NO_IRQ_AFTER_RESET |
 		 I2C_HID_QUIRK_SET_PWR_ON_SHUTDOWN | I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_WAKE_UP_SYS},
 	{ VID_KB_LENOVO_TP, PID_KB_LENOVO_TP,
+		 I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_NO_IRQ_AFTER_RESET |
 		 I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_WAKE_UP_SYS | I2C_HID_QUIRK_SHOULD_SKIP_SET_PWR},
+	/* 0x32cd/0x003a: stock quirks = 0x7 (bit0|bit1|bit2) exactly */
+	{ 0x32cd, 0x003a,
+		 I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_NO_IRQ_AFTER_RESET |
+		 I2C_HID_QUIRK_NO_RUNTIME_PM },
+	/* 0x2575/0xc300-0xc301: stock quirks = 0x1 (bit0 SET_PWR_WAKEUP_DEV;
+	 * (product & 0xfffe) >> 1 == 0x6180); 0xc302 does not match */
+	{ 0x2575, 0xc300, I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV },
+	{ 0x2575, 0xc301, I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV },
 	{ 0, 0 }
 };
 
@@ -1038,38 +1053,51 @@ static int i2c_hid_parse(struct hid_device *hid)
 	}
 
 	/*
-	 * Stock only resumes and resets a keyboard that was put to sleep.
-	 * A normally-powered keyboard skips this path entirely.
+	 * Stock gate (Image-b i2c_hid_parse 0x8cb1f04-0x8cb1fd0): the reset
+	 * section runs only while the screen is on; with the screen off it
+	 * prints "screen is off didn't reset" and skips the
+	 * section.  The gate is re-checked on every retry.  The %s in the
+	 * stock prints is the literal "i2c_hid_hwreset" kept from the
+	 * original helper (rodata 0x9bed54b).  kb_i2c_resume() still
+	 * requires g_already_sleep (returns -1 when awake) and only the
+	 * reset-command failure path calls kb_i2c_suspend() (0x8cb1fb0);
+	 * the resume failure path unlocks and retries without suspending
+	 * (0x8cb1f34).
 	 */
-	if (g_already_sleep) {
-		for (;;) {
-			mutex_lock(&ihid->reset_lock);
-			ret = kb_i2c_resume();
-			if (ret) {
-				dev_err(&client->dev, "failed to resume keyboard\n");
-				kb_i2c_suspend();
-				mutex_unlock(&ihid->reset_lock);
-				msleep(1000);
-				if (tries-- == 0)
-					return ret;
-				continue;
-			}
+	for (;;) {
+		pr_info("hid-keyboard,%s\n", "i2c_hid_hwreset");
+		if (!g_screen_on) {
+			pr_info("hid-keyboard,%s,screen is off didn't reset\n",
+				"i2c_hid_hwreset");
+			break;
+		}
 
-			usleep_range(1000, 5000);
-			ret = __i2c_hid_command(client, &hid_reset_cmd, 0, 0,
-						NULL, 0, NULL, 0);
-			if (!ret) {
-				mutex_unlock(&ihid->reset_lock);
-				break;
-			}
-
-			dev_err(&client->dev, "failed to reset device.\n");
-			kb_i2c_suspend();
+		mutex_lock(&ihid->reset_lock);
+		ret = kb_i2c_resume();
+		if (ret) {
 			mutex_unlock(&ihid->reset_lock);
 			msleep(1000);
 			if (tries-- == 0)
 				return ret;
+			continue;
 		}
+
+		usleep_range(1000, 5000);
+		pr_info("hid-keyboard,%s,resetting...\n", "i2c_hid_hwreset");
+		ret = __i2c_hid_command(client, &hid_reset_cmd, 0, 0,
+					NULL, 0, NULL, 0);
+		if (!ret) {
+			mutex_unlock(&ihid->reset_lock);
+			break;
+		}
+
+		pr_info("hid-keyboard,%s,failed to reset device.\n",
+			"i2c_hid_hwreset");
+		kb_i2c_suspend();
+		mutex_unlock(&ihid->reset_lock);
+		msleep(1000);
+		if (tries-- == 0)
+			return ret;
 	}
 
 	use_override = i2c_hid_get_dmi_hid_report_desc_override(client->name,
