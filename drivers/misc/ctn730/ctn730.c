@@ -760,10 +760,13 @@ static void rf_on_work(struct work_struct *work)
 		return;
 	}
 	if (data->rf_on == 0) {
-		if (data->gpio_ven < 0x500) {
-			ctn730_set_ven(data, 0);
+		/* W1e-3c (C89, stock 0x8883d80/0x8883da0): the rf_on==0 pulse drives
+		 * gpio_rst (@0xf0), not gpio_ven, via gpio_to_desc +
+		 * gpiod_direction_output_raw, with the <0x500 gate retained. */
+		if (data->gpio_rst < 0x500) {
+			gpiod_direction_output_raw(gpio_to_desc(data->gpio_rst), 0);
 			msleep(5);
-			ctn730_set_ven(data, 1);
+			gpiod_direction_output_raw(gpio_to_desc(data->gpio_rst), 1);
 		}
 		data->detected = 0;
 		return;
@@ -810,6 +813,10 @@ static void check_static_charge_work(struct work_struct *work)
 	}
 	memset(data->mac, 0, 6);
 	memset(data->pen_info_buf, 0, 8);
+	/* W1e-3d (C90, stock 0x8883eb0): the 8-byte store writes level=-1 in
+	 * the low half and pen_info_attached=0 in the high half; clear it
+	 * before the notifier chain. */
+	data->pen_info_attached = 0;
 	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
 	ctn730_uevent_change(data);
 }
@@ -834,6 +841,9 @@ static void check_pen_lost(struct work_struct *work)
 		pr_info("ctn730: %s: pen_lost :open pen mode\n", "check_pen_lost");
 		nvt_support_pen_set_nfc(true);
 	}
+	/* W1e-3d (C90, stock 0x8883f98): pen_info_attached cleared to 0 before
+	 * the notifier chain (high half of the stock 8-byte store). */
+	data->pen_info_attached = 0;
 	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
 	ctn730_uevent_change(data);
 }
@@ -1778,28 +1788,32 @@ static int ctn730_probe(struct i2c_client *client,
 
 	count = of_count_phandle_with_args(np, "panel", NULL);
 	pr_info("ctn730: %s: panel count:%d \n", "ctn730_probe", count);
-	if (count < 1) {
-		ret = -ENODEV;
-		goto parse_fail;
-	}
-	for (i = 0; i < count; i++) {
-		struct device_node *panel_np = of_parse_phandle(np, "panel", i);
-		struct drm_panel *panel;
+	/* W1e-3e (C91, stock 0x88831a8..0x8883284): count < 1 does NOT fail
+	 * the probe - stock falls through to "parse device tree success" and
+	 * keeps binding (the shipping live DT has no `panel` property). */
+	if (count >= 1) {
+		for (i = 0; i < count; i++) {
+			struct device_node *panel_np = of_parse_phandle(np, "panel", i);
+			struct drm_panel *panel;
 
-		if (!panel_np)
-			continue;
-		panel = of_drm_find_panel(panel_np);
-		if (IS_ERR_OR_NULL(panel)) {
-			of_node_put(panel_np);
-			continue;
+			if (!panel_np)
+				continue;
+			panel = of_drm_find_panel(panel_np);
+			if (IS_ERR_OR_NULL(panel)) {
+				of_node_put(panel_np);
+				continue;
+			}
+			pr_info("ctn730: %s: find panel\n", "ctn730_probe");
+			ctn730_panel = panel_np;
+			break;
 		}
-		pr_info("ctn730: %s: find panel\n", "ctn730_probe");
-		ctn730_panel = panel_np;
-		break;
-	}
-	if (i == count) {
-		ret = -ENODEV;
-		goto parse_fail;
+		/* stock 0x8883214..0x8883248: find-panel failure prints the
+		 * parse-fail line, frees data and returns -EPROBE_DEFER (-517),
+		 * not -ENODEV. */
+		if (i == count) {
+			ret = -EPROBE_DEFER;
+			goto parse_fail;
+		}
 	}
 
 	pr_info("ctn730: %s: parse device tree success\n", "ctn730_probe");
