@@ -288,7 +288,9 @@ static int ps5169_apply_seq(struct ssusb_redriver *redriver,
 			    const u8 *seq, size_t len)
 {
 	size_t i;
-	int ret = 0;
+	/* Stock initialises the result to -EINVAL and keeps the result of
+	 * the last write attempt (Image-b 0xa78fe0-0xa79104). */
+	int ret = -EINVAL;
 
 	for (i = 0; i < len; i++) {
 		u8 reg = seq[i * 3 + 0];
@@ -302,9 +304,16 @@ static int ps5169_apply_seq(struct ssusb_redriver *redriver,
 		ret = regmap_write(redriver->regmap, reg, val);
 		if (ret < 0) {
 			dev_err(redriver->dev,
-				"%s: write 0x%02x failed %d\n",
-				__func__, reg, ret);
-			return ret;
+				"writing reg 0x%02x failure\n", reg);
+			/* Stock prints a second message whose format string
+			 * ("%s error: reg=0x%02x, value = 0x%02x\n") lacks
+			 * the %s argument in the compiled binary - an upstream
+			 * bug that cannot trigger on stock because a failed
+			 * chip-id read returns before the sequence runs.
+			 * Supply __func__ for the missing argument. */
+			dev_err(redriver->dev,
+				"%s error: reg=0x%02x, value = 0x%02x\n",
+				__func__, reg, val);
 		}
 	}
 	return ret;
@@ -1041,7 +1050,6 @@ static int redriver_i2c_probe(struct i2c_client *client,
 	union power_supply_propval pval = {0};
 	int ret;
 
-	redriver_exist = false;
 	redriver = devm_kzalloc(&client->dev, sizeof(struct ssusb_redriver),
 			GFP_KERNEL);
 	if (!redriver)
@@ -1088,28 +1096,37 @@ static int redriver_i2c_probe(struct i2c_client *client,
 
 			ret = regmap_read(redriver->regmap, echo_regs[k],
 					  &val_tmp);
-			if (ret < 0)
+			if (ret < 0) {
+				dev_err(redriver->dev,
+					"reading reg 0x%02x failure\n",
+					echo_regs[k]);
 				break;
+			}
 			echo[k] = (u8)val_tmp;
 		}
 		if (ret < 0) {
-			/* Stock logs the chip-id failure and continues with the
-			 * default configuration; do not fail probe on this read. */
-			dev_warn(redriver->dev,
-				 "Failed to get chip id: %d, continue\n", ret);
-		} else {
-			dev_info(redriver->dev, "%s: echo %02x %02x %02x %02x\n",
-				 __func__, echo[0], echo[1], echo[2], echo[3]);
-			redriver_exist = true;
+			/* Stock forces -EINVAL regardless of the i2c error
+			 * and fails the probe (Image-b 0xa79098-0xa790b8). */
+			ret = -EINVAL;
+			dev_err(redriver->dev,
+				"Failed to get chip id: %d\n", ret);
+			goto destroy_wq;
 		}
+		dev_err(redriver->dev,
+			"get chip id: id_1 = 0x%02x, id_2 = 0x%02x, revision_1 = 0x%02x, revision_2 = 0x%02x\n",
+			echo[0], echo[1], echo[2], echo[3]);
+		redriver_exist = true;
 
 		redriver->host_active = false;
 		redriver->vbus_active = false;
 
 		ret = ps5169_apply_seq(redriver, ps5169_default_seq,
 				       PS5169_DEFAULT_SEQ_LEN);
-		if (ret < 0)
+		if (ret < 0) {
+			dev_err(redriver->dev,
+				"Failed to set default mode: %d\n", ret);
 			goto destroy_wq;
+		}
 	} else {
 		/* Set default parameters for A/B/C/D channels. */
 		ret = ssusb_redriver_default_config(redriver);
@@ -1154,7 +1171,6 @@ put_psy:
 		power_supply_put(redriver->usb_psy);
 
 destroy_wq:
-	redriver_exist = false;
 	destroy_workqueue(redriver->redriver_wq);
 
 	return ret;
