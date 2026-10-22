@@ -388,6 +388,73 @@ void nvt_set_pen_normal_mode(void)
 }
 EXPORT_SYMBOL(nvt_set_pen_normal_mode);
 
+/* TASK-085-C1: stock nvt_cmd_store (Image-b 0x8adef78).
+ * Generic command write engine used by edge_reject, game_mode,
+ * support_pen etc. procfs handlers.
+ * Flow: mutex_lock → check bTouchIsAwake → nvt_set_page(0x50) →
+ * write {0x50, cmd_val} → msleep(20) → read-back verify → unlock. */
+static int32_t nvt_cmd_store(uint8_t cmd_val)
+{
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+	int32_t retry = 10;
+
+	mutex_lock(&ts->lock);
+
+	if (!bTouchIsAwake) {
+		printk("hid-keyboard,%s:%d not awake, val=%d\n",
+		       "nvt_cmd_store", 995, cmd_val & 0xff);
+		mutex_unlock(&ts->lock);
+		return -1;
+	}
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		printk("hid-keyboard,%s:%d set page failed\n",
+		       "nvt_cmd_store", 1003);
+		mutex_unlock(&ts->lock);
+		return ret;
+	}
+
+	buf[0] = 0x50;
+	buf[1] = cmd_val;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+
+	msleep(20);
+
+	while (retry > 0) {
+		buf[0] = 0x50;
+		buf[1] = 0xFF;
+		CTP_I2C_READ(ts->client, I2C_FW_Address, buf, 2);
+		if (buf[1] == 0x00)
+			break;
+
+		buf[0] = 0x50;
+		buf[1] = cmd_val;
+		CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+		msleep(20);
+		retry--;
+	}
+
+	mutex_unlock(&ts->lock);
+	return ret;
+}
+
+/* TASK-085-C2: stock nvt_edge_reject_set (Image-b 0x8adf548).
+ * Level 0-3 maps to bytes from constant 0xBCBDBBBA:
+ * level 0 → 0xBA, 1 → 0xBB, 2 → 0xBD, 3 → 0xBC.
+ * Calls nvt_cmd_store to write the selected value. */
+static void nvt_edge_reject_set(uint8_t edge)
+{
+	u32 mask = 0xBCBDBBBA;
+
+	if (edge > 3)
+		return;
+	nvt_cmd_store((mask >> (edge * 8)) & 0xFF);
+}
+
+
 
 /*******************************************************
  * Description:
