@@ -34,8 +34,9 @@ extern void nvt_support_pen_set_nfc(bool normal);
 #define CTN730_STATUS_TEXT_MAX	27
 
 int tp_state;
-static int is_hard_reset;
+int is_hard_reset;
 int has_hard_reset;
+int err_count;
 static struct ctn730_data *ctn730;
 static struct i2c_client *client_address;
 static struct device_node *ctn730_panel;
@@ -844,24 +845,17 @@ static void check_static_charge_work(struct work_struct *work)
 			"check_static_charge_work");
 		return;
 	}
-	/* stock: one 8-byte -1 store over level+attached */
 	data->level = -1;
-	data->pen_info_attached = -1;
 	data->pending_event_index = 0;
 	data->charging = 0;
-	if (is_hard_reset != 1) {
-		memset(data->param, 0, 6);
-		memset(data->mac, 0, 8);
-		ctn730_notifier_call_chain(data, data->cmd_delay, NULL);
-		ctn730_uevent_change(data);
-		return;
+	if (tp_state == 1) {
+		pr_info("ctn730: %s: check charge work :open pen mode\n",
+			"check_static_charge_work");
+		nvt_support_pen_set_nfc(true);
 	}
-	pr_info("ctn730: %s: check charge work :open pen mode\n",
-		"check_static_charge_work");
-	nvt_support_pen_set_nfc(true);
-	memset(data->param, 0, 6);
-	memset(data->mac, 0, 8);
-	ctn730_notifier_call_chain(data, data->cmd_delay, NULL);
+	memset(data->mac, 0, 6);
+	memset(data->pen_info_buf, 0, 8);
+	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
 	ctn730_uevent_change(data);
 }
 
@@ -875,15 +869,17 @@ static void check_pen_lost(struct work_struct *work)
 		pr_info("ctn730: %s: no ctn730_dev\n", "check_pen_lost");
 		return;
 	}
-	memset(data->mac_or_param, 0, 6);
-	memset(data->pen_uid, 0, 8);
+	memset(data->mac, 0, 6);
+	memset(data->pen_info_buf, 0, 8);
+	data->pending_event_index = 0;
+	data->level = -1;
 	data->charging = 0;
 	pr_info("ctn730: %s: enter check :is pen lost\n", "check_pen_lost");
-	if (is_hard_reset == 1) {
+	if (tp_state == 1) {
 		pr_info("ctn730: %s: pen_lost :open pen mode\n", "check_pen_lost");
 		nvt_support_pen_set_nfc(true);
 	}
-	ctn730_notifier_call_chain(data, data->cmd_delay, NULL);
+	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
 	ctn730_uevent_change(data);
 }
 
@@ -1194,7 +1190,7 @@ t80_dispatch:
 			goto tail;
 		if (payload[0] == 5) {
 			data->last_irq_ktime = 0;
-			is_hard_reset = 0;
+			has_hard_reset = 0;
 		}
 		goto shared_4_or_5;
 	case 20: /* 0x94: table entry 0x888499c */
@@ -1303,81 +1299,55 @@ shared_4_or_5:
 	goto tail;
 
 t40_init_block:
-	/* 0x8884704 (T40 c6): pen_mode mutex + set_work */
+	/* 0x8884704 (T40 c6): stock bist_mutex + pen_delay state machine. */
 	if (payload[0]) {
-		/* 0x8884a9c: charge disable */
 		data->fw_status = 26;
 		queue_delayed_work_on(8, system_wq, &data->set_work, 0);
+		pr_info("ctn730: %s: HOST_CTRL_BIST  Response error: %d\n",
+			"ctn730_parse_message", payload[0]);
 		goto tail;
 	}
-	mutex_lock(&data->report_info_mutex);
-	if (data->fw_status == 1) {
+
+	mutex_lock(&data->bist_mutex);
+	if (data->pen_delay == 1) {
 		data->fw_status = 9;
 		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[9]);
-		if (data->fw_status == 2) {
-			data->fw_status = 10;
-			pr_info("ctn730: %s: status %s\n",
-				"ctn730_parse_message",
-				ctn730_status_text[10]);
-			if (data->fw_status == 9) {
-				memcpy(data->mac, data->mac_or_param, 6);
-				data->fw_status = 11;
-				data->pen_mode_open = 1;
-				data->has_mac = 1;
-				pr_info("ctn730: %s: mac %pM\n",
-					"ctn730_parse_message", data->mac);
-				pr_info("ctn730: %s: detect...\n",
-					"ctn730_parse_message");
-				queue_delayed_work_on(8, system_wq,
-					&data->set_work, 0);
-			}
-		}
-	} else if (data->fw_status == 2) {
+	}
+	if (data->pen_delay == 2) {
 		data->fw_status = 10;
 		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[10]);
-		if (data->fw_status == 9) {
-			memcpy(data->mac, data->mac_or_param, 6);
-			data->fw_status = 11;
-			data->pen_mode_open = 1;
-			data->has_mac = 1;
-			pr_info("ctn730: %s: mac %pM\n",
-				"ctn730_parse_message", data->mac);
-			pr_info("ctn730: %s: detect...\n",
-				"ctn730_parse_message");
-			queue_delayed_work_on(8, system_wq,
-				&data->set_work, 0);
-		}
-	} else if (data->fw_status == 9) {
-		memcpy(data->mac, data->mac_or_param, 6);
+	}
+	if (data->pen_delay == 9) {
+		/* 0x8884b40: payload[1..6] -> data->mac, then notify userspace. */
+		memcpy(data->mac, payload + 1, 6);
 		data->fw_status = 11;
-		data->pen_mode_open = 1;
+		data->charging = 1;
 		data->has_mac = 1;
-		pr_info("ctn730: %s: mac %pM\n",
-			"ctn730_parse_message", data->mac);
-		pr_info("ctn730: %s: detect...\n", "ctn730_parse_message");
+		ctn730_uevent_change(data);
+		pr_info("ctn730: %s: pen_mac: %02X:%02X:%02X:%02X:%02X:%02X\n",
+			"ctn730_parse_message", data->mac[5], data->mac[4],
+			data->mac[3], data->mac[2], data->mac[1], data->mac[0]);
+	}
+	if (data->pen_delay == 4)
+		pr_info("ctn730: %s: BIST_ACTIVATION:%*ph\n",
+			"ctn730_parse_message", len, payload);
+	mutex_unlock(&data->bist_mutex);
+
+	/* 0x8884744: rf_on==1/2 returns to tail; otherwise queue set_work. */
+	if (data->rf_on != 1 && data->rf_on != 2)
 		queue_delayed_work_on(8, system_wq, &data->set_work, 0);
-	} else if (data->fw_status == 4) {
-		data->fw_status = 4;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
-			ctn730_status_text[4]);
-	}
-	mutex_unlock(&data->report_info_mutex);
-	if (data->fw_status >= 1 && data->fw_status <= 2) {
-		goto tail;
-	}
-	goto resched_tail;
+	goto tail;
 
 t80_init_block:
-	/* 0x8884d70 (T80 c0 p0==0): pen reset + version */
+	/* 0x8884d70 (T80 c0 p0==0): pen reset + version. */
 	data->fw_status = 2;
+	data->pending_event_index = 0;
+	data->charging = 0;
+	data->version[0] = payload[1];
+	data->version[1] = payload[2];
 	data->level = -1;
-	data->has_ext_cmd = 0;
-	data->version[0] = data->mac_or_param[0];
-	data->version[1] = data->mac_or_param[1];
-	memset(data->mac, 0, 6);
-	memset(data->pen_uid, 0, 8);
 	if (!data->fw_ver_sel) {
 		char ver[8];
 
@@ -1385,40 +1355,41 @@ t80_init_block:
 			data->version[1]);
 		data->fw_ver_sel = 1;
 	}
-	ctn730_notifier_call_chain(data, data->level, NULL);
+	if (tp_state == 1) {
+		pr_info("ctn730: %s: initialized :open pen mode\n",
+			"ctn730_parse_message");
+		nvt_support_pen_set_nfc(true);
+	}
+	memset(data->mac, 0, 6);
+	memset(data->pen_uid, 0, 8);
+	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
 	if (!is_hard_reset)
 		kobject_uevent(&data->misc.this_device->kobj, KOBJ_CHANGE);
 	is_hard_reset = 0;
 	pr_info("ctn730: %s: version %02x%02x\n",
 		"ctn730_parse_message", data->version[0],
 		data->version[1]);
-	if (payload[0] == 1) {
+	if (payload[0] == 1)
 		data->fw_status = data->detected ? 25 : 1;
-		goto resched_tail;
-	}
 	goto resched_tail;
 
 app_chn_connected:
+	data->pending_event_index = 0;
 	data->fw_status = 6;
-	alarm_cancel(&data->alarm);
-	memset(data->mac, 0, 8);
-	memset(data->pen_uid, 0, 8);
+	data->charging = 0;
 	data->level = -1;
 	data->last_irq_ktime = 0;
-	is_hard_reset = 0;
+	has_hard_reset = 0;
+	err_count = 0;
+	alarm_cancel(&data->alarm);
+	memset(data->pen_uid, 0, 8);
+	memset(data->mac, 0, 8);
 	pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
 		ctn730_status_text[6]);
-	ctn730_notifier_call_chain(data, data->level, NULL);
+	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
 	queue_delayed_work_on(8, system_wq, &data->check_pen_lost,
 		msecs_to_jiffies(15));
 	goto resched_tail;
-
-deactived:
-	data->fw_status = 4;
-	data->pen_info_attached = 0;
-	pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
-		ctn730_status_text[4]);
-	goto tail;
 
 bad:
 	/* 0x8884a70: recieve print -> 0x8884eb0 (NO resched) */
@@ -1432,13 +1403,8 @@ tail:
 	return;
 
 resched_tail:
-	/* 0x8884e78: fw_status dispatch */
-	if (data->fw_status == 2)
-		queue_delayed_work_on(8, system_wq, &data->update_fw_work, 0);
-	else if (data->fw_status == 1)
-		queue_delayed_work_on(8, system_wq, &data->rf_on_work, 0);
-	else
-		queue_delayed_work_on(8, system_wq, &data->set_work, 0);
+	/* 0x8884e78: stock selects work by rf_on, not fw_status. */
+	ctn730_queue_failure_work(data, 0);
 	msleep(5);
 }
 static ssize_t enable_show(struct device *dev, struct device_attribute *attr,
