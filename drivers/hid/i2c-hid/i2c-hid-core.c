@@ -402,8 +402,9 @@ static int __i2c_hid_command(struct i2c_client *client,
 	 * RESET_PENDING when the reset completion arrives.
 	 */
 	if (wait) {
-		i2c_hid_dbg(ihid, "%s: wait flags=%lx\n", __func__, ihid->flags);
-		if (test_bit(I2C_HID_RESET_PENDING, &ihid->flags))
+		i2c_hid_dbg(ihid, "%s: wait flags=%lx quirks=%lx\n",
+			__func__, ihid->flags, ihid->quirks);
+		if (ihid->quirks & I2C_HID_QUIRK_NO_IRQ_AFTER_RESET)
 			msleep(100);
 		else
 			ret = i2c_hid_wait_reset(ihid);
