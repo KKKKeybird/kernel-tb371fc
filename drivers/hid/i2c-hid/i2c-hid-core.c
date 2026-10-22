@@ -1237,7 +1237,8 @@ static int i2c_hid_power(struct hid_device *hid, int lvl)
 	struct i2c_client *client = hid->driver_data;
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
 
-	i2c_hid_dbg(ihid, "%s lvl:%d\n", __func__, lvl);
+	/* Stock power level print (Image-b 0x9bed03c3). */
+	printk("hid-keyboard,%s,lvl=%d\n", "i2c_hid_power", lvl);
 
 	switch (lvl) {
 	case PM_HINT_FULLON:
