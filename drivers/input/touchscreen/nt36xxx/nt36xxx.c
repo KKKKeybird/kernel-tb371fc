@@ -332,6 +332,63 @@ void nvt_set_charger(uint8_t charger_on)
 }
 EXPORT_SYMBOL(nvt_set_charger);
 
+/* TASK-085-B1: stock nvt_set_pen_inband_mode_1 (Image-b 0x8ade4b8).
+ * Writes 5-byte pen inband mode command {0x50, 0xC1, 0x02, p1, p2},
+ * then polls CTP_SPI_READ × 3 with usleep_range(10000,10000). */
+void nvt_set_pen_inband_mode_1(uint8_t param1, uint8_t param2)
+{
+	uint8_t buf[8] = {0};
+
+	mutex_lock(&ts->lock);
+
+	int32_t ret;
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	buf[0] = 0x50;
+	buf[1] = 0xC1;
+	buf[2] = 0x02;
+	buf[3] = param1;
+	buf[4] = param2;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 5);
+
+	mutex_unlock(&ts->lock);
+}
+EXPORT_SYMBOL(nvt_set_pen_inband_mode_1);
+
+/* TASK-085-B2: stock nvt_set_pen_normal_mode (Image-b 0x8ade670).
+ * Writes 3-byte pen normal mode command {0x50, 0xC1, 0x04},
+ * then polls CTP_SPI_READ × 3 with usleep_range(10000,10000). */
+void nvt_set_pen_normal_mode(void)
+{
+	uint8_t buf[8] = {0};
+
+	mutex_lock(&ts->lock);
+
+	int32_t ret;
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	buf[0] = 0x50;
+	buf[1] = 0xC1;
+	buf[2] = 0x04;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 3);
+
+	mutex_unlock(&ts->lock);
+}
+EXPORT_SYMBOL(nvt_set_pen_normal_mode);
+
+
 /*******************************************************
  * Description:
  *     Novatek touchscreen reset MCU (boot) function.
