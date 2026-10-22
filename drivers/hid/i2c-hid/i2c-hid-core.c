@@ -68,6 +68,13 @@
 /* bit index 2, i.e. mask 0x4 for data-bearing commands */
 #define I2C_HID_COMMAND_IN_PROGRESS	2
 
+_Static_assert(BIT(I2C_HID_RESET_PENDING) == 0x2,
+	       "stock flags bit1 is RESET_PENDING");
+_Static_assert(BIT(I2C_HID_COMMAND_IN_PROGRESS) == 0x4,
+	       "stock data-bearing command uses flags bit2");
+_Static_assert(I2C_HID_QUIRK_NO_IRQ_AFTER_RESET == BIT(1),
+	       "stock quirks bit1 is NO_IRQ_AFTER_RESET");
+
 #define I2C_HID_PWR_ON		0x00
 #define I2C_HID_PWR_SLEEP	0x01
 #define I2C_HID_PWR_SHUTDOWN	0x02
