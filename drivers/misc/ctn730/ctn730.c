@@ -799,15 +799,18 @@ static void rf_on_work(struct work_struct *work)
 		pr_info("ctn730: %s: no ctn730_dev\n", "rf_on_work");
 		return;
 	}
-	if (!data->suspended && data->gpio_ven < 0x500) {
-		ctn730_set_ven(data, 0);
-		msleep(5);
-		ctn730_set_ven(data, 1);
+	if (data->rf_on == 0) {
+		if (data->gpio_ven < 0x500) {
+			ctn730_set_ven(data, 0);
+			msleep(5);
+			ctn730_set_ven(data, 1);
+		}
+		data->detected = 0;
+		return;
 	}
-	if (data->suspended != 1)
+	if (data->rf_on != 1)
 		return;
 	if (data->fw_status == 2) {
-		/* stock: buf = {0x06,0x01,0x01}, bist_mutex, pen_delay = 1 */
 		memset(buf, 0, sizeof(buf));
 		buf[0] = 0x06;
 		buf[1] = 0x01;
@@ -817,20 +820,12 @@ static void rf_on_work(struct work_struct *work)
 			data->pen_delay = 1;
 		mutex_unlock(&data->bist_mutex);
 	} else if (data->fw_status == 1) {
-		/* stock: buf = {0x00,0x01,0x00} -> 0x100 little endian */
 		memset(buf, 0, sizeof(buf));
 		buf[0] = 0x00;
 		buf[1] = 0x01;
 		buf[2] = 0x00;
 		if (ctn730_i2c_send(data, buf, 3) >= 0)
 			data->detected = 1;
-	} else {
-		if (data->gpio_ven < 0x500) {
-			ctn730_set_ven(data, 0);
-			msleep(5);
-			ctn730_set_ven(data, 1);
-		}
-		data->detected = 0;
 	}
 }
 
