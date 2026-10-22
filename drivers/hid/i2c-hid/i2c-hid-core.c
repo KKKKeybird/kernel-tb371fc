@@ -848,6 +848,9 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	/* stock 0x8cb3dd8: a 0x07 frame with no keyboard input device would
 	 * execute input_event(NULL, ...). Skip only the invalid event, then keep
 	 * the frame's normal identity/report continuation. */
+	if (ihid->inbuf[2] == 0x07 && kb_input_dev)
+		printk("hid-keyboard,%s,0x07,input_report_key:[%d].\n",
+		       "i2c_hid_irq", ihid->inbuf[3]);
 	if (ihid->inbuf[2] == 0x07 && !kb_input_dev)
 		pr_err("hid-keyboard,%s,kb_input_dev is NULL", __func__);
 
@@ -856,8 +859,12 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			return;
 		if (!device_keyboard || device_keyboard->online != 1)
 			return;
-		if (ihid->inbuf[2] == 0x05 && handle_special_key_frame(ihid))
-			return;
+		if (ihid->inbuf[2] == 0x05) {
+			printk("hid-keyboard,%s,v02 v03 v04 spinel,special key\n",
+			       "i2c_hid_irq");
+			if (handle_special_key_frame(ihid))
+				return;
+		}
 	}
 
 	if (test_bit(I2C_HID_STARTED, &ihid->flags))
