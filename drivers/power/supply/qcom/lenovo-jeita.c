@@ -41,7 +41,6 @@ struct range_data {
 struct jeita_fcc_cfg {
 	struct lenovo_jeita_param	param;
 	struct range_data		fcc_cfg[JEITA_STEP];
-	struct range_data		hvdcp3_fcc_cfg[JEITA_STEP];
 	struct range_data		default_fcc_cfg[JEITA_STEP];
 };
 
@@ -286,11 +285,8 @@ static int get_jeita_setting_from_profile(struct lenovo_jeita_info *chip)
 	chip->taper_fcc = of_property_read_bool(profile_node, "qcom,taper-fcc");
 
 	chip->sw_jeita_cfg_valid = true;
-	rc = read_range_data_from_node(profile_node,
-			"qcom,jeita-fcc-ranges-hvdcp3",
-			chip->jeita_fcc_config->hvdcp3_fcc_cfg,
-			BATT_HOT_DECIDEGREE_MAX, max_fcc_ma * 1000);
-
+	/* W1o (C103): qcom,jeita-fcc-ranges-hvdcp3 is stock-absent
+	 * (Image-b attribute scan = 0 hits); removed. */
 	rc = read_range_data_from_node(profile_node,
 			"qcom,jeita-fcc-ranges",
 			chip->jeita_fcc_config->default_fcc_cfg,
@@ -400,52 +396,52 @@ static int get_val(struct range_data *range, int rise_hys, int fall_hys,
 {
 	int i;
 
+	/* W1p (C104, stock 0x8bd2dc8..0x8bd30e8): full stock semantics.
+	 * Entry only sets *new_index; *val is left to the caller's initial
+	 * value and written on hit. */
 	*new_index = -EINVAL;
-	*val = -EINVAL;
 
-	/*
-	 * If the threshold is lesser than the minimum allowed range,
-	 * return -ENODATA.
-	 */
-	//if (threshold < range[0].low_threshold)
-	//	return -ENODATA;
+	/* stock 0x8bd2dd0..0x8bd2dd8: threshold below the lowest range */
+	if (threshold < range[0].low_threshold)
+		return -ENODATA;
 
-	/* First try to find the matching index without hysteresis */
+	/* stock: an empty segment (low|high == 0) fails the lookup; a
+	 * segment not containing the threshold falls through to the next */
 	for (i = 0; i < JEITA_STEP; i++) {
-		if (range[i].high_threshold !=range[i].low_threshold) {
-			if (is_between(range[i].low_threshold,
+		if (!(range[i].low_threshold | range[i].high_threshold))
+			continue;
+		if (is_between(range[i].low_threshold,
 				range[i].high_threshold, threshold)) {
-				*new_index = i;
-				*val = range[i].value;
-				break;
-			}
+			*new_index = i;
+			*val = range[i].value;
+			break;
 		}
 	}
-#if 0
+	if (*new_index == -EINVAL)
+		return -ENODATA;
+
+	/* stock 0x8bd2ea0..0x8bd2ea8: no current index yet -> keep lookup */
+	if (current_index == -EINVAL)
+		return 0;
+
+	/* stock hysteresis 0x8bd2eb0..0x8bd2f14, including the else branch
+	 * (new outside current+/-1 also falls back to current) */
 	if (*new_index == current_index + 1) {
 		if (threshold <
 			(range[*new_index].low_threshold + rise_hys)) {
-			/*
-			 * Stay in the current index, threshold is not higher
-			 * by hysteresis amount
-			 */
 			*new_index = current_index;
 			*val = range[current_index].value;
 		}
 	} else if (*new_index == current_index - 1) {
 		if (threshold >
 			range[*new_index].high_threshold - fall_hys) {
-			/*
-			 * stay in the current index, threshold is not lower
-			 * by hysteresis amount
-			 */
 			*new_index = current_index;
 			*val = range[current_index].value;
 		}
+	} else {
+		*new_index = current_index;
+		*val = range[current_index].value;
 	}
-#endif
-	if(*new_index == current_index)
-		return -1;
 	return 0;
 }
 
@@ -533,13 +529,9 @@ static int handle_jeita(struct lenovo_jeita_info *chip)
 		goto update_time;
 	}
 
-	power_supply_get_property(chip->usb_psy, POWER_SUPPLY_PROP_REAL_TYPE, &pval);
-	pr_debug("%s : POWER_SUPPLY_PROP_REAL_TYPE : %d\n", __FUNCTION__, pval.intval);
-	if (pval.intval == POWER_SUPPLY_TYPE_USB_HVDCP_3) {
-		memcpy(chip->jeita_fcc_config->fcc_cfg, chip->jeita_fcc_config->hvdcp3_fcc_cfg, sizeof(struct range_data)*JEITA_STEP);
-	} else {
-		memcpy(chip->jeita_fcc_config->fcc_cfg, chip->jeita_fcc_config->default_fcc_cfg, sizeof(struct range_data)*JEITA_STEP);
-	}
+	/* W1o (C103): stock has no HVDCP3-specific FCC table switch;
+	 * the qcom,jeita-fcc-ranges table is used unconditionally. */
+	memcpy(chip->jeita_fcc_config->fcc_cfg, chip->jeita_fcc_config->default_fcc_cfg, sizeof(struct range_data)*JEITA_STEP);
 
 	if (!chip->sw_jeita_cfg_valid) {
 		if (chip->fcc_votable)
