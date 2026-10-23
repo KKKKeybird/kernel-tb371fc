@@ -10,6 +10,8 @@
  */
 
 #include <linux/backlight.h>
+#include <linux/init.h>
+#include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/fb.h>
@@ -77,7 +79,7 @@ struct ktz8866_reg ktz8866b_regs[] = {
 	{"KTZ8866B_DISP_FULL_CURRENT", KTZ8866_DISP_FULL_CURRENT},
 };
 
-static int lcd_bl_bias_read_byte(u8 regnum)
+static noinline int lcd_bl_bias_read_byte(u8 regnum)
 {
 	u8 buffer[1], reg_value[1];
 	int res = 0;
@@ -256,77 +258,78 @@ led_classdev_register_failed:
 
 int lcd_set_bias(bool enable)
 {
-	dev_warn(&lcd_bl_bias_i2c_client->dev, "bias:value = %d", enable);
-	if (enable) {
-		//write vsp/vsn reg
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BC1, 0XFA); /* BL_CFG1；OVP=40V，线性调光，PWM disabled */
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BC2, 0xED); /* BL_CFG2；dimming 512ms */
-		lcd_bl_bias_write_byte(KTZ8866_DISP_DIMMING, 0xAA); /* Turn ON/OFF RAMP time  512ms */
-		lcd_bl_bias_write_byte(KTZ8866_DISP_OPTION2, 0x37); /* BL_OPTION2；电感4.7uH，BL_CURRENT_LIMIT 2.5A；*/
-		lcd_bl_bias_write_byte(KTZ8866_DISP_FULL_CURRENT, 0xAD); /* Backlight Full-scale LED Current 22mA/CH；*/
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_BOOST, 0x2E); /* LCD_BOOST_CFG */
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_VPOS, 0x24); /* OUTP_CFG，OUTP = 5.8V */
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_VNEG, 0x24); /* OUTN_CFG，OUTN = -5.8V */
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x9D);/* OUTP enable, OUTN disable*/
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x9F);/* OUTP enable, OUTN enable*/
-		lcd_bl_bias_read_byte(KTZ8866_DISP_BIAS_CONF1);
-	} else {
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x9D);/* OUTP enable, OUTN disable*/
-		lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x99);/* OUTP disable, OUTN disable*/
-		lcd_bl_bias_read_byte(KTZ8866_DISP_BIAS_CONF1);
-	}
-	return 0;
+        dev_warn(&lcd_bl_bias_i2c_client->dev, "bias:value = %d", enable);
+        if (enable) {
+                if (strstr(saved_command_line,
+                           "mdss_dsi_panel_spinel_boe_nt36532_dsc_3k_video"))
+                        lcd_bl_bias_write_byte(KTZ8866_DISP_BC1, 0xDA);
+                else
+                        lcd_bl_bias_write_byte(KTZ8866_DISP_BC1, 0xDB);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_BC2, 0xED);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_DIMMING, 0xAA);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_OPTION2, 0x37);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_FULL_CURRENT, 0xA5);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_BOOST, 0x2E);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_VPOS, 0x24);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_VNEG, 0x24);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x9C);
+                lcd_bl_bias_read_byte(KTZ8866_DISP_BIAS_CONF1);
+                udelay(5000);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x9E);
+                lcd_bl_bias_read_byte(KTZ8866_DISP_BIAS_CONF1);
+        } else {
+                lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x9C);
+                lcd_bl_bias_read_byte(KTZ8866_DISP_BIAS_CONF1);
+                udelay(5000);
+                lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x98);
+                lcd_bl_bias_read_byte(KTZ8866_DISP_BIAS_CONF1);
+        }
+        return 0;
 }
 EXPORT_SYMBOL(lcd_set_bias);
 
 static int lcd_bl_bias_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	int ret;
-	if (NULL == client) {
-		dev_warn(&lcd_bl_bias_i2c_client->dev, "[LCD][BL] i2c_client is NULL\n");
-		return -EINVAL;
-	}
+        int ret;
 
-	lcd_bl_bias_i2c_client = client;
+        if (NULL == client) {
+                dev_warn(&lcd_bl_bias_i2c_client->dev, "[LCD][BL] i2c_client is NULL\n");
+                return -EINVAL;
+        }
 
-	dev_warn(&lcd_bl_bias_i2c_client->dev, "backlight, i2c address: %0x\n", client->addr);
+        lcd_bl_bias_i2c_client = client;
+        dev_warn(&lcd_bl_bias_i2c_client->dev, "backlight, i2c address: %0x\n", client->addr);
 
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_BOOST, 0x2E); /* LCD_BOOST_CFG */
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_VPOS, 0x24); /* OUTP_CFG，OUTP = 5.8V */
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_VNEG, 0x24); /* OUTN_CFG，OUTN = -5.8V */
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x9F);/* OUTP/OUTN enable ,EXT_EN enable*/
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BC2, 0xED);/* BL_CFG2；dimming 512ms */
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BC1, 0XFA); /* BL_CFG1；OVP=40V，线性调光，PWM disabled */
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_DIMMING, 0xAA); /* Turn ON/OFF RAMP time  512ms */
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_OPTION2, 0x37); /* BL_OPTION2；电感4.7uH，BL_CURRENT_LIMIT 2.5A；*/
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_FULL_CURRENT, 0xAD); /* Backlight Full-scale LED Current 22mA/CH；*/
-	ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BL_ENABLE, 0x7F); /* BL enabled and Current sink 1/2/3/4/5/6 enabled；*/
-	if (ret < 0) {
-		dev_warn(&lcd_bl_bias_i2c_client->dev, "I2C write reg is fail!");
-		return -EINVAL;
-	} else {
-		dev_warn(&lcd_bl_bias_i2c_client->dev, "I2C write reg is success!");
-	}
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_BOOST, 0x2E);
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_VPOS, 0x24);
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_VNEG, 0x24);
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BIAS_CONF1, 0x99);
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BC2, 0xED);
+        if (strstr(saved_command_line,
+                   "mdss_dsi_panel_spinel_boe_nt36532_dsc_3k_video"))
+                ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BC1, 0xDA);
+        else
+                ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BC1, 0xDB);
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_DIMMING, 0xAA);
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_OPTION2, 0x37);
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_FULL_CURRENT, 0xA5);
+        ret = lcd_bl_bias_write_byte(KTZ8866_DISP_BL_ENABLE, 0x4F);
+        if (ret < 0) {
+                dev_warn(&lcd_bl_bias_i2c_client->dev, "I2C write reg is fail!");
+                return -EINVAL;
+        } else {
+                dev_warn(&lcd_bl_bias_i2c_client->dev, "I2C write reg is success!");
+        }
 
-	ktz8866b_common_init(lcd_bl_bias_i2c_client);
-	return 0;
+        ktz8866b_common_init(lcd_bl_bias_i2c_client);
+        return 0;
 }
-
 static int lcd_bl_bias_i2c_remove(struct i2c_client *client)
 {
-	struct ktz8866_data *ktz8866b_driver_data = i2c_get_clientdata(lcd_bl_bias_i2c_client);
-	struct ktz8866_data *driver_data = i2c_get_clientdata(lcd_bl_bias_i2c_client);
-
-	device_remove_file (ktz8866b_driver_data->led_dev.dev, &dev_attr_ktz8866b_reg);
-	kfree (ktz8866b_driver_data);
-	led_classdev_unregister(&driver_data->led_dev);
-	kfree (driver_data);
-
-	lcd_bl_bias_i2c_client = NULL;
-	i2c_unregister_device(client);
-	return 0;
+        lcd_bl_bias_i2c_client = NULL;
+        i2c_unregister_device(client);
+        return 0;
 }
-
 module_i2c_driver(lcd_bl_bias_i2c_driver);
 
 MODULE_AUTHOR("caiyifeng <caiyifeng@huanqin.com>");
