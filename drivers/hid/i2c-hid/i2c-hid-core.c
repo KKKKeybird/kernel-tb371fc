@@ -1834,38 +1834,51 @@ static int i2c_hid_probe(struct i2c_client *client,
 	hid->vendor = le16_to_cpu(ihid->hdesc.wVendorID);
 	hid->product = le16_to_cpu(ihid->hdesc.wProductID);
 
-	/* Stock FW version check prints (Image-b 0x8cb35e0-0x8cb36xx).
-	 * The %s argument is the literal rodata func name. */
+	/* Stock FW version checks (Image-b 0x8cb34d4..0x8cb3918). */
 	printk("hid-keyboard,%s,VID:[0x%x],PID:[0x%x]\n",
 	       "i2c_hid_probe", hid->vendor, hid->product);
-	if (hid->vendor == VID_KB_LENOVO && hid->product == PID_KB_LENOVO_V04) {
+
+	/* Old-firmware rejects are keyed by product only in stock. */
+	if (hid->product == 0x6103) {
+		printk("hid-keyboard,%s,failed,because of old kb fireware\n",
+		       "i2c_hid_probe");
+		ret = -ENODEV;
+		goto err_irq;
+	}
+	if (hid->product == 0x3164) {
+		printk("hid-keyboard,%s,failed,because of old mouse fireware\n",
+		       "i2c_hid_probe");
+		ret = -ENODEV;
+		goto err_irq;
+	}
+
+	if (hid->vendor == VID_KB_LENOVO &&
+	    hid->product == PID_KB_LENOVO_V04) {
 		printk("hid-keyboard,%s,V04 FW\n", "i2c_hid_probe");
-	} else if (hid->vendor == VID_KB_LENOVO &&
-		   (hid->product == PID_KB_LENOVO)) {
-		if ((le16_to_cpu(ihid->hdesc.bcdVersion) & 0xFF00) == 0x0200 ||
-		    (le16_to_cpu(ihid->hdesc.bcdVersion) & 0xFF00) == 0x0300)
-			printk("hid-keyboard,%s,V02 or V03 FW\n", "i2c_hid_probe");
-		else
-			printk("hid-keyboard,%s,others devices\n", "i2c_hid_probe");
+		strlcpy(hid->name, "Lenovo Keyboard Pack for Spinel",
+			sizeof(hid->name));
+	} else if ((hid->vendor == VID_KB_LENOVO_TP &&
+		    hid->product == PID_KB_LENOVO_TP) ||
+		   (hid->vendor == 0x32cd && hid->product == 0x003a)) {
+		printk("hid-keyboard,%s,V02 or V03 FW\n", "i2c_hid_probe");
+		snprintf(hid->name, sizeof(hid->name),
+			 "%s %04hX:%04hX Spinel keyboard",
+			 client->name, (u16)hid->vendor, (u16)hid->product);
 	} else {
 		printk("hid-keyboard,%s,others devices\n", "i2c_hid_probe");
+		snprintf(hid->name, sizeof(hid->name),
+			 "%s %04hX:%04hX",
+			 client->name, (u16)hid->vendor, (u16)hid->product);
 	}
 	printk("hid-keyboard,%s,hid->version_id=0x%x\n",
 	       "i2c_hid_probe", le16_to_cpu(ihid->hdesc.bcdVersion));
+
 	if ((hid->vendor == VID_KB_LENOVO &&
 	     (hid->product == PID_KB_LENOVO || hid->product == PID_KB_LENOVO_V04)) ||
 	    (hid->vendor == VID_KB_LENOVO_TP && hid->product == PID_KB_LENOVO_TP) ||
 	    (hid->vendor == 0x32cd && hid->product == 0x003a))
 		g_client = client;
 
-	snprintf(hid->name, sizeof(hid->name), "%s %04X:%04X",
-		 client->name, (u16)hid->vendor, (u16)hid->product);
-		 
-		 if ((hid->vendor == VID_KB_LENOVO &&
-		     (hid->product == PID_KB_LENOVO ||
-		      hid->product == PID_KB_LENOVO_V04))) {
-		snprintf(hid->name, sizeof(hid->name), "Lenovo Keyboard Pack for Tab P12 Pro");
-	}
 	strlcpy(hid->phys, dev_name(&client->dev), sizeof(hid->phys));
 
 	ihid->quirks = i2c_hid_lookup_quirk(hid->vendor, hid->product);
