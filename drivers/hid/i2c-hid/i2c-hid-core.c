@@ -294,19 +294,19 @@ static const struct i2c_hid_quirks {
 		 I2C_HID_QUIRK_RESET_ON_RESUME },
 	{ USB_VENDOR_ID_ITE, I2C_DEVICE_ID_ITE_LENOVO_LEGION_Y720,
 		I2C_HID_QUIRK_BAD_INPUT_SIZE },
-		/* Stock quirks decision tree (Image-b 0x8cb36e8-0x8cb3774,
-		 * Unicorn sweep quirks_sweep6.py): 0x17ef/0x6127 does NOT hit
-		 * the 0x7 entry on stock; the extra masks below are our own
-		 * extensions pending per-bit rulings (ROUND6 C8). */
-		{ VID_KB_LENOVO, PID_KB_LENOVO,
-		 I2C_HID_QUIRK_SET_PWR_ON_SHUTDOWN | I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_WAKE_UP_SYS},
+	/* Stock quirks decision tree (Image-b 0x8cb36e8-0x8cb3774,
+	 * Unicorn sweep quirks_sweep6.py): 0x17ef/0x6127 does not
+	 * match any stock sub-entry and resolves to 0. */
+	{ VID_KB_LENOVO, PID_KB_LENOVO, 0 },
 	/* 0x17ef/0x6175 and 0x04f3/0x31a8: stock quirks = 0x7 (bit0|bit1|bit2) */
 	{ VID_KB_LENOVO, PID_KB_LENOVO_V04,
 		 I2C_HID_QUIRK_NO_IRQ_AFTER_RESET |
-		 I2C_HID_QUIRK_SET_PWR_ON_SHUTDOWN | I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_WAKE_UP_SYS},
+		 I2C_HID_QUIRK_NO_RUNTIME_PM |
+		 I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV },
 	{ VID_KB_LENOVO_TP, PID_KB_LENOVO_TP,
-		 I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_NO_IRQ_AFTER_RESET |
-		 I2C_HID_QUIRK_NO_RUNTIME_PM | I2C_HID_QUIRK_WAKE_UP_SYS | I2C_HID_QUIRK_SHOULD_SKIP_SET_PWR},
+		 I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV |
+		 I2C_HID_QUIRK_NO_IRQ_AFTER_RESET |
+		 I2C_HID_QUIRK_NO_RUNTIME_PM },
 	/* 0x32cd/0x003a: stock quirks = 0x7 (bit0|bit1|bit2) exactly */
 	{ 0x32cd, 0x003a,
 		 I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV | I2C_HID_QUIRK_NO_IRQ_AFTER_RESET |
