@@ -100,14 +100,10 @@ noinline long hq_emmcinfo(char *buf)
 		count = 3;
 	else if (size > 0x1003ff)
 		count = 2;
-	else if (size > 0xe03ff)
-		count = 1;
-	else if (size > 0xa03ff)
-		return sprintf(buf, "%dMB", 512);
 	else if (size > 0x803ff)
-		return sprintf(buf, "%dMB", 256);
+		count = 1;
 	else
-		return sprintf(buf, "%dMB", 0);
+		count = 0;
 
 	return sprintf(buf, "%dGB", count);
 }
