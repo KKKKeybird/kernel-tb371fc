@@ -225,55 +225,17 @@ clean:
 
 static int get_jeita_setting_from_profile(struct lenovo_jeita_info *chip)
 {
-	struct device_node *batt_node, *profile_node;
+	struct device_node *profile_node = chip->dev->of_node;
 	u32 max_fv_uv, max_fcc_ma;
-	const char *batt_type_str;
-	const __be32 *handle;
-	int batt_id_ohms, rc, hysteresis[2] = {0};
-	union power_supply_propval prop = {0, };
+	int rc, hysteresis[2] = {0};
 
-	handle = of_get_property(chip->dev->of_node,
-			"qcom,battery-data", NULL);
-	if (!handle) {
-		pr_debug("ignore getting sw-jeita/step charging settings from profile\n");
-		return 0;
-	}
-
-	batt_node = of_find_node_by_phandle(be32_to_cpup(handle));
-	if (!batt_node) {
-		pr_err("Get battery data node failed\n");
-		return -EINVAL;
-	}
-	
-	if (!is_bms_available(chip))
-		return -ENODEV;
-	
-	power_supply_get_property(chip->bms_psy,
-			POWER_SUPPLY_PROP_RESISTANCE_ID, &prop);
-	batt_id_ohms = prop.intval;
-
-	/* bms_psy has not yet read the batt_id */
-	if (batt_id_ohms < 0)
-		return -EBUSY;
-
-	profile_node = of_batterydata_get_best_profile(batt_node,
-					batt_id_ohms / 1000, NULL);
-	if (IS_ERR(profile_node))
-		return PTR_ERR(profile_node);
-
+	/* stock reads sw-jeita/step charging settings straight from the
+	 * qcom,qpnp-smb5 device node (live.dts:4880-4886); there is no
+	 * battery-data best-profile lookup in stock. */
 	if (!profile_node) {
-		pr_err("Couldn't find profile\n");
-		return -ENODATA;
+		pr_err("no device node for jeita settings\n");
+		return -ENODEV;
 	}
-
-	rc = of_property_read_string(profile_node, "qcom,battery-type",
-					&batt_type_str);
-	if (rc < 0) {
-		pr_err("battery type unavailable, rc:%d\n", rc);
-		return rc;
-	}
-	pr_err("battery: %s detected, getting sw-jeita settings\n",
-					batt_type_str);
 
 	rc = of_property_read_u32(profile_node, "qcom,max-voltage-uv",
 					&max_fv_uv);
@@ -289,11 +251,12 @@ static int get_jeita_setting_from_profile(struct lenovo_jeita_info *chip)
 		return rc;
 	}
 
+	pr_debug("max-voltage_uv=%d, fastchg-current-ma=%d\n",
+			max_fv_uv, max_fcc_ma);
+
 	chip->taper_fcc = of_property_read_bool(profile_node, "qcom,taper-fcc");
 
 	chip->sw_jeita_cfg_valid = true;
-	/* W1o (C103): qcom,jeita-fcc-ranges-hvdcp3 is stock-absent
-	 * (Image-b attribute scan = 0 hits); removed. */
 	rc = read_range_data_from_node(profile_node,
 			"qcom,jeita-fcc-ranges",
 			chip->jeita_fcc_config->default_fcc_cfg,
@@ -304,7 +267,9 @@ static int get_jeita_setting_from_profile(struct lenovo_jeita_info *chip)
 		chip->sw_jeita_cfg_valid = false;
 	}
 
-	memcpy(chip->jeita_fcc_config->fcc_cfg, chip->jeita_fcc_config->default_fcc_cfg, sizeof(struct range_data)*JEITA_STEP);
+	memcpy(chip->jeita_fcc_config->fcc_cfg,
+			chip->jeita_fcc_config->default_fcc_cfg,
+			sizeof(struct range_data) * JEITA_STEP);
 
 	rc = of_property_read_u32_array(profile_node,
 			"qcom,step-jeita-hysteresis", hysteresis, 2);
@@ -324,7 +289,8 @@ static int get_jeita_setting_from_profile(struct lenovo_jeita_info *chip)
 					rc);
 		chip->sw_jeita_cfg_valid = false;
 	}
-	pr_err("sw_jeita_cfg_valid :%d\n",chip->sw_jeita_cfg_valid);
+
+	pr_err("sw_jeita_cfg_valid :%d\n", chip->sw_jeita_cfg_valid);
 	return rc;
 }
 
