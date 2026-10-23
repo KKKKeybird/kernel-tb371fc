@@ -721,12 +721,48 @@ static void update_firmware_work(struct work_struct *work)
 		return;
 	}
 	if (data->fw_status == 0x17) {
-		data->fw_section_count = 0;
+		data->rf_on = 0;
 		data->fw_status = 1;
 		if (data->fw_section_data)
 			vfree(data->fw_section_data);
 		queue_delayed_work_on(8, system_wq, &data->set_work,
 				      msecs_to_jiffies(25));
+		return;
+	}
+	if (data->fw_status == 0x15 || data->fw_status == 0x16) {
+		u32 len1 = data->fw_section_len >> 7;
+		u32 len2 = data->fw_section_len2 >> 7;
+		u32 count = data->fw_section_count;
+		u32 addr;
+		u8 *src_ptr;
+
+		if (count < len1) {
+			src_ptr = (u8 *)data->fw_section_data + count * 128;
+			addr = data->fw_data2_addr + count * 128;
+		} else if (count < len2) {
+			src_ptr = (u8 *)data->fw_section_data + count * 128;
+			addr = data->fw_data_addr + (count - len1) * 128;
+		} else if (count == len2) {
+			memset(buf, 0, 0xa);
+			buf[0] = 0x04;
+			buf[1] = 0x04;
+			memcpy(&buf[2], &data->fw_crc_val, 4);
+			if (ctn730_i2c_send(data, buf, 6) >= 0)
+				data->fw_section_count++;
+			return;
+		} else {
+			return;
+		}
+
+		memset(buf, 0, 0xa);
+		buf[0] = 0x05;
+		buf[1] = 0x83;
+		buf[2] = addr & 0xff;
+		buf[3] = (addr >> 8) & 0xff;
+		buf[4] = (addr >> 16) & 0xff;
+		memcpy(&buf[5], src_ptr, 128);
+		if (ctn730_i2c_send(data, buf, 0x85) >= 0)
+			data->fw_section_count++;
 		return;
 	}
 	if (data->fw_status == 1) {
