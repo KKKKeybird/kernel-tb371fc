@@ -52,6 +52,7 @@ struct lenovo_jeita_info {
 	struct device		*dev;
 	ktime_t			jeita_last_update_time;
 	bool			config_is_read;
+	bool			thermal_cutback;
 	bool			sw_jeita_cfg_valid;
 	bool			batt_missing;
 	bool			taper_fcc;
@@ -74,7 +75,6 @@ struct lenovo_jeita_info {
 	struct power_supply	*usb_psy;
 	struct power_supply	*dc_psy;
 	struct delayed_work	status_change_work;
-	struct delayed_work	fcc_work;
 	struct delayed_work	get_config_work;
 	struct notifier_block	nb;
 };
@@ -321,36 +321,6 @@ static int get_jeita_setting_from_profile(struct lenovo_jeita_info *chip)
 	return rc;
 }
 
-static void fcc_work(struct work_struct *work)
-{
-	struct lenovo_jeita_info *chip = container_of(work,
-			struct lenovo_jeita_info, fcc_work.work);
-	int rc;
-	union power_supply_propval pval = {0, };
-
-	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, &pval);
-	pr_err("fcc_work : POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT : %d\n",pval.intval);
-	if(chip->jeita_fcc_index >= 0){
-		if(pval.intval > chip->jeita_fcc_config->fcc_cfg[chip->jeita_fcc_index].value){
-			if(pval.intval - 1000000 > chip->jeita_fcc_config->fcc_cfg[chip->jeita_fcc_index].value){
-				vote(chip->fcc_votable, JEITA_VOTER, true, pval.intval - 1000000);
-				schedule_delayed_work(&chip->fcc_work, msecs_to_jiffies(2000));
-				return;
-			}
-			else{
-				vote(chip->fcc_votable, JEITA_VOTER, true, chip->jeita_fcc_config->fcc_cfg[chip->jeita_fcc_index].value);
-				return;
-			}
-		}
-		if(pval.intval < chip->jeita_fcc_config->fcc_cfg[chip->jeita_fcc_index].value){
-			vote(chip->fcc_votable, JEITA_VOTER, true, chip->jeita_fcc_config->fcc_cfg[chip->jeita_fcc_index].value);
-		}
-	}
-	else{
-		return;
-	}
-
-}
 static void get_config_work(struct work_struct *work)
 {
 	struct lenovo_jeita_info *chip = container_of(work,
@@ -491,51 +461,29 @@ static int get_batt_maintaince_fv(struct lenovo_jeita_info *chip){
 	}
 	return rc;
 }
-#define JEITA_SUSPEND_HYST_UV		0
-static int handle_jeita(struct lenovo_jeita_info *chip)
+/* W1m/W1n: full rebuild of stock status_change_work
+ * (0x8bd1c48..0x8bd2978, 0xd30 bytes). handle_jeita and fcc_work are
+ * stock-absent (no fcc_work kallsyms symbol; FCC adjustment runs inline
+ * via POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT with a mA conversion). */
+static void status_change_work(struct work_struct *work)
 {
+	struct lenovo_jeita_info *chip = container_of(work,
+			struct lenovo_jeita_info, status_change_work.work);
 	union power_supply_propval pval = {0, };
-	int rc = 0, fcc_ua = 0, fv_uv = 0, temp = 0;
-	u64 elapsed_us;
+	int rc, temp, fcc_ua = 0, fv_uv = 0, iterm_delta = 0;
 
-	if (!chip->fcc_votable)
-		chip->fcc_votable = find_votable("FCC");
-	if (!chip->fcc_votable){
-		pr_err("%s : no fcc_votable\n", __FUNCTION__);
-		goto update_time;
-	}
-	if (!chip->fv_votable)
-		chip->fv_votable = find_votable("FV");
-	if (!chip->fv_votable){
-		pr_err("%s : no fv_votable\n", __FUNCTION__);
-		goto update_time;
-	}
-	if (!chip->usb_icl_votable)
-		chip->usb_icl_votable = find_votable("USB_ICL");
-	if (!chip->usb_icl_votable){
-		pr_err("%s : no usb_icl_votable\n", __FUNCTION__);
-		goto update_time;
-	}
-	if (!chip->dc_suspend_votable)
-		chip->dc_suspend_votable = find_votable("DC_SUSPEND");
-	if (!chip->dc_suspend_votable){
-		pr_err("%s : no dc_suspend_votable\n", __FUNCTION__);
-		goto update_time;
-	}
-	if (!chip->chg_disable_votable)
-		chip->chg_disable_votable = find_votable("CHG_DISABLE");
-	if (!chip->chg_disable_votable){
-		pr_err("%s : no chg_disable_votable\n", __FUNCTION__);
-		goto update_time;
-	}
+	/* sec 1: batt/bms lazy get (0x1c70..0x1ca4) */
+	if (!chip->batt_psy)
+		chip->batt_psy = power_supply_get_by_name("battery");
+	if (!chip->batt_psy)
+		goto relax_exit;
+	if (!chip->bms_psy)
+		chip->bms_psy = power_supply_get_by_name("bms");
+	if (!chip->bms_psy)
+		goto relax_exit;
 
-	/* W1o (C103): stock has no HVDCP3-specific FCC table switch;
-	 * the qcom,jeita-fcc-ranges table is used unconditionally. */
-	memcpy(chip->jeita_fcc_config->fcc_cfg, chip->jeita_fcc_config->default_fcc_cfg, sizeof(struct range_data)*JEITA_STEP);
-
-	if (!chip->sw_jeita_cfg_valid) {
-		if (chip->fcc_votable)
-			vote(chip->fcc_votable, JEITA_VOTER, false, 0);
+	/* sec 2: config_is_read gate (0x1ca8..0x1cb4, false path 0x1d7c) */
+	if (!chip->config_is_read) {
 		if (chip->fv_votable)
 			vote(chip->fv_votable, JEITA_VOTER, false, 0);
 		if (chip->usb_icl_votable)
@@ -544,140 +492,131 @@ static int handle_jeita(struct lenovo_jeita_info *chip)
 			vote(chip->dc_suspend_votable, JEITA_VOTER, false, 0);
 		if (chip->chg_disable_votable)
 			vote(chip->chg_disable_votable, JEITA_VOTER, false, 0);
-		
-		return 0;
+		goto relax_exit;
 	}
 
-	elapsed_us = ktime_us_delta(ktime_get(), chip->jeita_last_update_time);
-	/* skip processing, event too early */
-	if (elapsed_us < STEP_CHG_HYSTERISIS_DELAY_US)
-		return 0;
-
+	/* sec 2.5: temp read + max fcc (0x1cb8..0x1ce4). stock discards the
+	 * ktime result here: no elapsed-time debounce exists in stock. */
+	ktime_get();
 	rc = power_supply_get_property(chip->batt_psy,
 			chip->jeita_fcc_config->param.psy_prop, &pval);
-
 	if (rc < 0) {
-		pr_err("Couldn't read %s property rc=%d\n",
-				chip->jeita_fcc_config->param.prop_name, rc);
-		return rc;
+		pr_err("Couldn't read sw term %d\n", rc);
+		goto relax_exit;
 	}
 	temp = pval.intval;
+
 	rc = hq_config_chg_max_fcc(chip->batt_psy, 8000000);
 	if (rc < 0)
 		pr_err("Couldn't config max fcc rc=%d\n", rc);
 
+	/* sec 3: get_val -> jeita_fcc_index (0x1ce8..0x1d0c) */
 	rc = get_val(chip->jeita_fcc_config->fcc_cfg,
 			chip->jeita_fcc_config->param.rise_hys,
 			chip->jeita_fcc_config->param.fall_hys,
-			chip->jeita_fcc_index,
-			temp,
-			&chip->jeita_fcc_index,
-			&fcc_ua);
-	pr_err("rc:%d,temp:%d,index:%d,fcc:%d\n",rc,temp,chip->jeita_fcc_index,fcc_ua);
-
-	if (!rc){
-		if(chip->jeita_fcc_index < 0){
-			pr_err("battery temp too low or too high,disable charge\n");
-			vote(chip->chg_disable_votable, JEITA_VOTER, true, fcc_ua ? false : true);
-		}
-		else{
-			vote(chip->chg_disable_votable, JEITA_VOTER, false, false);
-		}
-		rc = power_supply_get_property(chip->bms_psy,
-					POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
-		if(chip->jeita_fcc_index == 0){
-			if(pval.intval > 4200000){
-				fcc_ua = 1500000;
-			}
-			pval.intval = -1200;
-			rc = power_supply_set_property(chip->batt_psy,
-					POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &pval);
-		}
-		else{
-			pval.intval = -1700;
-			rc = power_supply_set_property(chip->batt_psy,
-					POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &pval);
-		}
-	}
-	if(fcc_ua > 0)
-		schedule_delayed_work(&chip->fcc_work, msecs_to_jiffies(0));
-
-	rc = get_batt_maintaince_fv(chip);
-	if(!rc){
-		vote(chip->fv_votable, BATT_MAINTAINCE_VOTER, true, chip->batt_maintaince_fv);
-		pval.intval = chip->recharge_voltage;
-		rc = power_supply_set_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_RECHARGE_MV, &pval);
-	}
-	rc = get_val(chip->jeita_fv_config->fv_cfg,
-			chip->jeita_fv_config->param.rise_hys,
-			chip->jeita_fv_config->param.fall_hys,
-			chip->jeita_fv_index,
-			temp,
-			&chip->jeita_fv_index,
-			&fv_uv);
-	if (!rc){
-		if (fv_uv > 0) {
-
-			rc = power_supply_get_property(chip->batt_psy,
-					POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
-			if (!rc && (pval.intval > fv_uv)){
-				vote(chip->usb_icl_votable, JEITA_VOTER, true, 0);
-				vote(chip->dc_suspend_votable, JEITA_VOTER, true, 1);
-			}
-			else if (pval.intval < (fv_uv - JEITA_SUSPEND_HYST_UV)){
-				vote(chip->usb_icl_votable, JEITA_VOTER, false, 0);
-				vote(chip->dc_suspend_votable, JEITA_VOTER, false, 0);
-			}
-
-		}
-	}
-	/*
-	 * If JEITA float voltage is same as max-vfloat of battery then
-	 * skip any further VBAT specific checks.
-	 */
-
-	/*
-	 * Suspend USB input path if battery voltage is above
-	 * JEITA VFLOAT threshold.
-	 */
-
-	vote(chip->fv_votable, JEITA_VOTER, true, fv_uv);
-
-update_time:
-	chip->jeita_last_update_time = ktime_get();
-
-	return 0;
-}
-
-static void status_change_work(struct work_struct *work)
-{
-	struct lenovo_jeita_info*chip = container_of(work,
-			struct lenovo_jeita_info, status_change_work.work);
-	int rc = 0;
-
-	if (!is_batt_available(chip)|| !is_bms_available(chip)) 
-		goto exit_work;
-	
-
-	/* skip elapsed_us debounce for handling battery temperature */
-	rc = handle_jeita(chip);
+			chip->jeita_fcc_index, temp,
+			&chip->jeita_fcc_index, &fcc_ua);
 	if (rc < 0)
-		pr_err("Couldn't handle sw jeita rc = %d\n", rc);
+		fcc_ua = 0;
 
+	/* sec 3.5: usb_psy lazy get + pd status / usb type (0x1d10..0x1d54) */
+	if (!chip->usb_psy) {
+		chip->usb_psy = power_supply_get_by_name("usb");
+		if (!chip->usb_psy) {
+			pr_err("usb psy not found\n");
+			goto after_usb;
+		}
+	}
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
+	if (rc < 0)
+		pr_err("Couldn't read pd status from usb psy rc=%d\n", rc);
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_REAL_TYPE, &pval);
+	if (rc < 0)
+		pr_err("Couldn't read usb type from usb psy rc=%d\n", rc);
 
-	/* Remove stale votes on USB removal */
+	/* sec 4: fcc_index 150..449 -> hq_chg_type_config_fcc branch
+	 * (0x1d58..0x1e0c, magic 0x5b8d80 / 0x44aa20) */
+	if (chip->jeita_fcc_index >= 150 && chip->jeita_fcc_index <= 449) {
+		if (pval.intval == 2)
+			fcc_ua = 5999999;
+		else if (pval.intval == 13)
+			fcc_ua = 4499999;
+	}
+after_usb:
 
-	if (! is_input_present(chip)) {
-		if (chip->usb_icl_votable)
-			vote(chip->usb_icl_votable, JEITA_VOTER,
-					false, 0);
-
+	/* sec 5: thermal level (0x1e10..0x1e6c, prop 204) */
+	if (temp >= 500) {
+		if (!chip->thermal_cutback) {
+			chip->thermal_cutback = 1;
+			pval.intval = 1;
+			power_supply_set_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_CHARGE_DISABLE, &pval);
+		}
+	} else if (temp >= 10 && temp <= 479) {
+		if (chip->thermal_cutback) {
+			chip->thermal_cutback = 0;
+			pval.intval = 0;
+			power_supply_set_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_CHARGE_DISABLE, &pval);
+		}
 	}
 
-exit_work:
+	/* sec 6: usb type gate -> temp ranges -> CHARGE_TERM_CURRENT
+	 * (0x1e70..0x1f10, -500 / -1600 / -100 uA) */
+	if (chip->usb_psy) {
+		int pd_st = 0, usb_ty = 0;
+		rc = power_supply_get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
+		if (rc >= 0) {
+			pd_st = pval.intval;
+			rc = power_supply_get_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_REAL_TYPE, &pval);
+			if (rc >= 0)
+				usb_ty = pval.intval;
+		}
+		if (usb_ty == 2 || pd_st == 13) {
+			if (temp <= 149)
+				iterm_delta = -500;
+			else if (temp >= 150 && temp <= 449)
+				iterm_delta = -1600;
+			else if (temp >= 450 && temp <= 499)
+				iterm_delta = -100;
+		} else {
+			iterm_delta = -500;
+		}
+	}
+	pval.intval = iterm_delta;
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &pval);
+	if (rc < 0)
+		pr_err("Couldn't set term current property rc=%d\n", rc);
+
+	/* sec 7: FV votable + effective result (0x1f50..0x1f9c) */
+	if (!chip->fv_votable) {
+		chip->fv_votable = find_votable("FV");
+		if (!chip->fv_votable) {
+			pr_err("cannt find fv_votable vote\n");
+			goto relax_exit;
+		}
+	}
+	fcc_ua = get_effective_result(chip->fv_votable);
+	if (!chip->chg_disable_votable) {
+		chip->chg_disable_votable = find_votable("CHG_DISABLE");
+		if (!chip->chg_disable_votable) {
+			pr_err("cannt find cp_disabled_votable vote\n");
+			goto relax_exit;
+		}
+	}
+
+	/* sec 8: FV vote + relax (0x286c..0x2890) */
+	vote(chip->fv_votable, JEITA_VOTER, fv_uv != 0, fv_uv);
+
+relax_exit:
 	__pm_relax(chip->lenovo_jeita_ws);
 }
+
 
 static int jeita_notifier_call(struct notifier_block *nb,
 		unsigned long ev, void *v)
@@ -755,7 +694,6 @@ int lenovo_jeita_init(struct device *dev, bool lenovo_jeita_en)
 
 	INIT_DELAYED_WORK(&chip->status_change_work, status_change_work);
 	INIT_DELAYED_WORK(&chip->get_config_work, get_config_work);
-	INIT_DELAYED_WORK(&chip->fcc_work, fcc_work);
 
 	rc = jeita_register_notifier(chip);
 	if (rc < 0) {
