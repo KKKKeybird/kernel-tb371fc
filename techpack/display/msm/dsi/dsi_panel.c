@@ -5023,7 +5023,7 @@ exit_ctrl:
 	return rc;
 }
 
-int dsi_panel_write_mipi_reg(struct dsi_panel *panel,
+int dsi_panel_mipi_reg_write(struct dsi_panel *panel,
 				char *buf, size_t count)
 {
 	struct dsi_panel_cmd_set cmd_sets = {0};
@@ -5176,7 +5176,7 @@ exit_unlock:
 	return retval;
 }
 
-ssize_t dsi_panel_read_mipi_reg(struct dsi_panel *panel, char *buf)
+ssize_t dsi_panel_mipi_reg_read(struct dsi_panel *panel, char *buf)
 {
 	int i = 0;
 	ssize_t count = 0;

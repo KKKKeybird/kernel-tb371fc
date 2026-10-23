@@ -8078,7 +8078,7 @@ ssize_t dsi_display_mipi_reg_read(struct device *dev, char *buf)
 		DSI_ERR("Invalid display/panel ptr\n");
 		return -EINVAL;
 	}
-	return dsi_panel_read_mipi_reg(panel, buf);
+	return dsi_panel_mipi_reg_read(panel, buf);
 }
 
 int dsi_display_mipi_reg_write(struct device *dev,
@@ -8103,7 +8103,7 @@ int dsi_display_mipi_reg_write(struct device *dev,
 		DSI_ERR("Invalid display/panel ptr\n");
 		return -EINVAL;
 	}
-	return dsi_panel_write_mipi_reg(panel, (char *)buf, count);
+	return dsi_panel_mipi_reg_write(panel, (char *)buf, count);
 }
 
 module_init(dsi_display_register);
