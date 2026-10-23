@@ -715,8 +715,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	}
 
 	if (ihid->quirks & I2C_HID_QUIRK_BOGUS_IRQ && ret_size == 0xffff) {
-		dev_warn_once(&ihid->client->dev, "%s: IRQ triggered but "
-			      "there's no data\n", __func__);
 		return;
 	}
 
@@ -759,7 +757,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 				// Report the battery level
 				sprintf(status_event[0], "kb_batt_level=%d", ihid->inbuf[9]);
 				kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-				dev_err(&ihid->client->dev, "kb_batt_level: %d\n", ihid->inbuf[9]);
 
 				if (ihid->inbuf[0] == 0x12) {
 					// Report the keyboard BT paired
@@ -795,18 +792,14 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 					kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
 				}
 				kfree(status_event[0]);
-			} else {
-				dev_err(&ihid->client->dev, "%s: Failed to allocate memory for reporting KB status\n", __func__);
 			}
 			sprintf(versions_info, "MCU:%d,KB:%d,TP:%d,BT:%d,online:%d,MAC:%s", ihid->inbuf[4],
 				ihid->inbuf[5], ihid->inbuf[6], ihid->inbuf[16], kb_connect, KB_BT_MAC_info);
-				dev_err(&ihid->client->dev, "KB connected: %s, status:%02x\n", versions_info, ihid->inbuf[3]);
 		} else {
 			sprintf(KB_BT_MAC_info, "00:00:00:00:00:00");
 			sprintf(versions_info, "HOST_MCU:%d, online:%d", ihid->inbuf[4], kb_connect);
 			first_tpd_status_reported = false;
 			first_kbd_status_reported = false;
-			dev_err(&ihid->client->dev, "KB Dis-connected\n");
 		}
 		register_hardware_info("KB_INFO", versions_info);
 		hw_info_registed = true;
@@ -1153,7 +1146,6 @@ static int i2c_hid_parse(struct hid_device *hid)
 
 
 	if (ihid->pdata.preset_descriptors && (rdesc[0] != 0x05 || rdesc[1] != 0x01)) {
-		dev_err(&client->dev, "Wrong HID report descriptor, will use preset\n");
 		memcpy(rdesc, ihid->pdata.hid_report_descriptor, ihid->pdata.hid_report_descriptor_len);
 		rsize = ihid->pdata.hid_report_descriptor_len;
 	}
@@ -1355,7 +1347,6 @@ static int i2c_hid_fetch_hid_descriptor(struct i2c_hid *ihid)
 validate:
 	if (ihid->pdata.preset_descriptors &&
 		le16_to_cpu(hdesc->wHIDDescLength) != 0x001E) {
-		dev_err(&client->dev, "Wrong HID descriptor, will use preset\n");
 		memcpy(ihid->hdesc_buffer, ihid->pdata.hid_descriptor,
 			ihid->pdata.hid_descriptor_len);
 	}
@@ -1463,7 +1454,6 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 	 * kb,output-gpio consumer is not present in stock and must not
 	 * drive this pin from keyboard status frames. */
 	pdata->output_gpio = -1;
-	dev_info(dev, "p284: got mcu_rst_gpio in dt: %d\n", ret);
 
 	ret = of_get_named_gpio_flags(dev->of_node, "mcu_resume_gpio", 0,
 				      NULL);
@@ -1472,7 +1462,6 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 	mcu_resume_gpio = ret;
-	dev_info(dev, "p284: got mcu_resume_gpio in dt: %d\n", ret);
 	
 	ret = of_property_read_u32(dev->of_node, "hid-descr-addr", &val);
 	if (ret) {
@@ -1490,12 +1479,9 @@ pdata->hid_descriptor = (u8*)of_get_property(dev->of_node, "hid-descr-preset", &
 	pdata->hid_report_descriptor = (u8*)of_get_property(dev->of_node, "hid-report-descr-preset", &(pdata->hid_report_descriptor_len));
 	if (!pdata->hid_report_descriptor || !pdata->hid_descriptor) {
 		pdata->preset_descriptors = false;
-		dev_printk(KERN_DEBUG, &client->dev, "Preset HID info not found\n");
 		return 0;
 	} else {
 		pdata->preset_descriptors = true;
-		dev_printk(KERN_DEBUG, &client->dev, "Preset HID Descriptor: %*ph\n", pdata->hid_descriptor_len, pdata->hid_descriptor);
-		dev_printk(KERN_DEBUG, &client->dev, "Preset HID Report Descriptor: %*ph\n", pdata->hid_report_descriptor_len, pdata->hid_report_descriptor);
 	}
 	
 	return 0;
@@ -2055,9 +2041,6 @@ static int i2c_hid_suspend(struct device *dev)
 		wake_status = enable_irq_wake(client->irq);
 		if (!wake_status)
 			ihid->irq_wake_enabled = true;
-		else
-			hid_warn(hid, "Failed to enable irq wake: %d\n",
-				wake_status);
 	}
 
 	return 0;
@@ -2078,9 +2061,6 @@ static int i2c_hid_resume(struct device *dev)
 		wake_status = disable_irq_wake(client->irq);
 		if (!wake_status)
 			ihid->irq_wake_enabled = false;
-		else
-			hid_warn(hid, "Failed to disable irq wake: %d\n",
-				wake_status);
 	}
 
 	/* We'll resume to full power */
