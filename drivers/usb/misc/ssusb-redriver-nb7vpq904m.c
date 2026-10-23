@@ -14,6 +14,7 @@
 #include <linux/uaccess.h>
 #include <linux/regmap.h>
 #include <linux/ctype.h>
+#include <linux/seq_file.h>
 
 /* PS5169 sequences, stock Image-b .data; starts = the addresses stock
  * gen_dev_set/probe actually dereference. Entry = {reg, val, delay_ms}:
@@ -137,7 +138,7 @@ static const u8 ps5169_USB_AND_DP_remove_seq[] = {
 
 /* Registers Address */
 
-#define REDRIVER_REG_MAX		0x1f
+#define REDRIVER_REG_MAX		0xff
 
 
 
@@ -190,7 +191,8 @@ enum operation_mode {
  * @id_nb: used for id event reception
  * @dp_nb: used for DP event reception
  * @panic_nb: used for panic event reception
- * @debug_root: debugfs entry for this context
+ * @id_1..@revision_2: chip-id echo bytes
+ * @dbg_dentry: single 8-byte slot at +0xe0 (stock original name unknown)
  */
 struct ssusb_redriver {
 	struct device		*dev;
@@ -214,12 +216,36 @@ struct ssusb_redriver {
 	struct notifier_block	dp_nb;
 
 	struct notifier_block	panic_nb;
-
-
-
-
-	struct dentry	*debug_root;
+	u8			id_1;
+	u8			id_2;
+	u8			revision_1;
+	u8			revision_2;
+	struct dentry		*dbg_dentry;
 };
+
+_Static_assert(offsetof(struct ssusb_redriver, dev)               == 0x00, "dev");
+_Static_assert(offsetof(struct ssusb_redriver, regmap)            == 0x08, "regmap");
+_Static_assert(offsetof(struct ssusb_redriver, client)            == 0x10, "client");
+_Static_assert(offsetof(struct ssusb_redriver, config_work)       == 0x18, "config_work");
+_Static_assert(offsetof(struct ssusb_redriver, redriver_wq)       == 0x48, "redriver_wq");
+_Static_assert(offsetof(struct ssusb_redriver, usb_psy)           == 0x50, "usb_psy");
+_Static_assert(offsetof(struct ssusb_redriver, host_active)       == 0x58, "host_active");
+_Static_assert(offsetof(struct ssusb_redriver, vbus_active)       == 0x59, "vbus_active");
+_Static_assert(offsetof(struct ssusb_redriver, is_usb3)           == 0x5a, "is_usb3");
+_Static_assert(offsetof(struct ssusb_redriver, typec_orientation) == 0x5c, "typec_orientation");
+_Static_assert(offsetof(struct ssusb_redriver, op_mode)           == 0x60, "op_mode");
+_Static_assert(offsetof(struct ssusb_redriver, extcon_usb)        == 0x68, "extcon_usb");
+_Static_assert(offsetof(struct ssusb_redriver, extcon_dp)         == 0x70, "extcon_dp");
+_Static_assert(offsetof(struct ssusb_redriver, vbus_nb)           == 0x78, "vbus_nb");
+_Static_assert(offsetof(struct ssusb_redriver, id_nb)             == 0x90, "id_nb");
+_Static_assert(offsetof(struct ssusb_redriver, dp_nb)             == 0xa8, "dp_nb");
+_Static_assert(offsetof(struct ssusb_redriver, panic_nb)          == 0xc0, "panic_nb");
+_Static_assert(offsetof(struct ssusb_redriver, id_1)              == 0xd8, "id_1");
+_Static_assert(offsetof(struct ssusb_redriver, id_2)              == 0xd9, "id_2");
+_Static_assert(offsetof(struct ssusb_redriver, revision_1)        == 0xda, "revision_1");
+_Static_assert(offsetof(struct ssusb_redriver, revision_2)        == 0xdb, "revision_2");
+_Static_assert(offsetof(struct ssusb_redriver, dbg_dentry)        == 0xe0, "dbg_dentry");
+_Static_assert(sizeof(struct ssusb_redriver)                      == 0xe8, "sizeof");
 /* Apply one stock sequence table. delay_ms != 0 -> msleep(delay), no
  * register write (stock probe loop 0xffffff8008a79018: ldrb delay; cbnz
  * -> msleep; else regmap_write(reg,val)). Returns the first regmap error
@@ -260,7 +286,107 @@ static int ps5169_apply_seq(struct ssusb_redriver *redriver,
 }
 
 
-static void ssusb_redriver_debugfs_entries(struct ssusb_redriver *redriver);
+static int redriver_i2c_reg_get(struct ssusb_redriver *redriver,
+				u8 reg, u8 *val)
+{
+	unsigned int tmp;
+	int ret;
+
+	ret = regmap_read(redriver->regmap, reg, &tmp);
+	if (ret < 0) {
+		dev_err(redriver->dev, "reading reg 0x%02x failure\n", reg);
+		return ret;
+	}
+
+	*val = (u8)tmp;
+	return 0;
+}
+
+static int redriver_i2c_reg_set(struct ssusb_redriver *redriver,
+				u8 reg, u8 val)
+{
+	int ret;
+
+	ret = regmap_write(redriver->regmap, reg, val);
+	if (ret < 0)
+		dev_err(redriver->dev, "writing reg 0x%02x failure\n", reg);
+
+	return ret;
+}
+
+static const int dump_reg_list[] = {
+	0x40, 0xa0, 0xa1, 0x52, 0x5e, 0x5c,
+	0x20, 0x21, 0x22, 0x23, 0x24, 0x25,
+	0x50, 0x5d, 0x54, 0x51, 0x77, 0x78,
+	0xac, 0xad, 0xae, 0xaf,
+};
+
+static int dump_register_show(struct seq_file *s, void *unused)
+{
+	struct ssusb_redriver *redriver = s->private;
+	u8 val;
+	int i, ret;
+
+	for (i = 0; i < ARRAY_SIZE(dump_reg_list); i++) {
+		ret = redriver_i2c_reg_get(redriver, dump_reg_list[i], &val);
+		if (ret < 0)
+			seq_printf(s, "0x%02x = ERR\n", dump_reg_list[i]);
+		else
+			seq_printf(s, "0x%02x = 0x%02x\n",
+				   dump_reg_list[i], val);
+	}
+	return 0;
+}
+
+static int dump_register_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dump_register_show, inode->i_private);
+}
+
+static const struct file_operations dump_register_ops = {
+	.open = dump_register_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int update_register_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, NULL, inode->i_private);
+}
+
+static ssize_t update_register_write(struct file *file,
+				     const char __user *ubuf,
+				     size_t count, loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct ssusb_redriver *redriver = s->private;
+	char buf[40];
+	unsigned int reg, val;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = 0;
+
+	if (sscanf(buf, "0x%x=0x%x", &reg, &val) != 2)
+		return -EINVAL;
+	if (reg > REDRIVER_REG_MAX || val > 0xff)
+		return -EINVAL;
+	if (redriver_i2c_reg_set(redriver, reg, val) < 0)
+		return -EIO;
+
+	return count;
+}
+
+static const struct file_operations update_register_ops = {
+	.open = update_register_open,
+	.write = update_register_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 
 /**
  * Handle Re-driver chip operation mode and channel settings.
@@ -613,11 +739,8 @@ static int ssusb_redriver_panic_notifier(struct notifier_block *this,
 	return NOTIFY_OK;
 }
 
-/* TASK-081 D85 (Round3 audit 1.13.5): stock ships this same ssusb-redriver
- * source rebuilt for the HQ PS5169 redriver (stock match_table@0x980c348
- * claims hq_redriver,ps5169, and ten config sequence tables live in
- * stock .data). The onnn,NB7VPQ904M DT path below is kept unchanged;
- * PS5169 devices get the stock hard-coded sequences instead. */
+/* TASK-081 D85: the PS5169 sequence tables are the stock Lenovo
+ * programming tables for the hq_redriver,ps5169 device. */
 static const struct regmap_config redriver_regmap = {
 	.max_register = REDRIVER_REG_MAX,
 	.reg_bits = 8,
@@ -629,6 +752,8 @@ static int redriver_i2c_probe(struct i2c_client *client,
 {
 	struct ssusb_redriver *redriver;
 	union power_supply_propval pval = {0};
+	static const u8 echo_regs[4] = { 0xad, 0xac, 0xae, 0xaf };
+	unsigned int k;
 	int ret;
 
 	redriver = devm_kzalloc(&client->dev, sizeof(struct ssusb_redriver),
@@ -666,10 +791,6 @@ static int redriver_i2c_probe(struct i2c_client *client,
 	 * 0x8a78efc-0x8a78f98: read the four config echoes
 	 * 0xad/0xac/0xae/0xaf, then apply the 28-entry
 	 * ps5169_default_seq. */
-	static const u8 echo_regs[4] = { 0xad, 0xac, 0xae, 0xaf };
-	u8 echo[4];
-	unsigned int k;
-
 	for (k = 0; k < 4; k++) {
 		unsigned int val_tmp;
 
@@ -681,7 +802,21 @@ static int redriver_i2c_probe(struct i2c_client *client,
 				echo_regs[k]);
 			break;
 		}
-		echo[k] = (u8)val_tmp;
+
+		switch (k) {
+		case 0:
+			redriver->id_1 = (u8)val_tmp;
+			break;
+		case 1:
+			redriver->id_2 = (u8)val_tmp;
+			break;
+		case 2:
+			redriver->revision_1 = (u8)val_tmp;
+			break;
+		case 3:
+			redriver->revision_2 = (u8)val_tmp;
+			break;
+		}
 	}
 	if (ret < 0) {
 		/* Stock forces -EINVAL regardless of the i2c error
@@ -693,7 +828,8 @@ static int redriver_i2c_probe(struct i2c_client *client,
 	}
 	dev_err(redriver->dev,
 		"get chip id: id_1 = 0x%02x, id_2 = 0x%02x, revision_1 = 0x%02x, revision_2 = 0x%02x\n",
-		echo[0], echo[1], echo[2], echo[3]);
+		redriver->id_1, redriver->id_2,
+		redriver->revision_1, redriver->revision_2);
 	redriver_exist = true;
 
 	redriver->host_active = false;
@@ -734,7 +870,18 @@ static int redriver_i2c_probe(struct i2c_client *client,
 	atomic_notifier_chain_register(&panic_notifier_list,
 			&redriver->panic_nb);
 
-	ssusb_redriver_debugfs_entries(redriver);
+	redriver->dbg_dentry = debugfs_create_file("dump_register", 0600,
+						  NULL, redriver,
+						  &dump_register_ops);
+	if (IS_ERR(redriver->dbg_dentry))
+		dev_warn(&client->dev,
+			 "Couldn't create dump_register file\n");
+
+	if (IS_ERR(debugfs_create_file("update_register", 0600, NULL,
+				       redriver, &update_register_ops)))
+		dev_warn(&client->dev,
+			 "Couldn't create update_register file\n");
+
 	dev_dbg(&client->dev, "USB 3.1 Gen1/Gen2 Re-Driver Probed.\n");
 
 	return 0;
@@ -767,17 +914,6 @@ static int redriver_i2c_remove(struct i2c_client *client)
 	destroy_workqueue(redriver->redriver_wq);
 
 	return 0;
-}
-
-static void ssusb_redriver_debugfs_entries(
-		struct ssusb_redriver *redriver)
-{
-	redriver->debug_root = debugfs_create_dir("ssusb_redriver", NULL);
-	if (!redriver->debug_root) {
-		dev_warn(redriver->dev, "Couldn't create debug dir\n");
-		return;
-	}
-
 }
 
 static int __maybe_unused redriver_i2c_suspend(struct device *dev)
