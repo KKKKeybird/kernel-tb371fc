@@ -43,6 +43,8 @@
 
 #define HUAQIN_MISC_NAME	"misc"
 
+long hq_emmcinfo(char *buf);
+
 
 enum misc_id{
 	MISC_EMMC_SIZE = 0,

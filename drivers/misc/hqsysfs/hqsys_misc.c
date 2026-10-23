@@ -59,6 +59,59 @@ static struct attribute *hq_misc_attrs[] = {
 
 #define SN_LEN 12
 
+noinline long hq_emmcinfo(char *buf)
+{
+	struct file *pfile = NULL;
+	mm_segment_t old_fs;
+	loff_t pos = 0;
+	ssize_t ret;
+	u32 size;
+	char sizebuf[16] = {0};
+	int count;
+
+	pfile = filp_open(qcom_emmc, O_RDONLY, 0);
+	if (IS_ERR(pfile))
+		return -1;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	ret = vfs_read(pfile, sizebuf, qcom_emmc_len, &pos);
+	filp_close(pfile, NULL);
+	set_fs(old_fs);
+	if (ret < 1)
+		return -1;
+
+	size = (u32)(simple_strtoull(sizebuf, NULL, 0) >> 1);
+	if (size > 0x400003ff)
+		count = 128;
+	else if (size > 0x200003ff)
+		count = 64;
+	else if (size > 0x10003ff)
+		count = 32;
+	else if (size > 0x8003ff)
+		count = 16;
+	else if (size > 0x6003ff)
+		count = 8;
+	else if (size > 0x4003ff)
+		count = 6;
+	else if (size > 0x3003ff)
+		count = 4;
+	else if (size > 0x2003ff)
+		count = 3;
+	else if (size > 0x1003ff)
+		count = 2;
+	else if (size > 0xe03ff)
+		count = 1;
+	else if (size > 0xa03ff)
+		return sprintf(buf, "%dMB", 512);
+	else if (size > 0x803ff)
+		return sprintf(buf, "%dMB", 256);
+	else
+		return sprintf(buf, "%dMB", 0);
+
+	return sprintf(buf, "%dGB", count);
+}
+
 static ssize_t hq_misc_show(struct kobject *kobj, struct attribute *a, char *buf)
 {
 	ssize_t count = 0;
@@ -78,12 +131,10 @@ static ssize_t hq_misc_show(struct kobject *kobj, struct attribute *a, char *buf
 		break;
 	}
 	case MISC_EMMC_SIZE:
-		/* 骁龙870 使用UFS，此节点不实现，返回0 */
-		count = sprintf(buf, "0GB\n");
+		count = hq_emmcinfo(buf);
 		break;
 	case MISC_OTP_SN:
-		/* 骁龙平台OTP SN读取需要厂商私有接口，默认返回未实现 */
-		count = sprintf(buf, "SN not implemented on QCOM\n");
+		count = sprintf(buf, "SN in OTP not enabled\n");
 		break;
 	default:
 		count = sprintf(buf, "Not support");
