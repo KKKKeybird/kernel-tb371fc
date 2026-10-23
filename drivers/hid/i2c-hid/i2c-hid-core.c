@@ -1487,11 +1487,7 @@ static inline int i2c_hid_of_probe(struct i2c_client *client,
 static void i2c_hid_fwnode_probe(struct i2c_client *client,
 				 struct i2c_hid_platform_data *pdata)
 {
-	u32 val;
-
-	if (!device_property_read_u32(&client->dev, "post-power-on-delay-ms",
-				      &val))
-		pdata->post_power_delay_ms = val;
+	/* Stock does not consume post-power-on-delay-ms from DT. */
 }
 
 /* Stock register_kb_wakeup_devices @0xffffff8008cb18c8. */
