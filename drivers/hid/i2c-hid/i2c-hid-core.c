@@ -698,9 +698,10 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	}
 
 	ret_size = ihid->inbuf[0] | ihid->inbuf[1] << 8;
+	/* Stock special-key/hidinput gate covers only the three spinel
+	 * V04/P12 combos below; 0x17ef/0x6127 is not in the stock gate. */
 	lenovo_kb = (ihid->hid->vendor == 0x17ef &&
-		     (ihid->hid->product == 0x6127 ||
-		      ihid->hid->product == 0x6175)) ||
+		     ihid->hid->product == 0x6175) ||
 		    (ihid->hid->vendor == 0x04f3 &&
 		     ihid->hid->product == 0x31a8) ||
 		    (ihid->hid->vendor == 0x32cd &&
@@ -815,19 +816,30 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			printk("hid-keyboard,%s,kb_report_power_key\n", __func__);
 			kb_report_power_key();
 		}
-	}
-
-	/* stock 0x8cb3d6c..0x8cb3da8: manage hidinput registration from
-	 * device_keyboard->status and online, not from a PID-specific global. */
-	if (lenovo_kb && device_keyboard) {
-		if (device_keyboard->status) {
-			if (device_keyboard->online == 0) {
-				hidinput_disconnect(ihid->hid);
-				device_keyboard->status = 0;
+		/* stock 0x8cb3d6c..0x8cb3da8: manage hidinput registration
+		 * only for 0x06 status frames, from device_keyboard->status
+		 * and online, not from a PID-specific global. */
+		if (lenovo_kb && device_keyboard) {
+			if (device_keyboard->status) {
+				if (device_keyboard->online == 0) {
+					hidinput_disconnect(ihid->hid);
+					device_keyboard->status = 0;
+				}
+			} else if (device_keyboard->online == 1) {
+				if (hidinput_connect(ihid->hid, 0) == 0)
+					device_keyboard->status = 1;
 			}
-		} else if (device_keyboard->online == 1) {
-			if (hidinput_connect(ihid->hid, 0) == 0)
-				device_keyboard->status = 1;
+		}
+
+		{
+			u16 adc_value = ihid->inbuf[7] |
+					(ihid->inbuf[8] << 8);
+
+			printk("hid-keyboard,%s,adc_value=0x%x,device_keyboard->kb_connect_status=%d,kb_hall=%d,input_registered=%d\n",
+				"i2c_hid_irq", adc_value,
+				device_keyboard ? device_keyboard->online : 0,
+				device_keyboard ? device_keyboard->hall : 0,
+				device_keyboard ? device_keyboard->status : 0);
 		}
 	}
 
@@ -836,20 +848,22 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	 * the frame's normal identity/report continuation. */
 	if (ihid->inbuf[2] == 0x07 && kb_input_dev)
 		printk("hid-keyboard,%s,0x07,input_report_key:[%d].\n",
-		       "i2c_hid_irq", ihid->inbuf[3]);
+			"i2c_hid_irq", ihid->inbuf[3]);
 	if (ihid->inbuf[2] == 0x07 && !kb_input_dev)
 		printk("hid-keyboard,%s,kb_input_dev is NULL", __func__);
 
-	if (lenovo_kb) {
-		if (!test_bit(I2C_HID_STARTED, &ihid->flags))
-			return;
-		if (!device_keyboard || device_keyboard->online != 1)
-			return;
-		if (ihid->inbuf[2] == 0x05) {
+	if (ihid->inbuf[2] != 0x06 && ihid->inbuf[2] != 0x07) {
+		if (lenovo_kb) {
 			printk("hid-keyboard,%s,v02 v03 v04 spinel,special key\n",
-			       "i2c_hid_irq");
-			if (handle_special_key_frame(ihid))
-				return;
+				"i2c_hid_irq");
+			if (ihid->inbuf[2] == 0x05 &&
+				test_bit(I2C_HID_STARTED, &ihid->flags) &&
+				device_keyboard && device_keyboard->online == 1) {
+				if (handle_special_key_frame(ihid))
+					return;
+			}
+		} else {
+			printk("hid-keyboard,%s,other FW\n", "i2c_hid_irq");
 		}
 	}
 
@@ -892,7 +906,7 @@ static void i2c_hid_find_max_report(struct hid_device *hid, unsigned int type,
 	list_for_each_entry(report, &hid->report_enum[type].report_list, list) {
 		size = i2c_hid_get_report_length(report);
 		if (*max < size)
-			*max = size;
+			 *max = size;
 	}
 }
 
@@ -1281,47 +1295,85 @@ static int i2c_hid_fetch_hid_descriptor(struct i2c_hid *ihid)
 	struct i2c_hid_desc *hdesc = &ihid->hdesc;
 	unsigned int dsize;
 	int ret;
+	int retry;
 
 	/* i2c hid fetch using a fixed descriptor size (30 bytes) */
 	if (i2c_hid_get_dmi_i2c_hid_desc_override(client->name)) {
 		i2c_hid_dbg(ihid, "Using a HID descriptor override\n");
 		ihid->hdesc =
-			*i2c_hid_get_dmi_i2c_hid_desc_override(client->name);
-	} else {
-		i2c_hid_dbg(ihid, "Fetching the HID descriptor\n");
+			 *i2c_hid_get_dmi_i2c_hid_desc_override(client->name);
+		goto validate;
+	}
+
+	/* Stock probe fetches and validates the 30-byte descriptor in a
+	 * three-attempt loop with a 15 ms backoff. */
+	for (retry = 0; retry < 3; retry++) {
+		printk("hid-keyboard,%s,1 i2c_wait=%d\n",
+			"i2c_hid_probe", retry);
+		ret = i2c_smbus_read_byte(client);
+		if (ret < 0)
+			printk("hid-keyboard,%s,nothing at this address.\n",
+				"i2c_hid_probe");
+		printk("hid-keyboard,%s,2 i2c_wait=%d\n",
+			"i2c_hid_probe", retry);
+		printk("hid-keyboard,%s\n", "i2c_hid_fetch_hid_descriptor");
+		printk("hid-keyboard,%s,Fetching the HID descriptor\n",
+			"i2c_hid_fetch_hid_descriptor");
 		ret = i2c_hid_command(client, &hid_descr_cmd,
-				      ihid->hdesc_buffer,
-				      sizeof(struct i2c_hid_desc));
+					ihid->hdesc_buffer,
+					sizeof(struct i2c_hid_desc));
 		if (ret) {
 			dev_err(&client->dev, "hid_descr_cmd failed\n");
-			return -ENODEV;
+			msleep(15);
+			continue;
 		}
+		if (le16_to_cpu(hdesc->bcdVersion) != 0x0100) {
+			printk("hid-keyboard,%s,unexpected HID descriptor bcdVersion (0x%04hx)\n",
+				"i2c_hid_fetch_hid_descriptor",
+				le16_to_cpu(hdesc->bcdVersion));
+			msleep(15);
+			continue;
+		}
+		dsize = le16_to_cpu(hdesc->wHIDDescLength);
+		if (dsize != sizeof(struct i2c_hid_desc)) {
+			printk("hid-keyboard,%s,weird size of HID descriptor (%u)\n",
+				"i2c_hid_fetch_hid_descriptor", dsize);
+			msleep(15);
+			continue;
+		}
+		printk("hid-keyboard,%s,dsize=%d,HID Descriptor: %*ph\n",
+			"i2c_hid_fetch_hid_descriptor", dsize, dsize,
+			ihid->hdesc_buffer);
+		printk("hid-keyboard,%s,i2c success,retry count is:%d\n",
+			"i2c_hid_probe", retry);
+		return 0;
 	}
+	printk("hid-keyboard,%s,i2c error,retry count is:%d\n",
+		"i2c_hid_probe", retry);
+	return -ENXIO;
 
-if (ihid->pdata.preset_descriptors && le16_to_cpu(hdesc->wHIDDescLength) != 0x001E) {
+validate:
+	if (ihid->pdata.preset_descriptors &&
+		le16_to_cpu(hdesc->wHIDDescLength) != 0x001E) {
 		dev_err(&client->dev, "Wrong HID descriptor, will use preset\n");
-		memcpy(ihid->hdesc_buffer, ihid->pdata.hid_descriptor, ihid->pdata.hid_descriptor_len);
+		memcpy(ihid->hdesc_buffer, ihid->pdata.hid_descriptor,
+			ihid->pdata.hid_descriptor_len);
 	}
-	/* Validate the length of HID descriptor, the 4 first bytes:
-	 * bytes 0-1 -> length
-	 * bytes 2-3 -> bcdVersion (has to be 1.00) */
-	/* check bcdVersion == 1.0 */
 	if (le16_to_cpu(hdesc->bcdVersion) != 0x0100) {
 		printk("hid-keyboard,%s,unexpected HID descriptor bcdVersion (0x%04hx)\n",
-		       "i2c_hid_fetch_hid_descriptor",
-		       le16_to_cpu(hdesc->bcdVersion));
+			"i2c_hid_fetch_hid_descriptor",
+			le16_to_cpu(hdesc->bcdVersion));
 		return -ENODEV;
 	}
-
-	/* Descriptor length should be 30 bytes as per the specification */
 	dsize = le16_to_cpu(hdesc->wHIDDescLength);
 	if (dsize != sizeof(struct i2c_hid_desc)) {
 		printk("hid-keyboard,%s,weird size of HID descriptor (%u)\n",
-		       "i2c_hid_fetch_hid_descriptor", dsize);
+			"i2c_hid_fetch_hid_descriptor", dsize);
 		return -ENODEV;
 	}
 	printk("hid-keyboard,%s,dsize=%d,HID Descriptor: %*ph\n",
-	       "i2c_hid_fetch_hid_descriptor", dsize, dsize, ihid->hdesc_buffer);
+		"i2c_hid_fetch_hid_descriptor", dsize, dsize,
+		ihid->hdesc_buffer);
 	return 0;
 }
 
@@ -1540,7 +1592,7 @@ static bool update_special_key(int key, bool pressed, bool *state)
 	if (*state == pressed)
 		return false;
 	report_special_key(key, pressed ? 1 : 0);
-	*state = pressed;
+	 *state = pressed;
 	return true;
 }
 
@@ -1662,9 +1714,11 @@ static int i2c_enable_mcu(struct i2c_client *client, struct i2c_hid *ihid)
 		int rst_value = gpiod_get_raw_value(gpio_to_desc(mcu_rst_gpio));
 		int resume_value = gpiod_get_raw_value(gpio_to_desc(mcu_resume_gpio));
 
+		printk("hid-keyboard,%s,after setting: MCU_HWRESET_PIN=%d,MCU_WAKEUP_PIN=%d\n",
+			"i2c_enable_mcu", rst_value, resume_value);
 		printk("hid-keyboard,%s,mcu_rst_gpio=%d,mcu_resume_gpio=%d,post_power_delay_ms=%d\n",
-		       "i2c_enable_mcu", mcu_rst_gpio, mcu_resume_gpio,
-		       ihid->pdata.post_power_delay_ms);
+			"i2c_enable_mcu", mcu_rst_gpio, mcu_resume_gpio,
+			ihid->pdata.post_power_delay_ms);
 	}
 	return 0;
 }
@@ -1762,15 +1816,6 @@ static int i2c_hid_probe(struct i2c_client *client,
 	pm_runtime_enable(&client->dev);
 	device_enable_async_suspend(&client->dev);
 
-	/* Make sure there is something at this address */
-	ret = i2c_smbus_read_byte(client);
-	if (ret < 0) {
-		printk("hid-keyboard,%s,nothing at this address.\n", "i2c_hid_probe");
-		ret = -ENXIO;
-		goto err_pm;
-	}
-
-	printk("hid-keyboard,%s,Fetching the HID descriptor\n", "i2c_hid_probe");
 	ret = i2c_hid_fetch_hid_descriptor(ihid);
 	if (ret < 0)
 		goto err_pm;
@@ -1779,14 +1824,16 @@ static int i2c_hid_probe(struct i2c_client *client,
 	    mcu_rst_gpio >= 0) {
 		if (!kb_status_kobj) {
 			kb_status_kobj = kobject_create_and_add("kb_status", NULL);
+			printk("hid-keyboard,%s,kobject_status=%d\n",
+				"creat_kb_status_node",
+				(int)(unsigned long)kb_status_kobj);
 			if (!kb_status_kobj) {
 				printk("hid-keyboard,%s,failed to create kb_status\n",
-				       "i2c_hid_probe");
+					"creat_kb_status_node");
 			} else if (sysfs_create_group(kb_status_kobj,
 					&kb_sys_attr_group)) {
-				dev_err(&client->dev, "failed to create kb_status\n");
-				kobject_put(kb_status_kobj);
-				kb_status_kobj = NULL;
+				printk("hid-keyboard,%s,failed to create kb_status\n",
+					"creat_kb_status_node");
 			}
 		}
 	}
@@ -2111,9 +2158,9 @@ noinline int kb_i2c_resume(void)
 	       "kb_i2c_resume");
 
 	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_resume_gpio), 1);
-        if(ret) {
-                return ret;
-        }
+		if(ret) {
+				return ret;
+		}
 
 	ret = i2c_hid_set_power(g_client, I2C_HID_PWR_ON);
 	if (ret) {
