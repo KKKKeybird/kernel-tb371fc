@@ -1938,7 +1938,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 	 * it in charger mode. */
 	ldo_keyboard = regulator_get(&hid->dev, "pm8150a_l10");
 	if (IS_ERR(ldo_keyboard)) {
-		printk("hid-keyboard,%s,could not get pm8150a_l10, rc = %ld\n",
+		printk(KERN_ERR "hid-keyboard,%s,could not get pm8150a_l10, rc = %ld\n",
 		       "i2c_hid_probe", PTR_ERR(ldo_keyboard));
 		ret = -ENODEV;
 		goto err_irq;
