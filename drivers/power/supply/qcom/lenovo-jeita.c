@@ -337,9 +337,9 @@ reschedule:
 static int get_val(struct range_data *range, int rise_hys, int fall_hys,
 		int current_index, int threshold, int *new_index, int *val)
 {
-	int i;
+	int i, last_nonempty = -EINVAL;
 
-	/* W1p (C104, stock 0x8bd2dc8..0x8bd30e8): full stock semantics.
+	/* W1p-2 (C104, stock 0x8bd2dc8..0x8bd30e8): full stock semantics.
 	 * Entry only sets *new_index; *val is left to the caller's initial
 	 * value and written on hit. */
 	*new_index = -EINVAL;
@@ -348,11 +348,15 @@ static int get_val(struct range_data *range, int rise_hys, int fall_hys,
 	if (threshold < range[0].low_threshold)
 		return -ENODATA;
 
-	/* stock: an empty segment (low|high == 0) fails the lookup; a
-	 * segment not containing the threshold falls through to the next */
+	/* stock: first empty segment terminates the lookup; later empty
+	 * segments are skipped while the continuous table is scanned. */
+	if (!(range[0].low_threshold | range[0].high_threshold))
+		return -ENODATA;
+
 	for (i = 0; i < JEITA_STEP; i++) {
 		if (!(range[i].low_threshold | range[i].high_threshold))
 			continue;
+		last_nonempty = i;
 		if (is_between(range[i].low_threshold,
 				range[i].high_threshold, threshold)) {
 			*new_index = i;
@@ -360,15 +364,23 @@ static int get_val(struct range_data *range, int rise_hys, int fall_hys,
 			break;
 		}
 	}
-	if (*new_index == -EINVAL)
-		return -ENODATA;
+	if (*new_index == -EINVAL) {
+		/* stock clamps a threshold above the last non-empty segment. */
+		if (last_nonempty >= 0 &&
+		    threshold > range[last_nonempty].high_threshold) {
+			*new_index = last_nonempty;
+			*val = range[last_nonempty].value;
+		} else {
+			return -ENODATA;
+		}
+	}
 
 	/* stock 0x8bd2ea0..0x8bd2ea8: no current index yet -> keep lookup */
 	if (current_index == -EINVAL)
 		return 0;
 
-	/* stock hysteresis 0x8bd2eb0..0x8bd2f14, including the else branch
-	 * (new outside current+/-1 also falls back to current) */
+	/* stock hysteresis 0x8bd2eb0..0x8bd2f14: only adjacent transitions
+	 * are subject to hysteresis; a larger jump keeps the new index/value. */
 	if (*new_index == current_index + 1) {
 		if (threshold <
 			(range[*new_index].low_threshold + rise_hys)) {
@@ -381,9 +393,6 @@ static int get_val(struct range_data *range, int rise_hys, int fall_hys,
 			*new_index = current_index;
 			*val = range[current_index].value;
 		}
-	} else {
-		*new_index = current_index;
-		*val = range[current_index].value;
 	}
 	return 0;
 }
