@@ -616,8 +616,7 @@ static int i2c_hid_set_power(struct i2c_client *client, int power_state)
 		if (!ret)
 			break;
 		if (retry == 0)
-			dev_err(&client->dev,
-				"failed to change power setting,then retry\n");
+			printk("failed to change power setting,then retry\n");
 		if (retry < 3)
 			msleep(10);
 	}
@@ -627,8 +626,7 @@ static int i2c_hid_set_power(struct i2c_client *client, int power_state)
 		msleep(10);
 		gpiod_set_raw_value(gpio_to_desc(mcu_rst_gpio), 1);
 		msleep(10);
-		dev_err(&client->dev,
-			"failed to change power setting retry 3 times,set reset pin to 1.\n");
+		printk("failed to change power setting retry 3 times,set reset pin to 1.\n");
 	}
 
 	if (ihid->quirks & I2C_HID_QUIRK_DELAY_AFTER_SLEEP &&
@@ -674,7 +672,7 @@ static int i2c_hid_hwreset(struct i2c_client *client)
 
 	ret = i2c_hid_command(client, &hid_reset_cmd, NULL, 0);
 	if (ret) {
-		dev_err(&client->dev, "failed to reset device.\n");
+		printk("failed to reset device.\n");
 		i2c_hid_set_power(client, I2C_HID_PWR_SLEEP);
 	}
 
@@ -831,8 +829,7 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 		/* stock i2c_hid_irq 0xffffff8008cb3cdc-d8: inject the soft power
 		 * key when the frame reports online==1 and g_screen_on==0. */
 		if (kb_connect == 1 && !g_screen_on) {
-			dev_err(&ihid->client->dev,
-				"hid-keyboard,%s,kb_report_power_key\n", __func__);
+			printk("hid-keyboard,%s,kb_report_power_key\n", __func__);
 			kb_report_power_key();
 		}
 	}
@@ -858,7 +855,7 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 		printk("hid-keyboard,%s,0x07,input_report_key:[%d].\n",
 		       "i2c_hid_irq", ihid->inbuf[3]);
 	if (ihid->inbuf[2] == 0x07 && !kb_input_dev)
-		pr_err("hid-keyboard,%s,kb_input_dev is NULL", __func__);
+		printk("hid-keyboard,%s,kb_input_dev is NULL", __func__);
 
 	if (lenovo_kb) {
 		if (!test_bit(I2C_HID_STARTED, &ihid->flags))
@@ -1070,11 +1067,11 @@ static int i2c_hid_parse(struct hid_device *hid)
 
 	/* Stock prints unconditionally (Image-b 0x8cb1e98:
 	 * "hid-keyboard,=== %s ====", %s = "i2c_hid_parse"). */
-	pr_info("hid-keyboard,=== %s ====\n", "i2c_hid_parse");
+	printk("hid-keyboard,=== %s ====\n", "i2c_hid_parse");
 
 	rsize = le16_to_cpu(hdesc->wReportDescLength);
 	if (!rsize || rsize > HID_MAX_DESCRIPTOR_SIZE) {
-		pr_info("hid-keyboard,%s,weird size of report descriptor (%u)\n",
+		printk("hid-keyboard,%s,weird size of report descriptor (%u)\n",
 			"i2c_hid_parse", rsize);
 		return -EINVAL;
 	}
@@ -1092,9 +1089,9 @@ static int i2c_hid_parse(struct hid_device *hid)
 	 * (0x8cb1f34).
 	 */
 	for (;;) {
-		pr_info("hid-keyboard,%s\n", "i2c_hid_hwreset");
+		printk("hid-keyboard,%s\n", "i2c_hid_hwreset");
 		if (!g_screen_on) {
-			pr_info("hid-keyboard,%s,screen is off didn't reset\n",
+			printk("hid-keyboard,%s,screen is off didn't reset\n",
 				"i2c_hid_hwreset");
 			break;
 		}
@@ -1110,7 +1107,7 @@ static int i2c_hid_parse(struct hid_device *hid)
 		}
 
 		usleep_range(1000, 5000);
-		pr_info("hid-keyboard,%s,resetting...\n", "i2c_hid_hwreset");
+		printk("hid-keyboard,%s,resetting...\n", "i2c_hid_hwreset");
 		ret = __i2c_hid_command(client, &hid_reset_cmd, 0, 0,
 					NULL, 0, NULL, 0);
 		if (!ret) {
@@ -1118,7 +1115,7 @@ static int i2c_hid_parse(struct hid_device *hid)
 			break;
 		}
 
-		pr_info("hid-keyboard,%s,failed to reset device.\n",
+		printk("hid-keyboard,%s,failed to reset device.\n",
 			"i2c_hid_hwreset");
 		kb_i2c_suspend();
 		mutex_unlock(&ihid->reset_lock);
@@ -1141,7 +1138,7 @@ static int i2c_hid_parse(struct hid_device *hid)
 			return -ENOMEM;
 		}
 
-		pr_info("hid-keyboard,%s,asking HID report descriptor\n",
+		printk("hid-keyboard,%s,asking HID report descriptor\n",
 			"i2c_hid_parse");
 
 		ret = i2c_hid_command(client, &hid_report_descr_cmd,
@@ -1423,8 +1420,7 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 	/* TB371FC magnetic keyboard MCU reset/wake pins. */
 	ret = of_get_named_gpio_flags(dev->of_node, "mcu_rst_gpio", 0, NULL);
 	if (ret < 0) {
-		dev_err(&client->dev,
-			"hid-keyboard,%s,Not support MCU HW reset pin\n", __func__);
+		printk("hid-keyboard,%s,Not support MCU HW reset pin\n", __func__);
 		return -ENODEV;
 	}
 	mcu_rst_gpio = ret;
@@ -1437,8 +1433,7 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 	ret = of_get_named_gpio_flags(dev->of_node, "mcu_resume_gpio", 0,
 				      NULL);
 	if (ret < 0) {
-		dev_err(&client->dev,
-			"hid-keyboard,%s,Not support MCU wake_sleep pin\n", __func__);
+		printk("hid-keyboard,%s,Not support MCU wake_sleep pin\n", __func__);
 		return -ENODEV;
 	}
 	mcu_resume_gpio = ret;
@@ -1446,11 +1441,11 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 	
 	ret = of_property_read_u32(dev->of_node, "hid-descr-addr", &val);
 	if (ret) {
-		dev_err(&client->dev, "HID register address not provided\n");
+		printk("HID register address not provided\n");
 		return -ENODEV;
 	}
 	if (val >> 16) {
-		dev_err(&client->dev, "Bad HID register address: 0x%08x\n",
+		printk("Bad HID register address: 0x%08x\n",
 			val);
 		return -EINVAL;
 	}
@@ -2122,7 +2117,7 @@ noinline int kb_i2c_resume(void)
 {
 	int ret = 0;
 
-	pr_info("hid-keyboard,=== %s === start\n", __func__);
+	printk("hid-keyboard,=== %s === start\n", __func__);
 	if (!g_already_sleep) {
 		printk("hid-keyboard,%s,Device was already activated\n",
 		       "kb_i2c_resume");
@@ -2143,7 +2138,7 @@ noinline int kb_i2c_resume(void)
 	}
 
 	g_already_sleep = false;
-	pr_info("hid-keyboard,=== %s === end\n", __func__);
+	printk("hid-keyboard,=== %s === end\n", __func__);
 
 	return 0;
 }
@@ -2152,7 +2147,7 @@ noinline void kb_i2c_suspend(void)
 {
 	int ret;
 
-	pr_info("hid-keyboard,=== %s === start\n", __func__);
+	printk("hid-keyboard,=== %s === start\n", __func__);
 	if (g_already_sleep)
 		return;
 
@@ -2170,7 +2165,7 @@ noinline void kb_i2c_suspend(void)
 	}
 
 	g_already_sleep = true;
-	pr_info("hid-keyboard,=== %s === end\n", __func__);
+	printk("hid-keyboard,=== %s === end\n", __func__);
 }
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
 
