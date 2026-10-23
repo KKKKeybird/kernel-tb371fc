@@ -28,10 +28,6 @@
 #define LCD_BL_BIAS_I2C_ID_NAME "ktz8866b"
 
 static DEFINE_MUTEX(read_lock);
-static DEFINE_MUTEX(b_store_lock);
-int g_ktz8866b_id = 0;
-EXPORT_SYMBOL(g_ktz8866b_id);
-struct ktz8866_data *ktz8866b_driver_data;
 static struct i2c_client *lcd_bl_bias_i2c_client;
 static int lcd_bl_bias_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int lcd_bl_bias_i2c_remove(struct i2c_client *client);
@@ -56,28 +52,6 @@ int lcd_bl_bias_write_byte(unsigned char addr, unsigned char value)
 	return ret;
 }
 EXPORT_SYMBOL(lcd_bl_bias_write_byte);
-
-struct ktz8866_reg ktz8866b_regs[] = {
-	{"KTZ8866B_DISP_ID", KTZ8866_DISP_ID},
-	{"KTZ8866B_DISP_BC1", KTZ8866_DISP_BC1},
-	{"KTZ8866B_DISP_BC2", KTZ8866_DISP_BC2},
-	{"KTZ8866B_DISP_BB_LSB", KTZ8866_DISP_BB_LSB},
-	{"KTZ8866B_DISP_BB_MSB", KTZ8866_DISP_BB_MSB},
-	{"KTZ8866B_DISP_BL_ENABLE", KTZ8866_DISP_BL_ENABLE},
-	{"KTZ8866B_DISP_BIAS_CONF1", KTZ8866_DISP_BIAS_CONF1},
-	{"KTZ8866B_DISP_BIAS_CONF2", KTZ8866_DISP_BIAS_CONF2},
-	{"KTZ8866B_DISP_BIAS_CONF3", KTZ8866_DISP_BIAS_CONF3},
-	{"KTZ8866B_DISP_BIAS_BOOST", KTZ8866_DISP_BIAS_BOOST},
-	{"KTZ8866B_DISP_BIAS_VPOS", KTZ8866_DISP_BIAS_VPOS},
-	{"KTZ8866B_DISP_BIAS_VNEG", KTZ8866_DISP_BIAS_VNEG},
-	{"KTZ8866B_DISP_FLAGS", KTZ8866_DISP_FLAGS},
-	{"KTZ8866B_DISP_OPTION1", KTZ8866_DISP_OPTION1},
-	{"KTZ8866B_DISP_OPTION2", KTZ8866_DISP_OPTION2},
-	{"KTZ8866B_DISP_PTD_LSB", KTZ8866_DISP_PTD_LSB},
-	{"KTZ8866B_DISP_PTD_MSB", KTZ8866_DISP_PTD_MSB},
-	{"KTZ8866B_DISP_DIMMING", KTZ8866_DISP_DIMMING},
-	{"KTZ8866B_DISP_FULL_CURRENT", KTZ8866_DISP_FULL_CURRENT},
-};
 
 static noinline int lcd_bl_bias_read_byte(u8 regnum)
 {
@@ -134,127 +108,6 @@ otherwise the probe function will not be executed!
 		.of_match_table = i2c_of_match,
 	},
 };
-
-static int ktz8866b_id_read(void)
-{
-	int id_b = 0;
-
-	id_b = lcd_bl_bias_read_byte(ktz8866b_regs[0].reg);//read ktz8866a id reg
-	if (id_b <= 0)	{
-	  dev_warn(&lcd_bl_bias_i2c_client->dev, "read id_b error!!! id_b = 0x%2X\n", id_b);
-	  return 0;
-	}
-	pr_info("%s:read id_b = 0x%2X\n", __func__, id_b);
-
-	return id_b;
-}
-
-/*****************************************************************************
- * for ktz8866b to registe
- *****************************************************************************/
-static ssize_t ktz8866b_registers_show (struct device *dev,
-struct device_attribute *attr, char *buf)
-{
-	struct ktz8866_data *driver_data = i2c_get_clientdata(lcd_bl_bias_i2c_client);
-	int reg_count = 0;
-	int i, n = 0;
-	u8 value = 0;
-	struct ktz8866_reg *regs_p;
-
-	reg_count = sizeof(ktz8866b_regs) / sizeof(ktz8866b_regs[0]);
-	regs_p = ktz8866b_regs;
-
-	if (atomic_read(&driver_data->suspended)) {
-		pr_err("%s: can't read: driver suspended\n", __func__);
-		n += scnprintf(buf + n, PAGE_SIZE - n,
-			"Unable to read ktz8866b_i2c_client[0] registers: driver suspended\n");
-	} else {
-		pr_info("%s: read all registers\n", __func__);
-		for (i = 0, n = 0; i < reg_count; i++) {
-			value = lcd_bl_bias_read_byte(regs_p[i].reg);
-			n += scnprintf(buf + n, PAGE_SIZE - n,
-				"%-30s (0x%02x) = 0x%02X\n",
-					regs_p[i].name, regs_p[i].reg, value);
-		}
-	}
-	return n;
-}
-
-static ssize_t ktz8866b_registers_store (struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct ktz8866_data *driver_data = i2c_get_clientdata(lcd_bl_bias_i2c_client);
-	unsigned reg;
-	unsigned value;
-
-	if (atomic_read(&driver_data->suspended)) {
-		pr_err("%s: can't write: driver suspended\n", __func__);
-		return -ENODEV;
-	}
-	sscanf(buf, "%2x %2x", &reg, &value);
-	if (value > 0xFF)
-		return -EINVAL;
-	pr_info("%s: writing reg 0x%2x = 0x%2x\n", __func__, reg, value);
-
-	mutex_lock(&b_store_lock);
-	lcd_bl_bias_write_byte(reg, (uint8_t)value);
-	mutex_unlock(&b_store_lock);
-
-	return size;
-}
-
-static DEVICE_ATTR(ktz8866b_reg, 0664, ktz8866b_registers_show, ktz8866b_registers_store);
-
-static int ktz8866b_common_init(struct i2c_client *client)
-{
-	struct ktz8866_data *driver_data = NULL;
-	int ret = 0;
-
-	/* We should be able to read and write byte data */
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		pr_err ("%s: I2C_FUNC_I2C not supported\n", __func__);
-		return -ENOTSUPP;
-	}
-
-	driver_data = kzalloc(sizeof(struct ktz8866_data), GFP_KERNEL);
-	if (driver_data == NULL) {
-		pr_err ("%s: driver_data kzalloc failed\n", __func__);
-		return -ENOMEM;
-	}
-	memset (driver_data, 0, sizeof (*driver_data));
-
-	driver_data->client = client;
-	i2c_set_clientdata (client, driver_data);
-	atomic_set(&driver_data->suspended, 0);
-
-	driver_data->led_dev.name = LCD_BL_BIAS_I2C_ID_NAME;
-	ret = led_classdev_register (&client->dev, &driver_data->led_dev);
-	if (ret) {
-		pr_err("%s: led_classdev_register %s failed: %d\n", __func__, LCD_BL_BIAS_I2C_ID_NAME, ret);
-		goto led_classdev_register_failed;
-	}
-
-	pr_info("%s: register ktz8866b ok\n", __func__);
-	ktz8866b_driver_data = driver_data;
-	ret = device_create_file(ktz8866b_driver_data->led_dev.dev, &dev_attr_ktz8866b_reg);
-	if (ret) {
-	  pr_err("%s: ktz8866b unable to create suspend device file for %s: %d\n", __func__, LCD_BL_BIAS_I2C_ID_NAME, ret);
-	  goto device_create_file_failed;
-	}
-	dev_set_drvdata (&client->dev, ktz8866b_driver_data);
-
-	g_ktz8866b_id = ktz8866b_id_read();
-	return 0;
-
-device_create_file_failed:
-	device_remove_file (ktz8866b_driver_data->led_dev.dev, &dev_attr_ktz8866b_reg);
-	kfree (ktz8866b_driver_data);
-led_classdev_register_failed:
-	led_classdev_unregister(&driver_data->led_dev);
-	kfree (driver_data);
-
-	return ret;
-}
 
 int lcd_set_bias(bool enable)
 {
@@ -321,7 +174,6 @@ static int lcd_bl_bias_i2c_probe(struct i2c_client *client, const struct i2c_dev
                 dev_warn(&lcd_bl_bias_i2c_client->dev, "I2C write reg is success!");
         }
 
-        ktz8866b_common_init(lcd_bl_bias_i2c_client);
         return 0;
 }
 static int lcd_bl_bias_i2c_remove(struct i2c_client *client)
