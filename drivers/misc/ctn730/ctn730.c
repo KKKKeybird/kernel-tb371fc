@@ -40,6 +40,7 @@ int err_count;
 static struct ctn730_data *ctn730;
 static struct i2c_client *client_address;
 static struct device_node *ctn730_panel;
+static struct drm_panel *ctn730_drm_panel;
 
 static const char * const ctn730_charge_state_text[] = {
 	"Unknown", "Charging", "Full", "Notcharging",
@@ -929,7 +930,7 @@ static irqreturn_t ctn730_dev_irq_handler(int irq, void *dev_id)
 	memset(head, 0, sizeof(head));
 	memset(payload, 0, sizeof(payload));
 	/* stock checks gpio_irq (data+0xf4) here, not ven */
-	if (!gpiod_get_value_cansleep(gpio_to_desc(data->gpio_irq))) {
+	if (!gpiod_get_raw_value(gpio_to_desc(data->gpio_irq))) {
 		pr_info("ctn730: %s: irq_gpio low do not read i2c\n",
 			"ctn730_dev_irq_handler");
 		goto out;
@@ -1509,11 +1510,13 @@ static ssize_t reget_mac_store(struct device *dev,
 		return -ENODEV;
 	}
 	ret = kstrtoul(buf, 0, &val);
-	if (!ret) {
-		data->detected = 0;
-		data->fw_status = 4;
-		queue_delayed_work_on(8, system_wq, &data->rf_on_work, 0);
-	}
+	if (ret)
+		return count;
+	if (val == 0)
+		return count;
+	data->charging = 0;
+	data->fw_status = 4;
+	queue_delayed_work_on(8, system_wq, &data->set_work, 0);
 	return count;
 }
 
@@ -1530,8 +1533,10 @@ static ssize_t info_report_store(struct device *dev,
 		return -ENODEV;
 	}
 	ret = kstrtoul(buf, 0, &val);
-	/* stock: cinc w8,w8,eq over 0x11 -> 0x12 when kstrtoul succeeded */
-	data->fw_status = ret ? 0x11 : 0x12;
+	if (ret)
+		return count;
+	/* stock consumes the parsed value (simple_strtoul), not the error code */
+	data->fw_status = (val == 0) ? 0x12 : 0x11;
 	queue_delayed_work_on(8, system_wq, &data->set_work,
 			      msecs_to_jiffies(25));
 	return count;
@@ -1549,7 +1554,9 @@ static ssize_t rf_on_store(struct device *dev, struct device_attribute *attr,
 		return -ENODEV;
 	}
 	ret = kstrtoul(buf, 0, &val);
-	data->rf_on = ret ? 1 : 0;
+	if (ret)
+		return count;
+	data->rf_on = (val != 0) ? 1 : 0;
 	queue_delayed_work_on(8, system_wq, &data->rf_on_work,
 			      msecs_to_jiffies(3));
 	return count;
@@ -1841,6 +1848,7 @@ static int ctn730_probe(struct i2c_client *client,
 			}
 			pr_info("ctn730: %s: find panel\n", "ctn730_probe");
 			ctn730_panel = panel_np;
+			ctn730_drm_panel = panel;
 			break;
 		}
 		/* stock 0x8883214..0x8883248: find-panel failure prints the
@@ -1911,6 +1919,12 @@ static int ctn730_probe(struct i2c_client *client,
 	data->irq = ret;
 	pr_info("ctn730: %s: Enable to map GPIO irq_gpio to an IRQ\n",
 		"ctn730_probe");
+	ret = gpiod_direction_input(gpio_to_desc(data->gpio_irq));
+	if (ret < 0) {
+		pr_info("ctn730: %s: not able to set irq_gpio as input\n",
+			"ctn730_probe");
+		goto free_ven_gpio;
+	}
 	pr_info("ctn730: %s: request ven_gpio %d\n", "ctn730_probe",
 		data->gpio_ven);
 
@@ -1941,13 +1955,10 @@ static int ctn730_probe(struct i2c_client *client,
 	data->drm_nb.notifier_call = ctn730_drm_notifier_callback;
 	if (!ctn730_panel) {
 		pr_info("ctn730: %s: drm panel is  NULL\n", "ctn730_probe");
-	} else {
-		struct drm_panel *panel = of_drm_find_panel(ctn730_panel);
-
-		if (IS_ERR_OR_NULL(panel) ||
-		    drm_panel_notifier_register(panel, &data->drm_nb))
-			pr_info("ctn730: %s: Unable to register ctn730_drm_notifier\n",
-				"ctn730_probe");
+	} else if (IS_ERR_OR_NULL(ctn730_drm_panel) ||
+		   drm_panel_notifier_register(ctn730_drm_panel, &data->drm_nb)) {
+		pr_info("ctn730: %s: Unable to register ctn730_drm_notifier\n",
+			"ctn730_probe");
 	}
 
 	device_init_wakeup(data->dev, true);
@@ -1968,7 +1979,6 @@ static int ctn730_probe(struct i2c_client *client,
 					data->misc.name, data);
 	if (ret) {
 		pr_info("ctn730: %s: request_irq failed\n", "ctn730_probe");
-		disable_irq(data->irq);
 		misc_deregister(&data->misc);
 		goto free_ven_gpio;
 	}
