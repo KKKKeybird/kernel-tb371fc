@@ -12,6 +12,7 @@
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/pmic-voter.h>
+#include <linux/backlight.h>
 #include "lenovo-jeita.h"
 #include "smb5-lib.h"
 
@@ -70,10 +71,16 @@ struct lenovo_jeita_info {
 	struct votable		*usb_icl_votable;
 	struct votable		*dc_suspend_votable;
 	struct votable		*chg_disable_votable;
+	struct votable		*cp_disable_votable;
 	struct power_supply	*batt_psy;
 	struct power_supply	*bms_psy;
 	struct power_supply	*usb_psy;
 	struct power_supply	*dc_psy;
+	/* stock SOFT_HOT bookkeeping (struct+0x24/0x28/0x2c/0x30) */
+	int			iterm_retry_count;
+	int			hot_vbat_flag;
+	int			recharge_retry_count;
+	bool			usb209_flag;
 	struct delayed_work	status_change_work;
 	struct delayed_work	get_config_work;
 	struct notifier_block	nb;
@@ -465,14 +472,20 @@ static int get_batt_maintaince_fv(struct lenovo_jeita_info *chip){
  * (0x8bd1c48..0x8bd2978, 0xd30 bytes). handle_jeita and fcc_work are
  * stock-absent (no fcc_work kallsyms symbol; FCC adjustment runs inline
  * via POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT with a mA conversion). */
+/* W1m/W1n v2: full stock-parity rebuild of status_change_work.
+ * stock: 0x8bd1c48..0x8bd2978 (0xd30 bytes, 88 calls, 15 sections).
+ * Section anchors cited per block (Image-b addresses). */
 static void status_change_work(struct work_struct *work)
 {
 	struct lenovo_jeita_info *chip = container_of(work,
 			struct lenovo_jeita_info, status_change_work.work);
 	union power_supply_propval pval = {0, };
 	int rc, temp, fcc_ua = 0, fv_uv = 0, iterm_delta = 0;
+	int ibat = 0, vbat = 0, batt_status = 0, usb_209 = 0;
+	int fv_result = 0, pd_val = 0, type_val = 0;
+	int online = 0, pd2 = 0, pd3 = 0, type3 = 0;
 
-	/* sec 1: batt/bms lazy get (0x1c70..0x1ca4) */
+	/* sec1 0x1c70..0x1ca4: batt/bms lazy get */
 	if (!chip->batt_psy)
 		chip->batt_psy = power_supply_get_by_name("battery");
 	if (!chip->batt_psy)
@@ -482,7 +495,7 @@ static void status_change_work(struct work_struct *work)
 	if (!chip->bms_psy)
 		goto relax_exit;
 
-	/* sec 2: config_is_read gate (0x1ca8..0x1cb4, false path 0x1d7c) */
+	/* sec2 0x1ca8..0x1cb4 / 0x1d7c: config_is_read gate */
 	if (!chip->config_is_read) {
 		if (chip->fv_votable)
 			vote(chip->fv_votable, JEITA_VOTER, false, 0);
@@ -495,8 +508,7 @@ static void status_change_work(struct work_struct *work)
 		goto relax_exit;
 	}
 
-	/* sec 2.5: temp read + max fcc (0x1cb8..0x1ce4). stock discards the
-	 * ktime result here: no elapsed-time debounce exists in stock. */
+	/* sec3 0x1cb8..0x1ce4: temp + hq_config_chg_max_fcc */
 	ktime_get();
 	rc = power_supply_get_property(chip->batt_psy,
 			chip->jeita_fcc_config->param.psy_prop, &pval);
@@ -505,12 +517,11 @@ static void status_change_work(struct work_struct *work)
 		goto relax_exit;
 	}
 	temp = pval.intval;
-
 	rc = hq_config_chg_max_fcc(chip->batt_psy, 8000000);
 	if (rc < 0)
 		pr_err("Couldn't config max fcc rc=%d\n", rc);
 
-	/* sec 3: get_val -> jeita_fcc_index (0x1ce8..0x1d0c) */
+	/* sec4 0x1ce8..0x1d0c: get_val -> jeita_fcc_index */
 	rc = get_val(chip->jeita_fcc_config->fcc_cfg,
 			chip->jeita_fcc_config->param.rise_hys,
 			chip->jeita_fcc_config->param.fall_hys,
@@ -519,7 +530,7 @@ static void status_change_work(struct work_struct *work)
 	if (rc < 0)
 		fcc_ua = 0;
 
-	/* sec 3.5: usb_psy lazy get + pd status / usb type (0x1d10..0x1d54) */
+	/* sec5 0x1d10..0x1d54: usb_psy lazy + pd/type */
 	if (!chip->usb_psy) {
 		chip->usb_psy = power_supply_get_by_name("usb");
 		if (!chip->usb_psy) {
@@ -531,52 +542,53 @@ static void status_change_work(struct work_struct *work)
 			POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
 	if (rc < 0)
 		pr_err("Couldn't read pd status from usb psy rc=%d\n", rc);
+	else
+		pd_val = pval.intval;
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_REAL_TYPE, &pval);
 	if (rc < 0)
 		pr_err("Couldn't read usb type from usb psy rc=%d\n", rc);
+	else
+		type_val = pval.intval;
 
-	/* sec 4: fcc_index 150..449 -> hq_chg_type_config_fcc branch
-	 * (0x1d58..0x1e0c, magic 0x5b8d80 / 0x44aa20) */
+	/* sec6 0x1d58..0x1e0c: fcc_index 150..449 magic */
 	if (chip->jeita_fcc_index >= 150 && chip->jeita_fcc_index <= 449) {
-		if (pval.intval == 2)
+		if (type_val == 2)
 			fcc_ua = 5999999;
-		else if (pval.intval == 13)
+		else if (pd_val == 13)
 			fcc_ua = 4499999;
 	}
 after_usb:
 
-	/* sec 5: thermal level (0x1e10..0x1e6c, prop 204) */
+	/* sec7 0x1e10..0x1e6c: thermal level prop204 */
 	if (temp >= 500) {
 		if (!chip->thermal_cutback) {
 			chip->thermal_cutback = 1;
 			pval.intval = 1;
 			power_supply_set_property(chip->batt_psy,
-					POWER_SUPPLY_PROP_CHARGE_DISABLE, &pval);
+				POWER_SUPPLY_PROP_CHARGE_DISABLE, &pval);
 		}
 	} else if (temp >= 10 && temp <= 479) {
 		if (chip->thermal_cutback) {
 			chip->thermal_cutback = 0;
 			pval.intval = 0;
 			power_supply_set_property(chip->batt_psy,
-					POWER_SUPPLY_PROP_CHARGE_DISABLE, &pval);
+				POWER_SUPPLY_PROP_CHARGE_DISABLE, &pval);
 		}
 	}
 
-	/* sec 6: usb type gate -> temp ranges -> CHARGE_TERM_CURRENT
-	 * (0x1e70..0x1f10, -500 / -1600 / -100 uA) */
+	/* sec8 0x1e70..0x1f10: usb type gate -> CHARGE_TERM_CURRENT */
 	if (chip->usb_psy) {
-		int pd_st = 0, usb_ty = 0;
 		rc = power_supply_get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
 		if (rc >= 0) {
-			pd_st = pval.intval;
+			pd3 = pval.intval;
 			rc = power_supply_get_property(chip->usb_psy,
 					POWER_SUPPLY_PROP_REAL_TYPE, &pval);
 			if (rc >= 0)
-				usb_ty = pval.intval;
+				type3 = pval.intval;
 		}
-		if (usb_ty == 2 || pd_st == 13) {
+		if (type3 == 2 || pd3 == 13) {
 			if (temp <= 149)
 				iterm_delta = -500;
 			else if (temp >= 150 && temp <= 449)
@@ -593,7 +605,23 @@ after_usb:
 	if (rc < 0)
 		pr_err("Couldn't set term current property rc=%d\n", rc);
 
-	/* sec 7: FV votable + effective result (0x1f50..0x1f9c) */
+	/* sec9 0x1f14..0x1f4c: usb ONLINE/PD gate */
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_ONLINE, &pval);
+	if (rc < 0)
+		pr_err("Couldn't read sw term %d\n", rc);
+	else
+		online = pval.intval;
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
+	if (rc < 0)
+		pr_err("Couldn't read sw term %d\n", rc);
+	else
+		pd2 = pval.intval;
+	if (online == 0 && pd2 == 0)
+		goto sec12_fcc;
+
+	/* sec10 0x1f50..0x1f9c: FV + CP_DISABLE votables */
 	if (!chip->fv_votable) {
 		chip->fv_votable = find_votable("FV");
 		if (!chip->fv_votable) {
@@ -601,22 +629,324 @@ after_usb:
 			goto relax_exit;
 		}
 	}
-	fcc_ua = get_effective_result(chip->fv_votable);
-	if (!chip->chg_disable_votable) {
-		chip->chg_disable_votable = find_votable("CHG_DISABLE");
-		if (!chip->chg_disable_votable) {
+	fv_result = get_effective_result(chip->fv_votable);
+	if (!chip->cp_disable_votable) {
+		chip->cp_disable_votable = find_votable("CP_DISABLE");
+		if (!chip->cp_disable_votable) {
 			pr_err("cannt find cp_disabled_votable vote\n");
 			goto relax_exit;
 		}
 	}
+	(void)get_effective_result(chip->cp_disable_votable);
 
-	/* sec 8: FV vote + relax (0x286c..0x2890) */
+	/* sec11 0x1f9c..0x20bc: ibat/vbat/status/usb209 + iterm1600 chain */
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_CURRENT_NOW, &pval);
+	if (rc < 0)
+		pr_err("Couldn't get ibat\n");
+	else
+		ibat = pval.intval;
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
+	if (rc < 0)
+		pr_err("Couldn't get vbat\n");
+	else
+		vbat = pval.intval;
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_STATUS, &pval);
+	if (rc < 0) {
+		pr_err("Couldn't get battery status\n");
+		goto sec12_fcc;
+	}
+	batt_status = pval.intval;
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_ENABLE_SW_TERM, &pval);
+	if (rc < 0)
+		pr_err("Couldn't read sw term %d\n", rc);
+	else
+		usb_209 = pval.intval;
+	chip->usb209_flag = (usb_209 != 0);
+
+	if (iterm_delta == -1600 && batt_status == 1 &&
+	    ibat <= 0x1ab3f0 && vbat > (fv_result - 50000)) {
+		if (usb_209)
+			goto sec12_fcc;
+		pval.intval = 1;
+		rc = power_supply_set_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_ENABLE_SW_TERM, &pval);
+		if (rc < 0) {
+			pr_err("Couldn't set term current property rc=%d\n", rc);
+			goto sec12_fcc;
+		}
+		pr_err("iterm = 1600mA, vbat = %d, ibat = %d\n", vbat, ibat);
+		goto sec12_fcc;
+	}
+
+	if (iterm_delta == -1600 && batt_status == 1) {
+		if (usb_209 == 0)
+			goto sec12_fcc;
+		pval.intval = 0;
+		rc = power_supply_set_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_ENABLE_SW_TERM, &pval);
+		if (rc < 0) {
+			pr_err("Couldn't set term current property rc=%d\n", rc);
+			goto sec12_fcc;
+		}
+		pr_err("iterm = 1600mA, vbat = %d, ibat = %d\n", vbat, ibat);
+		goto sec12_fcc;
+	}
+
+	if (usb_209)
+		goto sec12_fcc;
+	pval.intval = 1;
+	rc = power_supply_set_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_ENABLE_SW_TERM, &pval);
+	if (rc < 0)
+		pr_err("Couldn't set term current property rc=%d\n", rc);
+
+sec12_fcc:
+	/* sec12a 0x222c/0x2234: fcc_votable lazy; fail -> 0x2898 */
+	if (!chip->fcc_votable) {
+		chip->fcc_votable = find_votable("FCC");
+		if (!chip->fcc_votable)
+			goto err_exit;
+	}
+
+	/* sec12b 0x2378: vote(fcc, JEITA_VOTER, fcc_ua!=0, fcc_ua) */
+	vote(chip->fcc_votable, JEITA_VOTER, fcc_ua != 0, fcc_ua);
+
+	/* sec12c 0x2390..0x23f8: is_lcd_on -> thermal prop33 */
+	if (is_lcd_on()) {
+		rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT, &pval);
+		if (rc < 0) {
+			pr_err("Couldn't get thermal level\n");
+			goto sec13_fv;
+		}
+		rc = power_supply_set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT, &pval);
+		if (rc < 0)
+			pr_err("Couldn't set thermal level\n");
+	} else {
+		vote(chip->fcc_votable, "THERMAL_DAEMON_VOTER", false, 0);
+	}
+
+	/* sec12d 0x23fc..0x2488: batt status + get_effective_result(fcc) +
+	 * CP_DISABLE client-vote(ILIM_VOTER) -> vote off */
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_STATUS, &pval);
+	if (rc < 0)
+		pr_err("Couldn't get battery status\n");
+	batt_status = pval.intval;
+	fv_result = get_effective_result(chip->fcc_votable);
+	if (fv_result >= 0x2dc6c1 && batt_status == 1 &&
+	    get_client_vote(chip->cp_disable_votable, "ILIM_VOTER") == 1) {
+		vote(chip->cp_disable_votable, "ILIM_VOTER", false, 0);
+		pr_err("cp is disable,try open cp\n");
+	}
+
+sec13_fv:
+	/* sec13 0x248c..0x25cc: FV get_val + magic + set RECHARGE_SOC(154) */
+	rc = get_val(chip->jeita_fv_config->fv_cfg,
+			chip->jeita_fv_config->param.rise_hys,
+			chip->jeita_fv_config->param.fall_hys,
+			chip->jeita_fv_index, temp,
+			&chip->jeita_fv_index, &fv_uv);
+	if (rc < 0)
+		fv_uv = 0;
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
+	if (rc < 0)
+		pr_err("Couldn't read pd status from usb psy rc=%d\n", rc);
+	else
+		pd_val = pval.intval;
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_REAL_TYPE, &pval);
+	if (rc < 0)
+		pr_err("Couldn't read usb type from usb psy rc=%d\n", rc);
+	else
+		type_val = pval.intval;
+	if (type_val == 2 || pd_val == 13) {
+		if (temp <= 149)
+			fv_uv = 4450000;
+		else if (temp <= 449)
+			fv_uv = 4490000;
+		else
+			fv_uv = 4200000;
+	} else {
+		if (temp <= 449)
+			fv_uv = 4450000;
+		else
+			fv_uv = 4200000;
+	}
+	pval.intval = (fv_uv / 1000) - 100;
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_RECHARGE_SOC, &pval);
+	if (rc < 0)
+		pr_err("Couldn't set term current property rc=%d\n", rc);
+
+	/* sec13b 0x25cc..0x2634: chg_disable lazy + batt 17/12 */
+	if (!chip->chg_disable_votable) {
+		chip->chg_disable_votable = find_votable("CHG_DISABLE");
+		if (!chip->chg_disable_votable) {
+			pr_err("Couldn't read sw term %d\n", rc);
+			goto sec13_tail;
+		}
+	}
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_CURRENT_NOW, &pval);
+	if (rc < 0) {
+		pr_err("Couldn't get ibat\n");
+		goto sec13_tail;
+	}
+	ibat = pval.intval;
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
+	if (rc < 0) {
+		pr_err("Couldn't get vbat\n");
+		goto sec13_tail;
+	}
+	vbat = pval.intval;
+	goto sec14_softhot;
+
+sec13_tail:
+	/* 0x2648..0x2708: FV/USB_ICL/DC_SUSPEND lazy + batt VMAX + FV vote */
+	chip->fv_votable = find_votable("FV");
+	if (!chip->fv_votable)
+		goto err_exit;
+	chip->usb_icl_votable = find_votable("USB_ICL");
+	if (!chip->usb_icl_votable)
+		goto tail_usb_dc;
+	chip->dc_suspend_votable = find_votable("DC_SUSPEND");
+	if (!chip->dc_suspend_votable)
+		goto tail_usb_dc;
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_MAX, &pval);
+	if (rc)
+		goto sec15_fv_vote;
+	if (pval.intval == fv_uv)
+		goto sec15_fv_vote;
+	if (fv_uv < 1)
+		goto sec15_fv_vote;
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
+	if (rc)
+		goto sec15_fv_vote;
+	if (pval.intval > fv_uv) {
+		vote(chip->usb_icl_votable, JEITA_VOTER, true, 0);
+		vote(chip->dc_suspend_votable, JEITA_VOTER, true, 1);
+	} else {
+		vote(chip->usb_icl_votable, JEITA_VOTER, false, 0);
+		vote(chip->dc_suspend_votable, JEITA_VOTER, false, 0);
+	}
+	goto sec15_fv_vote;
+
+sec14_softhot:
+	/* sec14 0x2710..0x2970: SOFT_HOT chain */
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_ONLINE, &pval);
+	if (rc < 0) {
+		pr_err("Couldn't read sw term %d\n", rc);
+		goto sec13_tail;
+	}
+	pd_val = pval.intval;
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
+	if (rc < 0)
+		goto sec14_print;
+	pd2 = pval.intval;
+	if (pd_val != 0 || pd2 != 0)
+		goto sec14_print;
+	vote(chip->chg_disable_votable, "SOFT_HOT_CHG_VOTER", false, 0);
+	chip->iterm_retry_count = 0;
+	chip->hot_vbat_flag = 0;
+	chip->recharge_retry_count = 0;
+
+sec14_print:
+	pr_err("temp = %d, ibat = %d, vbat = %d, iterm = %d/%d/%d\n",
+		temp, ibat, vbat, chip->iterm_retry_count,
+		chip->hot_vbat_flag, chip->recharge_retry_count);
+	if (temp < 450 || temp > 499)
+		goto sec14_warm;
+	if (ibat > 0x8164f || vbat < 0x3fef30)
+		goto sec14_hot_check;
+	if (chip->hot_vbat_flag == 0)
+		goto sec14_ibat_low;
+
+sec14_hot_check:
+	if (vbat >= 0x4015fd)
+		goto sec13_tail;
+	if (chip->hot_vbat_flag == 0)
+		goto sec13_tail;
+	if (chip->recharge_retry_count < 10) {
+		chip->recharge_retry_count++;
+		pr_err("chip->recharge_retry_count = %d\n",
+			chip->recharge_retry_count);
+		goto sec14_hot_check;
+	}
+	vote(chip->chg_disable_votable, "SOFT_HOT_CHG_VOTER", false, 0);
+	chip->hot_vbat_flag = 0;
+	chip->recharge_retry_count = 0;
+	pr_err("hot environment vbat < recharge_volt\n");
+	goto sec13_tail;
+
+sec14_warm:
+	if (temp < 10 || temp > 449)
+		goto sec13_tail;
+	vote(chip->chg_disable_votable, "SOFT_HOT_CHG_VOTER", false, 0);
+	chip->iterm_retry_count = 0;
+	chip->hot_vbat_flag = 0;
+	chip->recharge_retry_count = 0;
+	goto sec13_tail;
+
+sec14_ibat_low:
+	if (chip->iterm_retry_count < 20) {
+		chip->iterm_retry_count++;
+		pr_err("chip->iterm_retry_count = %d\n",
+			chip->iterm_retry_count);
+		goto sec14_hot_check;
+	}
+	vote(chip->chg_disable_votable, "SOFT_HOT_CHG_VOTER", true, 0);
+	pval.intval = 1;
+	power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_FORCE_5V, &pval);
+	chip->iterm_retry_count = 0;
+	chip->hot_vbat_flag = 1;
+	pr_err("hot environment ibat < 500mA, disable sw term\n");
+	goto sec14_hot_check;
+
+sec15_fv_vote:
+	/* sec15 0x286c..0x2894: vote(fv) + ktime */
 	vote(chip->fv_votable, JEITA_VOTER, fv_uv != 0, fv_uv);
+	chip->jeita_last_update_time = ktime_get();
+
+tail_usb_dc:
+	/* tail 0x2250..0x22d8: usb/dc PRESENT -> clear usb_icl vote -> relax */
+	if (!chip->usb_psy)
+		chip->usb_psy = power_supply_get_by_name("usb");
+	online = 0;
+	if (chip->usb_psy &&
+	    power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PRESENT, &pval) >= 0)
+		online = pval.intval;
+	if (!chip->dc_psy)
+		chip->dc_psy = power_supply_get_by_name("dc");
+	if (chip->dc_psy &&
+	    power_supply_get_property(chip->dc_psy,
+			POWER_SUPPLY_PROP_PRESENT, &pval) >= 0)
+		online |= pval.intval;
+	if (online == 0 && chip->usb_icl_votable)
+		vote(chip->usb_icl_votable, JEITA_VOTER, false, 0);
+	goto relax_exit;
+
+err_exit:
+	/* 0x2898: "Couldn't handle sw jeita rc = %d" then fall through to tail */
+	pr_err("Couldn't handle sw jeita rc = %d\n", -EINVAL);
+	goto tail_usb_dc;
 
 relax_exit:
 	__pm_relax(chip->lenovo_jeita_ws);
 }
-
 
 static int jeita_notifier_call(struct notifier_block *nb,
 		unsigned long ev, void *v)

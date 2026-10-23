@@ -183,6 +183,7 @@ extern struct backlight_device *devm_backlight_device_register(
 	void *devdata, const struct backlight_ops *ops,
 	const struct backlight_properties *props);
 extern void backlight_device_unregister(struct backlight_device *bd);
+extern bool is_lcd_on(void);
 extern void devm_backlight_device_unregister(struct device *dev,
 					struct backlight_device *bd);
 extern void backlight_force_update(struct backlight_device *bd,
