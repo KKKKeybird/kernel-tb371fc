@@ -480,7 +480,7 @@ static void status_change_work(struct work_struct *work)
 			vote(chip->dc_suspend_votable, JEITA_VOTER, false, 0);
 		if (chip->chg_disable_votable)
 			vote(chip->chg_disable_votable, JEITA_VOTER, false, 0);
-		goto relax_exit;
+		goto tail_usb_dc;
 	}
 
 	/* sec3 0x1cb8..0x1ce4: temp + hq_config_chg_max_fcc */
@@ -529,9 +529,9 @@ static void status_change_work(struct work_struct *work)
 	/* sec6 0x1d58..0x1e0c: fcc_index 150..449 magic */
 	if (chip->jeita_fcc_index >= 150 && chip->jeita_fcc_index <= 449) {
 		if (type_val == 2)
-			fcc_ua = 5999999;
+			fcc_ua = 6000000;
 		else if (pd_val == 13)
-			fcc_ua = 4499999;
+			fcc_ua = 4500000;
 	}
 after_usb:
 
@@ -601,7 +601,7 @@ after_usb:
 		chip->fv_votable = find_votable("FV");
 		if (!chip->fv_votable) {
 			pr_err("cannt find fv_votable vote\n");
-			goto relax_exit;
+			goto sec12_fcc;
 		}
 	}
 	fv_result = get_effective_result(chip->fv_votable);
@@ -609,7 +609,7 @@ after_usb:
 		chip->cp_disable_votable = find_votable("CP_DISABLE");
 		if (!chip->cp_disable_votable) {
 			pr_err("cannt find cp_disabled_votable vote\n");
-			goto relax_exit;
+			goto sec12_fcc;
 		}
 	}
 	(void)get_effective_result(chip->cp_disable_votable);
