@@ -1503,15 +1503,12 @@ static ssize_t reget_mac_store(struct device *dev,
 {
 	struct ctn730_data *data = ctn730_from_dev(dev);
 	unsigned long val;
-	int ret;
 
 	if (!data) {
 		pr_info("ctn730: %s: no ctn730_dev\n", "reget_mac_store");
 		return -ENODEV;
 	}
-	ret = kstrtoul(buf, 0, &val);
-	if (ret)
-		return count;
+	val = simple_strtoul(buf, NULL, 0);
 	if (val == 0)
 		return count;
 	data->charging = 0;
@@ -1526,16 +1523,12 @@ static ssize_t info_report_store(struct device *dev,
 {
 	struct ctn730_data *data = ctn730_from_dev(dev);
 	unsigned long val;
-	int ret;
 
 	if (!data) {
 		pr_info("ctn730: %s: no ctn730_dev\n", "info_report_store");
 		return -ENODEV;
 	}
-	ret = kstrtoul(buf, 0, &val);
-	if (ret)
-		return count;
-	/* stock consumes the parsed value (simple_strtoul), not the error code */
+	val = simple_strtoul(buf, NULL, 0);
 	data->fw_status = (val == 0) ? 0x12 : 0x11;
 	queue_delayed_work_on(8, system_wq, &data->set_work,
 			      msecs_to_jiffies(25));
@@ -1547,15 +1540,12 @@ static ssize_t rf_on_store(struct device *dev, struct device_attribute *attr,
 {
 	struct ctn730_data *data = ctn730_from_dev(dev);
 	unsigned long val;
-	int ret;
 
 	if (!data) {
 		pr_info("ctn730: %s: no ctn730_dev\n", "rf_on_store");
 		return -ENODEV;
 	}
-	ret = kstrtoul(buf, 0, &val);
-	if (ret)
-		return count;
+	val = simple_strtoul(buf, NULL, 0);
 	data->rf_on = (val != 0) ? 1 : 0;
 	queue_delayed_work_on(8, system_wq, &data->rf_on_work,
 			      msecs_to_jiffies(3));
