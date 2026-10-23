@@ -1662,8 +1662,7 @@ static int i2c_enable_mcu(struct i2c_client *client)
 
 	ret = gpio_request(mcu_resume_gpio, "mcu_resume_gpio");
 	if (ret) {
-		printk("hid-keyboard,%s,request mcu_resume_gpio failed\n",
-		       "i2c_enable_mcu");
+		printk("%s: request mcu_resume_gpio failed\n", "i2c_enable_mcu");
 		return ret;
 	}
 
@@ -2138,7 +2137,6 @@ noinline int kb_i2c_resume(void)
 
 	ret = gpiod_direction_output_raw(gpio_to_desc(mcu_resume_gpio), 1);
         if(ret) {
-                pr_err("%s: set mcu_resume_gpio failed\n", __func__);
                 return ret;
         }
 
@@ -2189,7 +2187,7 @@ int ret = 0;
 	if (!g_client)
 		return;
 
-	printk("-----hid suspend-----\n");
+	printk("hid-keyboard,=== %s === start\n", "kb_hid_suspend");
 
 	ret = __i2c_hid_command(g_client, &hid_set_report_cmd, 2, 2, args, args_len,
 				NULL, 0);
@@ -2203,6 +2201,7 @@ int ret = 0;
 	kb_i2c_suspend();
 	/*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
 
+	printk("hid-keyboard,=== %s === end\n", "kb_hid_suspend");
 	return;
 }
 void kb_hid_resume(void)
@@ -2214,7 +2213,7 @@ void kb_hid_resume(void)
 	if (!g_client)
 		return;
 
-	printk("-----hid resume-----\n");
+	printk("hid-keyboard,=== %s === start\n", "kb_hid_resume");
 	/*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 start*/
 	kb_i2c_resume();
 	/*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
@@ -2227,6 +2226,7 @@ void kb_hid_resume(void)
 	else
 		g_screen_on = 1;
 	/* Spruce code for OSPURCET-780 by sunft3 at 2023/01/18 end */
+	printk("hid-keyboard,=== %s === end\n", "kb_hid_resume");
 	return;
 }
 #endif
