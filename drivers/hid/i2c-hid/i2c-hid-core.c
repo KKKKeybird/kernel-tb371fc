@@ -135,7 +135,7 @@ int mcu_resume_gpio = 0;
 int mcu_rst_gpio = 0;
 struct regulator *ldo_keyboard;
 bool g_already_sleep = false;
-bool is_mcu_init = false;
+static bool is_mcu_init = false;
 void kb_i2c_suspend(void);
 int kb_i2c_resume(void);
 /*Spruce code for OSPURCET-1235 by chenzm9 at 2023/2/16 end*/
@@ -311,11 +311,13 @@ static u32 i2c_hid_lookup_quirk(const u16 idVendor, const u16 idProduct)
 	u32 quirks = 0;
 	int n;
 
+	printk("hid-keyboard,%s,1\n", __func__);
 	for (n = 0; i2c_hid_quirks[n].idVendor; n++)
 		if (i2c_hid_quirks[n].idVendor == idVendor &&
 		    (i2c_hid_quirks[n].idProduct == (__u16)HID_ANY_ID ||
 		     i2c_hid_quirks[n].idProduct == idProduct))
 			quirks = i2c_hid_quirks[n].quirks;
+	printk("hid-keyboard,%s,2\n", __func__);
 
 	return quirks;
 }
@@ -1426,8 +1428,8 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 	if (val >> 16) {
-		printk("Bad HID register address: 0x%08x\n",
-			val);
+		printk("hid-keyboard,%s,Bad HID register address: 0x%08x\n",
+		       __func__, val);
 		return -EINVAL;
 	}
 	pdata->hid_descriptor_address = val;
@@ -1623,7 +1625,7 @@ static const struct attribute_group kb_sys_attr_group = {
 	.attrs = (struct attribute **)kb_sys_attrs,
 };
 
-static int i2c_enable_mcu(struct i2c_client *client)
+static int i2c_enable_mcu(struct i2c_client *client, struct i2c_hid *ihid)
 {
 	int ret;
 
@@ -1660,8 +1662,9 @@ static int i2c_enable_mcu(struct i2c_client *client)
 		int rst_value = gpiod_get_raw_value(gpio_to_desc(mcu_rst_gpio));
 		int resume_value = gpiod_get_raw_value(gpio_to_desc(mcu_resume_gpio));
 
-		printk("hid-keyboard,%s,mcu_rst_gpio=%d,mcu_resume_gpio=%d\n",
-		       "i2c_enable_mcu", mcu_rst_gpio, mcu_resume_gpio);
+		printk("hid-keyboard,%s,mcu_rst_gpio=%d,mcu_resume_gpio=%d,post_power_delay_ms=%d\n",
+		       "i2c_enable_mcu", mcu_rst_gpio, mcu_resume_gpio,
+		       ihid->pdata.post_power_delay_ms);
 	}
 	return 0;
 }
@@ -1726,7 +1729,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 	/* Parse platform agnostic common properties from ACPI / device tree */
 	i2c_hid_fwnode_probe(client, &ihid->pdata);
 
-	ret = i2c_enable_mcu(client);
+	ret = i2c_enable_mcu(client, ihid);
 	if (ret)
 		return ret;
 
@@ -1781,7 +1784,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 				       "i2c_hid_probe");
 			} else if (sysfs_create_group(kb_status_kobj,
 					&kb_sys_attr_group)) {
-				dev_err(&client->dev, "kb_status sysfs group failed\n");
+				dev_err(&client->dev, "failed to create kb_status\n");
 				kobject_put(kb_status_kobj);
 				kb_status_kobj = NULL;
 			}
