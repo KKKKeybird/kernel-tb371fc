@@ -1506,9 +1506,9 @@ static int kb_report_power_key(void)
 {
 	int ret;
 
-	printk(KERN_ALERT "3===%s===\n", __func__);
+	printk(KERN_ERR "===%s===\n", __func__);
 	if (!kb_input_dev) {
-		printk(KERN_ALERT "3kb_input_dev is NULL");
+		printk(KERN_ERR "kb_input_dev is NULL");
 		return -1;
 	}
 	input_report_key(kb_input_dev, KEY_POWER, 1);
