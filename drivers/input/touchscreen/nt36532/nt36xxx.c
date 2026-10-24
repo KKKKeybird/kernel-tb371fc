@@ -3321,8 +3321,8 @@ static void nvt_mp_print_result_log(const u8 *data, u32 count)
 
 	buf = kmalloc(count * 6 + 1, GFP_KERNEL);
 	if (!buf) {
-		pr_err("3[%s] %s %d: Allocate mp memory failed\n",
-		       __func__, __func__, 608);
+		pr_err("3[%s] %s %d: kzalloc for tmp_log failed!\n ",
+		       "NVT-ts", __func__, 608);
 		return;
 	}
 	buf[0] = '\0';
@@ -3340,14 +3340,13 @@ static void nvt_mp_print_data_log(const s32 *data, u32 count)
 
 	buf = kmalloc(count * 7 + 1, GFP_KERNEL);
 	if (!buf) {
-		pr_err("3[%s] %s %d: Allocate mp memory failed\n",
-		       __func__, __func__, 584);
+		pr_err("3[%s] %s %d: kzalloc for tmp_log failed!\n ",
+		       "NVT-ts", __func__, 584);
 		return;
 	}
 	buf[0] = '\0';
 	for (i = 0; i < count; i++)
 		len += sprintf(buf + len, "%5d, ", data[i]);
-	printk("%s", buf);
 	kfree(buf);
 }
 
