@@ -1279,7 +1279,8 @@ static void nvt_hall_check_func(struct work_struct *work)
 	if (elapsed > 1000 && !bTouchIsAwake && hall != ((~nvt_hall_status) & 1)) {
 		if (!nvt_ts->hw_sleep_check) {
 			if (nvt_hall_pm_status == 1) {
-				(void)0;
+				pr_err("[%s] %s %d: The status of double click has changed",
+				       "NVT-ts", "nvt_hall_check_func", 1379);
 				nvt_hall_status = 1;
 			} else if (hall == 0) {
 				/* D66: stock 0x8adc228 stores halfword 0x1150 ->
@@ -1288,17 +1289,20 @@ static void nvt_hall_check_func(struct work_struct *work)
 				 * register 0x11 instead. */
 				u8 buf[2] = { 0x50, 0x11 };
 
-				(void)0;
+				pr_err("[%s] %s %d: The keyboard close!",
+				       "NVT-ts", "nvt_hall_check_func", 1382);
 				CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
 				nvt_hall_status = 1;
 				nvt_hall_timer0 = jiffies;
 			} else {
-				(void)0;
+				pr_err("[%s] %s %d: The keyboard open!",
+				       "NVT-ts", "nvt_hall_check_func", 1389);
 				nvt_hall_status = 0;
 			}
 		} else {
 			nvt_hall_pm = 1;
-			(void)0;
+			pr_err("[%s] %s %d: The status of pm is suspend",
+			       "NVT-ts", "nvt_hall_check_func", 1376);
 		}
 	}
 	queue_delayed_work_on(8, nvt_hall_check_wq,
@@ -1458,42 +1462,52 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 	if (!panel_data->data)
 		return NOTIFY_DONE;
 	blank_val = *(int *)panel_data->data;
-	(void)0;
 
 	if (event == DRM_PANEL_EVENT_BLANK &&
 	    blank_val == DRM_PANEL_BLANK_UNBLANK) {
+		pr_err("[%s] %s %d: hid-keyboard,%s,event=%lu, *blank=%d\n",
+		       "NVT-ts", "nvt_drm_panel_notifier_callback", 3253,
+		       "nvt_drm_panel_notifier_callback", event, blank_val);
 		if (nvt_gesture_flag)
 			cancel_delayed_work_sync(&nvt_hall_check_work);
 		if (bTouchIsAwake) {
-			(void)0;
+			pr_err("[%s] %s %d: Touch is already resume\n",
+			       "NVT-ts", "nvt_ts_resume", 3183);
 			kb_hid_resume();
 			return NOTIFY_OK;
 		}
 		mutex_lock(&nvt_ts->lock);
+		pr_err("[%s] %s %d: start\n",
+		       "NVT-ts", "nvt_ts_resume", 3189);
 		gpiod_set_raw_value(gpio_to_desc(nvt_ts->reset_gpio_num), 1);
 		if (nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME) == 0)
 			nvt_check_fw_reset_state(NVT_FW_INIT_RESET_STATE);
 		else
-			(void)0;
+			pr_err("[%s] %s %d: download firmware failed, ignore check fw state\n",
+			       "NVT-ts", "nvt_ts_resume", 3196);
 		nvt_irq_enable(true);
 		bTouchIsAwake = 1;
 		mutex_unlock(&nvt_ts->lock);
 		queue_work_on(8, nvt_fwu_wq, &nvt_restore_cmd_work);
-		(void)0;
+		pr_err("[%s] %s %d: end\n", "NVT-ts", "nvt_ts_resume", 3218);
 		kb_hid_resume();
 	} else if (event == DRM_PANEL_EARLY_EVENT_BLANK &&
 		   blank_val == DRM_PANEL_BLANK_POWERDOWN) {
-		(void)0;
+		pr_err("[%s] %s %d: hid-keyboard,%s,event=%lu, *blank=%d\n",
+		       "NVT-ts", "nvt_drm_panel_notifier_callback", 3247,
+		       "nvt_drm_panel_notifier_callback", event, blank_val);
 		hall_desc = gpio_to_desc(1275);
 		hall = gpiod_get_raw_value(hall_desc);
 		if (!bTouchIsAwake) {
-			(void)0;
+			pr_err("[%s] %s %d: Touch is already suspend\n",
+			       "NVT-ts", "nvt_ts_suspend", 3055);
 			kb_hid_suspend();
 			return NOTIFY_OK;
 		}
 		if (!nvt_gesture_flag)
 			nvt_irq_enable(false);
 		mutex_lock(&nvt_ts->lock);
+		pr_err("[%s] %s %d: start\n", "NVT-ts", "nvt_ts_suspend", 3084);
 		bTouchIsAwake = 0;
 		if (hall == 0 || !nvt_gesture_flag) {
 			u8 buf[2] = { 0x50, 0x11 };
@@ -1504,7 +1518,8 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 
 			CTP_SPI_WRITE(nvt_ts->client, buf, sizeof(buf));
 			irq_set_irq_wake(nvt_ts->irq, 1);
-			(void)0;
+			pr_err("[%s] %s %d: Enabled touch wakeup gesture\n",
+			       "NVT-ts", "nvt_ts_suspend", 3098);
 			nvt_hall_pm = 0;
 			nvt_hall_pm_status = 0;
 			queue_delayed_work_on(8, nvt_hall_check_wq,
@@ -1538,7 +1553,7 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 			input_sync(nvt_ts->pen_dev);
 		}
 		msleep(50);
-		(void)0;
+		pr_err("[%s] %s %d: end\n", "NVT-ts", "nvt_ts_suspend", 3160);
 		kb_hid_suspend();
 	}
 	return NOTIFY_OK;
