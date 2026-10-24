@@ -274,18 +274,18 @@ int check_tp_state(unsigned long enable)
 		return 1;
 	data = i2c_get_clientdata(client_address);
 	if (!data) {
-		pr_info("ctn730: %s: failed to get CTN730\n", "check_tp_state");
+		pr_err("ctn730: %s: failed to get CTN730\n", "check_tp_state");
 		return 1;
 	}
 
 	if (!(enable & 1)) {
 		tp_state = 0;
-		pr_info("ctn730: %s: TP is not ready!\n", "check_tp_state");
+		pr_err("ctn730: %s: TP is not ready!", "check_tp_state");
 		return 0;
 	}
 	tp_state = 1;
 	nvt_support_pen_set_nfc(data->pen_info_attached != 1);
-	pr_info("ctn730: %s: TP is ready!\n", "check_tp_state");
+	pr_err("ctn730: %s: TP is ready!", "check_tp_state");
 	return 0;
 }
 
@@ -358,7 +358,7 @@ static int ctn730_uevent(struct device *dev, struct kobj_uevent_env *env)
 	int ret;
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "ctn730_uevent");
+		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_uevent");
 		return -ENODEV;
 	}
 	if (data->pending_event == 1) {
@@ -398,7 +398,7 @@ static int ctn730_drm_notifier_callback(struct notifier_block *nb,
 	int *blank;
 
 	if (!priv) {
-		pr_info("ctn730: %s: no ctn730_dev\n",
+		pr_err("ctn730: %s: no ctn730_dev\n",
 			"ctn730_drm_notifier_callback");
 		return -ENODEV;
 	}
@@ -413,7 +413,7 @@ static int ctn730_drm_notifier_callback(struct notifier_block *nb,
 		mutex_lock(&priv->report_info_mutex);
 		priv->need_report_info = 1;
 		mutex_unlock(&priv->report_info_mutex);
-		pr_info("ctn730: %s: need_report_info:%d report_info:%d\n",
+		pr_err("ctn730: %s: need_report_info:%d report_info:%d\n",
 			"ctn730_drm_notifier_callback", priv->need_report_info,
 			priv->report_info);
 		if (priv->pending_event_index == 1 && priv->charging) {
@@ -424,7 +424,7 @@ static int ctn730_drm_notifier_callback(struct notifier_block *nb,
 		mutex_lock(&priv->report_info_mutex);
 		priv->need_report_info = 0;
 		mutex_unlock(&priv->report_info_mutex);
-		pr_info("ctn730: %s: need_report_info:%d report_info:%d\n",
+		pr_err("ctn730: %s: need_report_info:%d report_info:%d\n",
 			"ctn730_drm_notifier_callback", priv->need_report_info,
 			priv->report_info);
 		if (priv->pending_event_index == 1 && priv->charging) {
@@ -433,7 +433,7 @@ static int ctn730_drm_notifier_callback(struct notifier_block *nb,
 		}
 	} else {
 		/* stock indexes status_text with fw_status (data+0x538) */
-		pr_info("ctn730: %s: status: %s have_mac %d,no charging info cmd\n",
+		pr_err("ctn730: %s: status: %s have_mac %d,no charging info cmd\n",
 			"ctn730_drm_notifier_callback",
 			ctn730_status_text[priv->fw_status],
 			priv->has_mac);
@@ -457,7 +457,7 @@ static int ctn730_i2c_send(struct ctn730_data *data, void *buf, size_t len)
 	int ret;
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "ctn730_i2c_send");
+		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_i2c_send");
 		return -ENODEV;
 	}
 	pr_debug("ctn730: %s: %*ph\n", "ctn730_i2c_send", (int)len, buf);
@@ -471,7 +471,7 @@ static int ctn730_i2c_send(struct ctn730_data *data, void *buf, size_t len)
 		msleep(1);
 		ret = i2c_transfer_buffer_flags(data->client, buf, len, 0);
 		if (ret == (int)len) {
-			pr_info("ctn730: %s: %s : i2c_master_send retried ok\n",
+			pr_err("ctn730: %s: %s : i2c_master_send retried ok\n",
 				"ctn730_i2c_send", "ctn730_i2c_send");
 			return ret;
 		}
@@ -504,13 +504,13 @@ static void set_work(struct work_struct *work)
 	int ret;
 
 	if (!data->dev) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "set_work");
+		pr_err("ctn730: %s: no ctn730_dev\n", "set_work");
 		return;
 	}
 
 	/* stock: data+0xe8 != 0 -> "has ext_cmd, skip" */
 	if (data->rf_on != 0) {
-		pr_info("ctn730: %s: has ext_cmd, skip\n", "set_work");
+		pr_err("ctn730: %s: has ext_cmd, skip\n", "set_work");
 		return;
 	}
 
@@ -568,7 +568,7 @@ static void set_work(struct work_struct *work)
 		buf[2] = 0x09;
 		buf[3] = 0x10;
 		buf[4] = 0x01;
-		pr_info("ctn730: %s: %*ph\n", "ctn730_get_mac", 5, buf);
+		pr_err("ctn730: %s: %*ph\n", "ctn730_get_mac", 5, buf);
 		mutex_lock(&data->bist_mutex);
 		ret = ctn730_i2c_send(data, buf, 5);
 		if (ret >= 0)
@@ -672,24 +672,24 @@ static void reset_work(struct work_struct *work)
 						struct ctn730_data, reset_work);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "reset_work");
+		pr_err("ctn730: %s: no ctn730_dev\n", "reset_work");
 		return;
 	}
-	pr_info("ctn730: %s: ctn730_dev_hard_reset\n", "reset_work");
+	pr_err("ctn730: %s: ctn730_dev_hard_reset\n", "reset_work");
 	if (data->enabled) {
-		pr_info("ctn730: %s: ctn730_disenable\n", "ctn730_disable");
+		pr_err("ctn730: %s: ctn730_disenable\n", "ctn730_disable");
 		disable_irq(data->irq);
 		if (data->gpio_ven < 0x500) {
 			ctn730_set_ven(data, 0);
 			data->detected = 0;
 		} else {
-			pr_info("ctn730: %s: invalid gpio ven_gpio,disable failed\n",
+			pr_err("ctn730: %s: invalid gpio ven_gpio,disable failed\n",
 				"ctn730_disable");
 		}
 		data->enabled = 0;
 	}
 	msleep(2000);
-	pr_info("ctn730: %s: ctn730_enable\n", "ctn730_enable");
+	pr_err("ctn730: %s: ctn730_enable\n", "ctn730_enable");
 	if (!data->enabled) {
 		ctn730_set_ven(data, 1);
 		enable_irq(data->irq);
@@ -709,11 +709,11 @@ static void update_firmware_work(struct work_struct *work)
 	u8 buf[280];
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "update_firmware_work");
+		pr_err("ctn730: %s: no ctn730_dev\n", "update_firmware_work");
 		return;
 	}
 	if (!data->enabled) {
-		pr_info("ctn730: %s: ctn730_enable\n", "ctn730_enable");
+		pr_err("ctn730: %s: ctn730_enable\n", "ctn730_enable");
 		if (data->gpio_ven < 0x500)
 			ctn730_set_ven(data, 1);
 		data->enabled = 1;
@@ -774,13 +774,13 @@ static void update_firmware_work(struct work_struct *work)
 		ctn730_i2c_send(data, buf, 4);
 		return;
 	}
-	pr_info("ctn730: %s: ctn730_disenable\n", "ctn730_disable");
+	pr_err("ctn730: %s: ctn730_disenable\n", "ctn730_disable");
 	disable_irq(data->irq);
 	if (data->gpio_ven < 0x500) {
 		ctn730_set_ven(data, 0);
 		data->detected = 0;
 	} else {
-		pr_info("ctn730: %s: invalid gpio ven_gpio,disable failed\n",
+		pr_err("ctn730: %s: invalid gpio ven_gpio,disable failed\n",
 			"ctn730_disable");
 	}
 	data->enabled = 0;
@@ -793,7 +793,7 @@ static void rf_on_work(struct work_struct *work)
 	u8 buf[4];
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "rf_on_work");
+		pr_err("ctn730: %s: no ctn730_dev\n", "rf_on_work");
 		return;
 	}
 	if (data->rf_on == 0) {
@@ -836,7 +836,7 @@ static void check_static_charge_work(struct work_struct *work)
 						check_static_charge_work);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n",
+		pr_err("ctn730: %s: no ctn730_dev\n",
 			"check_static_charge_work");
 		return;
 	}
@@ -844,7 +844,7 @@ static void check_static_charge_work(struct work_struct *work)
 	data->pending_event_index = 0;
 	data->charging = 0;
 	if (tp_state == 1) {
-		pr_info("ctn730: %s: check charge work :open pen mode\n",
+		pr_err("ctn730: %s: check charge work :open pen mode\n",
 			"check_static_charge_work");
 		nvt_support_pen_set_nfc(true);
 	}
@@ -865,7 +865,7 @@ static void check_pen_lost(struct work_struct *work)
 						check_pen_lost);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "check_pen_lost");
+		pr_err("ctn730: %s: no ctn730_dev\n", "check_pen_lost");
 		return;
 	}
 	memset(data->mac, 0, 6);
@@ -873,9 +873,9 @@ static void check_pen_lost(struct work_struct *work)
 	data->pending_event_index = 0;
 	data->level = -1;
 	data->charging = 0;
-	pr_info("ctn730: %s: enter check :is pen lost\n", "check_pen_lost");
+	pr_err("ctn730: %s: enter check :is pen lost\n", "check_pen_lost");
 	if (tp_state == 1) {
-		pr_info("ctn730: %s: pen_lost :open pen mode\n", "check_pen_lost");
+		pr_err("ctn730: %s: pen_lost :open pen mode\n", "check_pen_lost");
 		nvt_support_pen_set_nfc(true);
 	}
 	/* W1e-3d (C90, stock 0x8883f98): pen_info_attached cleared to 0 before
@@ -892,7 +892,7 @@ static enum alarmtimer_restart charging_alarmtimer_function(struct alarm *alarm,
 						alarm);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "ctn730_dev");
+		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_dev");
 		return ALARMTIMER_NORESTART;
 	}
 	if (data->suspended) {
@@ -900,7 +900,7 @@ static enum alarmtimer_restart charging_alarmtimer_function(struct alarm *alarm,
 		data->err_count++;
 	}
 	queue_delayed_work_on(8, system_wq, &data->reset_work, 0);
-	pr_info("ctn730: %s: charging time out ctn730 reset !!!\n",
+	pr_err("ctn730: %s: charging time out ctn730 reset !!!\n",
 		"charging_alarmtimer_function");
 	return ALARMTIMER_NORESTART;
 }
@@ -916,11 +916,11 @@ static irqreturn_t ctn730_dev_irq_handler(int irq, void *dev_id)
 	struct timespec ts;
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "ctn730_dev_irq_handler");
+		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_dev_irq_handler");
 		return IRQ_HANDLED;
 	}
 	if (data->suspended) {
-		pr_info("ctn730: %s: suspended, wakeup event!\n",
+		pr_err("ctn730: %s: suspended, wakeup event!\n",
 			"ctn730_dev_irq_handler");
 		/* stock passes data+0x40 = misc.this_device */
 		pm_wakeup_dev_event(data->misc.this_device, 10000, 0);
@@ -931,14 +931,13 @@ static irqreturn_t ctn730_dev_irq_handler(int irq, void *dev_id)
 	memset(payload, 0, sizeof(payload));
 	/* stock checks gpio_irq (data+0xf4) here, not ven */
 	if (!gpiod_get_raw_value(gpio_to_desc(data->gpio_irq))) {
-		pr_info("ctn730: %s: irq_gpio low do not read i2c\n",
+		pr_err("ctn730: %s: irq_gpio low do not read i2c\n",
 			"ctn730_dev_irq_handler");
 		goto out;
 	}
 	ret = i2c_transfer_buffer_flags(data->client, head, 2, I2C_M_RD);
 	if (ret < 0) {
-		pr_info("ctn730: %s: recieve error %d\n",
-			"ctn730_dev_irq_handler", ret);
+		(void)0;
 		msleep(5);
 		return IRQ_HANDLED;
 	}
@@ -961,7 +960,7 @@ static irqreturn_t ctn730_dev_irq_handler(int irq, void *dev_id)
 				data->err_count++;
 				queue_delayed_work_on(8, system_wq,
 						      &data->reset_work, 0);
-				pr_info("ctn730: %s: ctn730_hard_reset \n",
+				pr_err("ctn730: %s: ctn730_hard_reset \n",
 					"ctn730_dev_irq_handler");
 				goto out;
 			}
@@ -969,20 +968,20 @@ static irqreturn_t ctn730_dev_irq_handler(int irq, void *dev_id)
 	} else {
 		data->last_irq_ktime = 0;
 	}
-	pr_info("ctn730: %s: recieve %*ph %*ph\n", "ctn730_dev_irq_handler",
+	pr_err("ctn730: %s: recieve %*ph %*ph\n", "ctn730_dev_irq_handler",
 		2, head, len, payload);
 	if ((head[0] & 0xc0) == 0x40) {
-		pr_info("ctn730: %s: wk>enter ctn730_parse_message(),instruction: %d\n",
+		pr_err("ctn730: %s: wk>enter ctn730_parse_message(),instruction: %d\n",
 			"ctn730_parse_message", head[0] & 0x3f);
 		ctn730_parse_message(data, head[0], head[0] & 0x3f, payload);
 	} else if ((head[0] & 0xc0) == 0x80) {
-		pr_info("ctn730: %s: wk>enter ctn730_parse_message(),instruction: %d\n",
+		pr_err("ctn730: %s: wk>enter ctn730_parse_message(),instruction: %d\n",
 			"ctn730_parse_message", head[0] & 0x3f);
 		if ((head[0] & 0x3f) <= 0x24)
 			ctn730_parse_message(data, head[0], head[0] & 0x3f,
 					     payload);
 	} else {
-		pr_info("ctn730: %s: recieve %02x %02x\n",
+		pr_err("ctn730: %s: recieve %02x %02x\n",
 			"ctn730_dev_irq_handler", head[0], len);
 	}
 out:
@@ -1006,15 +1005,13 @@ static void ctn730_parse_message(struct ctn730_data *data, u8 cmd, u8 len,
 
 	if ((cmd & 0xc0) == 0x40) {
 		sub = cmd & 0x3f;
-		pr_info("ctn730: %s: instruction: %d\n",
-			"ctn730_parse_message", sub);
+		(void)0;
 		if (sub < 3 || sub > 0x23)
 			goto bad;
 		goto t40_dispatch;
 	} else if ((cmd & 0xc0) == 0x80) {
 		sub = cmd & 0x3f;
-		pr_info("ctn730: %s: instruction: %d\n",
-			"ctn730_parse_message", sub);
+		(void)0;
 		if (sub > 0x24)
 			goto bad;
 		goto t80_dispatch;
@@ -1029,36 +1026,36 @@ t40_dispatch:
 		if (payload[0])
 			goto t43_err;
 		data->fw_status = 21;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+		pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[21]);
 		goto resched_tail;
 t43_err:
 		data->fw_status = 24;
-		pr_info("ctn730: %s: status HOST_CTRL_DL_OPEN_SESSION failed\n",
+		pr_err("ctn730: %s: status HOST_CTRL_DL_OPEN_SESSION failed\n",
 			"ctn730_parse_message");
 		goto resched_tail;
 	case 4:  /* 0x44: 0x8884c18 */
 		if (payload[0])
 			goto t44_err;
 		data->fw_status = 23;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+		pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[23]);
 		goto resched_tail;
 t44_err:
 		data->fw_status = 24;
-		pr_info("ctn730: %s: status HOST_CTRL_DL_COMMIT_SESSION failed\n",
+		pr_err("ctn730: %s: status HOST_CTRL_DL_COMMIT_SESSION failed\n",
 			"ctn730_parse_message");
 		goto resched_tail;
 	case 5:  /* 0x45: 0x8884c44 */
 		if (payload[0])
 			goto t45_err;
 		data->fw_status = 22;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+		pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[22]);
 		goto resched_tail;
 t45_err:
 		data->fw_status = 24;
-		pr_info("ctn730: %s: status HOST_CTRL_DL_WRITE_FLASH failed\n",
+		pr_err("ctn730: %s: status HOST_CTRL_DL_WRITE_FLASH failed\n",
 			"ctn730_parse_message");
 		goto resched_tail;
 	case 6:  /* 0x46: 0x8884704 (T40 init_block) */
@@ -1079,7 +1076,7 @@ t45_err:
 		if (payload[0])
 			goto tail;
 		data->fw_status = 3;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+		pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[3]);
 		queue_delayed_work_on(8, system_wq,
 			&data->check_static_charge_work,
@@ -1089,28 +1086,28 @@ t45_err:
 		if (payload[0])
 			goto tail;
 		data->fw_status = 4;
-		pr_info("ctn730: %s: CHG_DISABLE OK\n",
+		pr_err("ctn730: %s: CHG_DISABLE OK\n",
 			"ctn730_parse_message");
 		goto tail;
 	case 32: /* 0x60: 0x88847e0 */
 		if (payload[0])
 			goto tail;
 		data->fw_status = 12;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+		pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[12]);
 		goto tail;
 	case 33: /* 0x61: 0x8884808 */
 		if (payload[0])
 			goto tail;
 		data->fw_status = 13;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+		pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[13]);
 		goto tail;
 	case 35: /* 0x63: 0x8884830 */
 		if (payload[0])
 			goto t35_notok;
 		data->fw_status = 4;
-		pr_info("ctn730: %s: APP_CTRL_CHN_SEND_DATA rsp ok, treat as detected\n",
+		pr_err("ctn730: %s: APP_CTRL_CHN_SEND_DATA rsp ok, treat as detected\n",
 			"ctn730_parse_message");
 		goto tail;
 t35_notok:
@@ -1137,14 +1134,14 @@ t80_dispatch:
 			data->has_ext_cmd = 1;
 			queue_delayed_work_on(8, system_wq, &data->set_work,
 				msecs_to_jiffies(13));
-			pr_info("ctn730: %s: status %s\n",
+			pr_err("ctn730: %s: status %s\n",
 				"ctn730_parse_message",
 				ctn730_status_text[8]);
 			goto tail;
 		}
 		if (payload[0] != 1)
 			goto tail;
-		pr_info("ctn730: %s: disable_chg due to overtemp\n",
+		pr_err("ctn730: %s: disable_chg due to overtemp\n",
 			"ctn730_parse_message");
 		goto tail;
 	case 18: /* 0x92: table entry 0x8884870 */
@@ -1154,7 +1151,7 @@ t80_dispatch:
 				&data->check_static_charge_work);
 			data->pen_info_attached = 1;
 			memcpy(data->pen_info_buf, payload + 1, 7);
-			pr_info("ctn730: %s: pen_uid:%*ph\n",
+			pr_err("ctn730: %s: pen_uid:%*ph\n",
 				"ctn730_parse_message", 8, data->pen_info_buf);
 			ctn730_queue_failure_work(data, 0);
 			ctn730_notifier_call_chain(data,
@@ -1165,7 +1162,7 @@ t80_dispatch:
 		}
 		if (payload[0] == 1) {
 			data->fw_status = 5;
-			pr_info("ctn730: %s: status %s\n",
+			pr_err("ctn730: %s: status %s\n",
 				"ctn730_parse_message",
 				ctn730_status_text[5]);
 			goto tail;
@@ -1174,7 +1171,7 @@ t80_dispatch:
 			goto app_chn_connected;
 		if (payload[0] == 3) {
 			data->fw_status = 7;
-			pr_info("ctn730: %s: status %s\n",
+			pr_err("ctn730: %s: status %s\n",
 				"ctn730_parse_message",
 				ctn730_status_text[7]);
 			goto tail;
@@ -1190,7 +1187,7 @@ t80_dispatch:
 		if (!payload[0]) {
 			has_hard_reset = 0;
 			alarm_start_relative(&data->alarm, ktime_set(5400, 0));
-			pr_info("ctn730: %s: charge_state %s\n",
+			pr_err("ctn730: %s: charge_state %s\n",
 				"ctn730_parse_message",
 				ctn730_charge_state_text[1]);
 			if (tp_state == 1)
@@ -1208,7 +1205,7 @@ t80_dispatch:
 		}
 		if (payload[0] == 1) {
 			alarm_cancel(&data->alarm);
-			pr_info("ctn730: %s: charge_state %s\n",
+			pr_err("ctn730: %s: charge_state %s\n",
 				"ctn730_parse_message",
 				ctn730_charge_state_text[2]);
 			idx = 2;
@@ -1216,7 +1213,7 @@ t80_dispatch:
 		}
 		if (payload[0] == 2) {
 			if (!data->pen_status) {
-				pr_info("ctn730: %s: charge_state %s\n",
+				pr_err("ctn730: %s: charge_state %s\n",
 					"ctn730_parse_message",
 					ctn730_charge_state_text[3]);
 				idx = 3;
@@ -1238,7 +1235,7 @@ update_charge_state:
 		if (payload[0] == data->level)
 			goto tail;
 		idx = payload[0] == 0xff ? -1 : payload[0];
-		pr_info("ctn730: %s: level : %d\n",
+		pr_err("ctn730: %s: level : %d\n",
 			"ctn730_parse_message", idx);
 		data->level = idx;
 		data->has_mac = 1;
@@ -1247,7 +1244,7 @@ update_charge_state:
 	case 34: /* 0xa2: table entry 0x8884a1c */
 		if (!payload[0]) {
 			data->fw_status = 14;
-			pr_info("ctn730: %s: status %s\n",
+			pr_err("ctn730: %s: status %s\n",
 				"ctn730_parse_message",
 				ctn730_status_text[14]);
 			queue_delayed_work_on(8, system_wq,
@@ -1257,20 +1254,20 @@ update_charge_state:
 		if (payload[0] != 1)
 			goto tail;
 		data->fw_status = 4;
-		pr_info("ctn730: %s: app_chn_disconnected ,treat as status %s\n",
+		pr_err("ctn730: %s: app_chn_disconnected ,treat as status %s\n",
 			"ctn730_parse_message", ctn730_status_text[4]);
 		goto tail;
 	case 35: /* 0xa3: 0x8884a90 */
 		goto tail;
 	case 36: /* 0xa4: table entry 0x8884a54 */
 		if (!payload[0]) {
-			pr_info("ctn730: %s: APP_CTRL_CHN_RECIVE_DATA more data\n",
+			pr_err("ctn730: %s: APP_CTRL_CHN_RECIVE_DATA more data\n",
 				"ctn730_parse_message");
 			goto tail;
 		}
 		if (payload[0] != 1)
 			goto tail;
-		pr_info("ctn730: %s: APP_CTRL_CHN_RECIVE_DATA last data\n",
+		pr_err("ctn730: %s: APP_CTRL_CHN_RECIVE_DATA last data\n",
 			"ctn730_parse_message");
 		data->fw_status = 15;
 		queue_delayed_work_on(8, system_wq, &data->set_work, 0);
@@ -1289,7 +1286,7 @@ shared_4_or_5:
 	data->attach_delta_sec = div_s64(ktime_to_ns(delta), NSEC_PER_SEC);
 	if (ktime_to_ns(delta) <= 7503359) {
 		cancel_delayed_work_sync(&data->check_pen_lost);
-		pr_info("ctn730: %s:  cancel check pen lost\n",
+		pr_err("ctn730: %s:  cancel check pen lost\n",
 			"ctn730_parse_message");
 	}
 	memset(&data->attach_curr_ktime, 0, sizeof(data->attach_curr_ktime));
@@ -1312,7 +1309,7 @@ t40_init_block:
 	if (payload[0]) {
 		data->fw_status = 26;
 		queue_delayed_work_on(8, system_wq, &data->set_work, 0);
-		pr_info("ctn730: %s: HOST_CTRL_BIST  Response error: %d\n",
+		pr_err("ctn730: %s: HOST_CTRL_BIST  Response error: %d\n",
 			"ctn730_parse_message", payload[0]);
 		goto tail;
 	}
@@ -1320,12 +1317,12 @@ t40_init_block:
 	mutex_lock(&data->bist_mutex);
 	if (data->pen_delay == 1) {
 		data->fw_status = 9;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+		pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[9]);
 	}
 	if (data->pen_delay == 2) {
 		data->fw_status = 10;
-		pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+		pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 			ctn730_status_text[10]);
 	}
 	if (data->pen_delay == 9) {
@@ -1335,12 +1332,12 @@ t40_init_block:
 		data->charging = 1;
 		data->has_mac = 1;
 		ctn730_uevent_change(data);
-		pr_info("ctn730: %s: pen_mac: %02X:%02X:%02X:%02X:%02X:%02X\n",
+		pr_err("ctn730: %s: pen_mac: %02X:%02X:%02X:%02X:%02X:%02X\n",
 			"ctn730_parse_message", data->mac[5], data->mac[4],
 			data->mac[3], data->mac[2], data->mac[1], data->mac[0]);
 	}
 	if (data->pen_delay == 4)
-		pr_info("ctn730: %s: BIST_ACTIVATION:%*ph\n",
+		pr_err("ctn730: %s: BIST_ACTIVATION:%*ph\n",
 			"ctn730_parse_message", len, payload);
 	mutex_unlock(&data->bist_mutex);
 
@@ -1365,7 +1362,7 @@ t80_init_block:
 		data->fw_ver_sel = 1;
 	}
 	if (tp_state == 1) {
-		pr_info("ctn730: %s: initialized :open pen mode\n",
+		pr_err("ctn730: %s: initialized :open pen mode\n",
 			"ctn730_parse_message");
 		nvt_support_pen_set_nfc(true);
 	}
@@ -1375,7 +1372,7 @@ t80_init_block:
 	if (!is_hard_reset)
 		kobject_uevent(&data->misc.this_device->kobj, KOBJ_CHANGE);
 	is_hard_reset = 0;
-	pr_info("ctn730: %s: version %02x%02x\n",
+	pr_err("ctn730: %s: version %02x%02x\n",
 		"ctn730_parse_message", data->version[0],
 		data->version[1]);
 	if (payload[0] == 1)
@@ -1396,7 +1393,7 @@ app_chn_connected:
 	data->attach_prev_ktime = ktime_get();
 	memset(data->mac, 0, 6);
 	memset(data->pen_info_buf, 0, 8);
-	pr_info("ctn730: %s: status %s\n", "ctn730_parse_message",
+	pr_err("ctn730: %s: status %s\n", "ctn730_parse_message",
 		ctn730_status_text[6]);
 	ctn730_notifier_call_chain(data, data->pen_info_attached, NULL);
 	queue_delayed_work_on(8, system_wq, &data->check_pen_lost,
@@ -1405,7 +1402,7 @@ app_chn_connected:
 
 bad:
 	/* 0x8884a70: recieve print -> 0x8884eb0 (NO resched) */
-	pr_info("ctn730: %s: recieve %02x %02x\n", "ctn730_parse_message",
+	pr_err("ctn730: %s: recieve %02x %02x\n", "ctn730_parse_message",
 		cmd, len);
 	goto tail;
 
@@ -1425,10 +1422,10 @@ static ssize_t enable_show(struct device *dev, struct device_attribute *attr,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "enable_show");
+		pr_err("ctn730: %s: no ctn730_dev\n", "enable_show");
 		return -ENODEV;
 	}
-	pr_info("ctn730: %s: wk>enable__show\n", "enable_show");
+	pr_err("ctn730: %s: wk>enable__show\n", "enable_show");
 	return sprintf(buf, "%d\n",
 		       gpiod_get_raw_value(gpio_to_desc(data->gpio_ven)));
 }
@@ -1441,12 +1438,12 @@ static ssize_t enable_store(struct device *dev, struct device_attribute *attr,
 	unsigned long val;
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "enable_store");
+		pr_err("ctn730: %s: no ctn730_dev\n", "enable_store");
 		return -ENODEV;
 	}
 	val = simple_strtoul(buf, NULL, 0);
 	if (val == 0) {
-		pr_info("ctn730: %s: wk>excute--ctn730_disable_chg()\n",
+		pr_err("ctn730: %s: wk>excute--ctn730_disable_chg()\n",
 			"enable_store");
 		data->rf_on = 0;
 		memset(cmd, 0, sizeof(cmd));
@@ -1455,13 +1452,13 @@ static ssize_t enable_store(struct device *dev, struct device_attribute *attr,
 		ctn730_i2c_send(data, cmd, 2);
 		data->pen_info_attached = 0;
 		if (is_hard_reset == 1) {
-			pr_info("ctn730: %s: enable_store :open pen mode\n",
+			pr_err("ctn730: %s: enable_store :open pen mode\n",
 				"enable_store");
 			nvt_support_pen_set_nfc(true);
 		}
 		data->charging = 0;
 	} else {
-		pr_info("ctn730: %s: wk>ctn730_enable_chg\n", "enable_store");
+		pr_err("ctn730: %s: wk>ctn730_enable_chg\n", "enable_store");
 		memset(cmd, 0, sizeof(cmd));
 		cmd[0] = 0x10;
 		cmd[1] = 0x02;
@@ -1469,7 +1466,7 @@ static ssize_t enable_store(struct device *dev, struct device_attribute *attr,
 		cmd[3] = 0x01;
 		ctn730_i2c_send(data, cmd, 4);
 	}
-	pr_info("ctn730: %s: wk>END--enable_store(),return result>size:%d\n",
+	pr_err("ctn730: %s: wk>END--enable_store(),return result>size:%d\n",
 		"enable_store", (int)count);
 	return count;
 }
@@ -1480,7 +1477,7 @@ static ssize_t pen_cmd_store(struct device *dev, struct device_attribute *attr,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "pen_cmd_store");
+		pr_err("ctn730: %s: no ctn730_dev\n", "pen_cmd_store");
 		return -ENODEV;
 	}
 	if (data->fw_status == 4 && data->charging) {
@@ -1489,7 +1486,7 @@ static ssize_t pen_cmd_store(struct device *dev, struct device_attribute *attr,
 		data->fw_status = 0x10;
 		queue_delayed_work_on(8, system_wq, &data->set_work, 0);
 	} else {
-		pr_info("ctn730: %s: status: %s have_mac %d,no pen_cmd\n",
+		pr_err("ctn730: %s: status: %s have_mac %d,no pen_cmd\n",
 			"pen_cmd_store",
 			ctn730_status_text[data->fw_status],
 			data->has_mac);
@@ -1505,7 +1502,7 @@ static ssize_t reget_mac_store(struct device *dev,
 	unsigned long val;
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "reget_mac_store");
+		pr_err("ctn730: %s: no ctn730_dev\n", "reget_mac_store");
 		return -ENODEV;
 	}
 	val = simple_strtoul(buf, NULL, 0);
@@ -1525,7 +1522,7 @@ static ssize_t info_report_store(struct device *dev,
 	unsigned long val;
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "info_report_store");
+		pr_err("ctn730: %s: no ctn730_dev\n", "info_report_store");
 		return -ENODEV;
 	}
 	val = simple_strtoul(buf, NULL, 0);
@@ -1542,7 +1539,7 @@ static ssize_t rf_on_store(struct device *dev, struct device_attribute *attr,
 	unsigned long val;
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "rf_on_store");
+		pr_err("ctn730: %s: no ctn730_dev\n", "rf_on_store");
 		return -ENODEV;
 	}
 	val = simple_strtoul(buf, NULL, 0);
@@ -1558,11 +1555,11 @@ static ssize_t param_store(struct device *dev, struct device_attribute *attr,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "param_store");
+		pr_err("ctn730: %s: no ctn730_dev\n", "param_store");
 		return -ENODEV;
 	}
 	if (count >= 0x21) {
-		pr_info("ctn730: %s: too many input\n", "param_store");
+		pr_err("ctn730: %s: too many input\n", "param_store");
 		return count;
 	}
 	memcpy(data->param, buf, count);
@@ -1579,10 +1576,10 @@ static ssize_t charge_state_show(struct device *dev,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "charge_state_show");
+		pr_err("ctn730: %s: no ctn730_dev\n", "charge_state_show");
 		return -ENODEV;
 	}
-	pr_info("ctn730: %s: wk>charge_state_show\n", "charge_state_show");
+	pr_err("ctn730: %s: wk>charge_state_show\n", "charge_state_show");
 	return sprintf(buf, "%s\n",
 		       ctn730_charge_state_text[data->pending_event_index]);
 }
@@ -1593,10 +1590,10 @@ static ssize_t mac_show(struct device *dev, struct device_attribute *attr,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "mac_show");
+		pr_err("ctn730: %s: no ctn730_dev\n", "mac_show");
 		return -ENODEV;
 	}
-	pr_info("ctn730: %s: wk>mac_show\n", "mac_show");
+	pr_err("ctn730: %s: wk>mac_show\n", "mac_show");
 	return sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X\n",
 		       data->mac[5], data->mac[4], data->mac[3],
 		       data->mac[2], data->mac[1], data->mac[0]);
@@ -1608,7 +1605,7 @@ static ssize_t version_show(struct device *dev, struct device_attribute *attr,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "version_show");
+		pr_err("ctn730: %s: no ctn730_dev\n", "version_show");
 		return -ENODEV;
 	}
 	return sprintf(buf, "%02x%02x", data->version[0], data->version[1]);
@@ -1620,10 +1617,10 @@ static ssize_t level_show(struct device *dev, struct device_attribute *attr,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "level_show");
+		pr_err("ctn730: %s: no ctn730_dev\n", "level_show");
 		return -ENODEV;
 	}
-	pr_info("ctn730: %s: wk>level_show\n", "level_show");
+	pr_err("ctn730: %s: wk>level_show\n", "level_show");
 	return sprintf(buf, "%d\n", data->level);
 }
 
@@ -1633,10 +1630,10 @@ static ssize_t attached_show(struct device *dev, struct device_attribute *attr,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "attached_show");
+		pr_err("ctn730: %s: no ctn730_dev\n", "attached_show");
 		return -ENODEV;
 	}
-	pr_info("ctn730: %s: wk>attached__show\n", "attached_show");
+	pr_err("ctn730: %s: wk>attached__show\n", "attached_show");
 	return sprintf(buf, "%d\n", data->pen_info_attached);
 }
 
@@ -1646,10 +1643,10 @@ static ssize_t status_show(struct device *dev, struct device_attribute *attr,
 	struct ctn730_data *data = ctn730_from_dev(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "status_show");
+		pr_err("ctn730: %s: no ctn730_dev\n", "status_show");
 		return -ENODEV;
 	}
-	pr_info("ctn730: %s: wk>status__show\n", "status_show");
+	pr_err("ctn730: %s: wk>status__show\n", "status_show");
 	return sprintf(buf, "%s\n",
 		       ctn730_status_text[data->fw_status]);
 }
@@ -1661,10 +1658,10 @@ static ssize_t cn_test_show(struct device *dev, struct device_attribute *attr,
 	u8 cmd[8];
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "cn_test_show");
+		pr_err("ctn730: %s: no ctn730_dev\n", "cn_test_show");
 		return -ENODEV;
 	}
-	pr_info("ctn730: %s: wk>cn_test__show\n", "cn_test_show");
+	(void)0;
 	memset(cmd, 0, sizeof(cmd));
 	cmd[0] = 0x06;
 	cmd[1] = 0x01;
@@ -1700,7 +1697,7 @@ static int ctn730_suspend(struct device *dev)
 	u8 buf[4];
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "ctn730_suspend");
+		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_suspend");
 		return 0;
 	}
 	data->suspended = 1;
@@ -1725,7 +1722,7 @@ static int ctn730_resume(struct device *dev)
 	struct ctn730_data *data = dev_get_drvdata(dev);
 
 	if (!data) {
-		pr_info("ctn730: %s: no ctn730_dev\n", "ctn730_resume");
+		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_resume");
 		return 0;
 	}
 	pr_info("%s\n", "ctn730_resume");
@@ -1743,7 +1740,7 @@ static int ctn730_remove(struct i2c_client *client)
 	misc_deregister(&data->misc);
 	gpio_free(data->gpio_irq);
 	gpio_free(data->gpio_ven);
-	pr_info("ctn730: %s: kfree CTN730\n", "ctn730_remove");
+	pr_err("ctn730: %s: kfree CTN730\n", "ctn730_remove");
 	kfree(data);
 	return 0;
 }
@@ -1758,16 +1755,16 @@ static int ctn730_probe(struct i2c_client *client,
 	int count, i, ret;
 	int rst_gpio;
 
-	pr_info("ctn730: %s: probe device tree start\n", "ctn730_probe");
+	pr_err("ctn730: %s: probe device tree start\n", "ctn730_probe");
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data) {
-		pr_info("ctn730: %s: failed to allocate memory for module data\n",
+		pr_err("ctn730: %s: failed to allocate memory for module data\n",
 			"ctn730_probe");
 		return -ENOMEM;
 	}
 
 	if (ctn730)
-		pr_info("ctn730: %s: ctn730_dev is not NULL\n", "ctn730_probe");
+		pr_err("ctn730: %s: ctn730_dev is not NULL\n", "ctn730_probe");
 	client_address = client;
 	ctn730 = data;
 	data->client = client;
@@ -1775,7 +1772,7 @@ static int ctn730_probe(struct i2c_client *client,
 
 	np = client->dev.of_node;
 	if (!np) {
-		pr_info("ctn730: %s: no node\n", "ctn730_probe");
+		pr_err("ctn730: %s: no node\n", "ctn730_probe");
 		ret = -ENODEV;
 		goto free_data;
 	}
@@ -1820,7 +1817,7 @@ static int ctn730_probe(struct i2c_client *client,
 	data->gpio_irq = ret;
 
 	count = of_count_phandle_with_args(np, "panel", NULL);
-	pr_info("ctn730: %s: panel count:%d \n", "ctn730_probe", count);
+	pr_err("ctn730: %s: panel count:%d \n", "ctn730_probe", count);
 	/* W1e-3e (C91, stock 0x88831a8..0x8883284): count < 1 does NOT fail
 	 * the probe - stock falls through to "parse device tree success" and
 	 * keeps binding (the shipping live DT has no `panel` property). */
@@ -1836,7 +1833,7 @@ static int ctn730_probe(struct i2c_client *client,
 				of_node_put(panel_np);
 				continue;
 			}
-			pr_info("ctn730: %s: find panel\n", "ctn730_probe");
+			pr_err("ctn730: %s: find panel\n", "ctn730_probe");
 			ctn730_panel = panel_np;
 			ctn730_drm_panel = panel;
 			break;
@@ -1850,81 +1847,80 @@ static int ctn730_probe(struct i2c_client *client,
 		}
 	}
 
-	pr_info("ctn730: %s: parse device tree success\n", "ctn730_probe");
+	pr_err("ctn730: %s: parse device tree success\n", "ctn730_probe");
 	ret = gpio_request(rst_gpio, "rst-gpios");
 	if (ret == 0) {
-		pr_info("ctn730: %s: request rst_gpio %d\n", "ctn730_probe",
+		pr_err("ctn730: %s: request rst_gpio %d\n", "ctn730_probe",
 			rst_gpio);
 	} else {
-		pr_info("ctn730: %s: not able to get GPIO rst_gpio\n",
+		pr_err("ctn730: %s: not able to get GPIO rst_gpio\n",
 			"ctn730_probe");
 	}
 	data->gpio_rst = rst_gpio;
 
 	if (data->gpio_rst < 0x500) {
-		pr_info("ctn730: %s: ctn730_rst test!\n", "ctn730_probe");
+		pr_err("ctn730: %s: ctn730_rst test!\n", "ctn730_probe");
 		gpiod_direction_output_raw(gpio_to_desc(data->gpio_rst), 1);
 		gpiod_set_raw_value(gpio_to_desc(data->gpio_rst), 1);
 		msleep(20);
 		gpiod_set_raw_value(gpio_to_desc(data->gpio_rst), 0);
 		msleep(20);
 		gpiod_set_raw_value(gpio_to_desc(data->gpio_rst), 1);
-		pr_info("ctn730: %s: ctn730_rst test!\n", "ctn730_probe");
+		pr_err("ctn730: %s: ctn730_rst test!\n", "ctn730_probe");
 	}
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		pr_info("ctn730: %s: need I2C_FUNC_I2C\n", "ctn730_probe");
+		pr_err("ctn730: %s: need I2C_FUNC_I2C\n", "ctn730_probe");
 		ret = -ENODEV;
 		goto free_data;
 	}
-	pr_info("ctn730: %s: I2C success\n", "ctn730_probe");
+	pr_err("ctn730: %s: I2C success\n", "ctn730_probe");
 
-	pr_info("ctn730: %s: GPIO irq_gpio %u, ven_gpio %u\n",
-		"ctn730_probe", data->gpio_irq, data->gpio_ven);
+	(void)0;
 	ret = gpio_request(data->gpio_irq, "nfc_int");
 	if (ret < 0) {
-		pr_info("ctn730: %s: not able to get GPIO irq_gpio\n",
+		pr_err("ctn730: %s: not able to get GPIO irq_gpio\n",
 			"ctn730_probe");
 		ret = -ENODEV;
 		goto free_data;
 	}
-	pr_info("ctn730: %s: Enable to get GPIO irq_gpio\n", "ctn730_probe");
+	pr_err("ctn730: %s: Enable to get GPIO irq_gpio\n", "ctn730_probe");
 
 	ret = gpio_request(data->gpio_ven, "nfc_ven");
 	if (ret < 0) {
-		pr_info("ctn730: %s: not able to get GPIO ven_gpio\n",
+		pr_err("ctn730: %s: not able to get GPIO ven_gpio\n",
 			"ctn730_probe");
 		ret = -ENODEV;
 		goto free_irq_gpio;
 	}
-	pr_info("ctn730: %s: Enable to get GPIO ven_gpio\n", "ctn730_probe");
+	pr_err("ctn730: %s: Enable to get GPIO ven_gpio\n", "ctn730_probe");
 
 	ret = gpiod_to_irq(gpio_to_desc(data->gpio_irq));
 	if (ret < 0) {
-		pr_info("ctn730: %s: not able to map GPIO irq_gpio to an IRQ\n",
+		pr_err("ctn730: %s: not able to map GPIO irq_gpio to an IRQ\n",
 			"ctn730_probe");
 		ret = -ENODEV;
 		goto free_ven_gpio;
 	}
 	data->irq = ret;
-	pr_info("ctn730: %s: Enable to map GPIO irq_gpio to an IRQ\n",
+	pr_err("ctn730: %s: Enable to map GPIO irq_gpio to an IRQ\n",
 		"ctn730_probe");
 	ret = gpiod_direction_input(gpio_to_desc(data->gpio_irq));
 	if (ret < 0) {
-		pr_info("ctn730: %s: not able to set irq_gpio as input\n",
+		pr_err("ctn730: %s: not able to set irq_gpio as input\n",
 			"ctn730_probe");
 		goto free_ven_gpio;
 	}
-	pr_info("ctn730: %s: request ven_gpio %d\n", "ctn730_probe",
+	pr_err("ctn730: %s: request ven_gpio %d\n", "ctn730_probe",
 		data->gpio_ven);
 
 	ret = gpiod_direction_output_raw(gpio_to_desc(data->gpio_ven), 0);
 	if (ret < 0) {
-		pr_info("ctn730: %s: not able to set ven_gpio as output\n",
+		pr_err("ctn730: %s: not able to set ven_gpio as output\n",
 			"ctn730_probe");
 		goto free_ven_gpio;
 	}
-	pr_info("ctn730: %s: Enable to set ven_gpio as output\n", "ctn730_probe");
+	pr_err("ctn730: %s: Enable to set ven_gpio as output\n", "ctn730_probe");
 
 	data->misc.minor = MISC_DYNAMIC_MINOR;
 	data->misc.name = "ctn730";
@@ -1933,10 +1929,10 @@ static int ctn730_probe(struct i2c_client *client,
 	data->power_supply = power_supply_get_by_name("bq27541-0");
 	ret = misc_register(&data->misc);
 	if (ret) {
-		pr_info("ctn730: %s: misc_register failed\n", "ctn730_probe");
+		pr_err("ctn730: %s: misc_register failed\n", "ctn730_probe");
 		goto free_ven_gpio;
 	}
-	pr_info("ctn730: %s: misc_register success\n", "ctn730_probe");
+	pr_err("ctn730: %s: misc_register success\n", "ctn730_probe");
 	data->dev = data->misc.this_device;
 	data->misc.this_device->type = &ctn730_dev_type;
 	for (i = 0; ctn730_attrs[i]; i++)
@@ -1944,10 +1940,10 @@ static int ctn730_probe(struct i2c_client *client,
 
 	data->drm_nb.notifier_call = ctn730_drm_notifier_callback;
 	if (!ctn730_panel) {
-		pr_info("ctn730: %s: drm panel is  NULL\n", "ctn730_probe");
+		pr_err("ctn730: %s: drm panel is  NULL\n", "ctn730_probe");
 	} else if (IS_ERR_OR_NULL(ctn730_drm_panel) ||
 		   drm_panel_notifier_register(ctn730_drm_panel, &data->drm_nb)) {
-		pr_info("ctn730: %s: Unable to register ctn730_drm_notifier\n",
+		pr_err("ctn730: %s: Unable to register ctn730_drm_notifier\n",
 			"ctn730_probe");
 	}
 
@@ -1968,11 +1964,11 @@ static int ctn730_probe(struct i2c_client *client,
 					IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
 					data->misc.name, data);
 	if (ret) {
-		pr_info("ctn730: %s: request_irq failed\n", "ctn730_probe");
+		pr_err("ctn730: %s: request_irq failed\n", "ctn730_probe");
 		misc_deregister(&data->misc);
 		goto free_ven_gpio;
 	}
-	pr_info("ctn730: %s: request_irq successed\n", "ctn730_probe");
+	pr_err("ctn730: %s: request_irq successed\n", "ctn730_probe");
 	disable_irq(data->irq);
 	mutex_init(&data->bist_mutex);
 	__mutex_init(&data->report_info_mutex,
@@ -1980,7 +1976,7 @@ static int ctn730_probe(struct i2c_client *client,
 		     &report_info_mutex_key);
 	irq_set_irq_wake(data->irq, 1);
 
-	pr_info("ctn730: %s: ctn730_enable\n", "ctn730_enable");
+	pr_err("ctn730: %s: ctn730_enable\n", "ctn730_enable");
 	if (!data->enabled) {
 		if (data->gpio_ven < 0x500)
 			gpiod_direction_output_raw(gpio_to_desc(data->gpio_ven), 1);
@@ -1988,18 +1984,18 @@ static int ctn730_probe(struct i2c_client *client,
 		data->enabled = 1;
 	}
 	data->report_info = 1;
-	pr_info("ctn730: %s: success\n", "ctn730_probe");
+	pr_err("ctn730: %s: success\n", "ctn730_probe");
 	{
 		u8 init_buf[3] = { 0x01, 0x00, 0x00 };
 
 		if (ctn730_i2c_send(data, init_buf, 3) >= 0)
 			data->detected = 1;
 	}
-	pr_info("ctn730: %s: CTN730 successed\n", "ctn730_probe");
+	pr_err("ctn730: %s: CTN730 successed\n", "ctn730_probe");
 	return 0;
 
 parse_fail:
-	pr_info("ctn730: %s: parse device tree fail,probe fail\n",
+	pr_err("ctn730: %s: parse device tree fail,probe fail\n",
 		"ctn730_probe");
 free_data:
 	kfree(data);
