@@ -175,7 +175,6 @@ struct nvt_ts_data {
 	u8 irq_enabled;
 	u8 auto_copy;
 	struct input_dev *pen_dev;
-	struct input_dev *wake_input_dev;
 	int32_t fw_ver_sub_ver;
 	uint8_t x_num;
 	uint8_t y_num;

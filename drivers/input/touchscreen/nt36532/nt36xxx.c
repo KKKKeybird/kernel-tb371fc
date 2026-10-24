@@ -1213,38 +1213,88 @@ int nvt_check_stylus_state(u8 id, u8 *buf)
 }
 
 /* ---- nvt_ts_wakeup_gesture_report ---- */
-static void nvt_gesture_report_power(void)
-{
-	/* D67/p146 (old-tree proven fix): ZUI input policy (mTpWakeUp=false)
-	 * drops wake attempts from the touch panel device; report on the
-	 * dedicated wake keyboard device like a power button. */
-	input_report_key(nvt_ts->wake_input_dev, KEY_POWER, 1);
-	input_sync(nvt_ts->wake_input_dev);
-	input_report_key(nvt_ts->wake_input_dev, KEY_POWER, 0);
-	input_sync(nvt_ts->wake_input_dev);
-}
-
+/* stock @0x8ad8ed8 (0x260): D65 effective-id, invalid print (1125), id
+ * print (1129), 13-way gesture-name table (0x9812e70, idx=id-12, names at
+ * stock lines 1133..1181), common tail = KEY_POWER press/sync/release/sync
+ * reported on the MAIN touch input_dev ([nvt_ts+8]). No wake device. */
 void nvt_ts_wakeup_gesture_report(u8 id, u8 *buf)
 {
+	u8 gid = id;
 	u8 idx;
 
-	/* D65: stock @0x8ad8ed8 - when id==0x1e && buf[2]==1 the EFFECTIVE
-	 * gesture id is buf[3], not id (stock: mov w8, buf[3] before the
-	 * (id-12)<=12 jump table). The old-tree form used id itself, so a
-	 * 0x1e sub-frame computed idx=0x12 (18) and was dropped as invalid
-	 * - double-tap wake could never fire. */
-	if (id == 0x1e && buf[2] == 1)
-		id = buf[3];
-	if (id >= 0x1f)
-		goto invalid;
-	(void)0;
-	idx = id - 12;
-	if (idx < 13) {
-		nvt_gesture_report_power();
+	if (id == 0x1e && buf[2] == 1) {
+		/* D65: stock takes the valid path directly with buf[3],
+		 * bypassing the 0x1f bound check (mov w8,w6; b.eq valid). */
+		gid = buf[3];
+	} else if (id >= 0x1f) {
+		pr_err("[%s] %s %d: gesture_id %d is invalid, func_type=%d, func_id=%d\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1125,
+		       id, buf[2], buf[3]);
 		return;
 	}
-invalid:
-	(void)0;
+	pr_err("[%s] %s %d: gesture_id = %d\n",
+	       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1129, gid);
+	idx = gid - 12;
+	if (idx > 12)
+		return;
+	switch (idx) {
+	case 0:
+		pr_err("[%s] %s %d: Gesture : Word-C.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1133);
+		break;
+	case 1:
+		pr_err("[%s] %s %d: Gesture : Word-W.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1137);
+		break;
+	case 2:
+		pr_err("[%s] %s %d: Gesture : Word-V.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1141);
+		break;
+	case 3:
+		pr_err("[%s] %s %d: Gesture : Double Click.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1145);
+		break;
+	case 4:
+		pr_err("[%s] %s %d: Gesture : Word-Z.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1149);
+		break;
+	case 5:
+		pr_err("[%s] %s %d: Gesture : Word-M.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1153);
+		break;
+	case 6:
+		pr_err("[%s] %s %d: Gesture : Word-O.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1157);
+		break;
+	case 7:
+		pr_err("[%s] %s %d: Gesture : Word-e.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1161);
+		break;
+	case 8:
+		pr_err("[%s] %s %d: Gesture : Word-S.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1165);
+		break;
+	case 9:
+		pr_err("[%s] %s %d: Gesture : Slide UP.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1169);
+		break;
+	case 10:
+		pr_err("[%s] %s %d: Gesture : Slide DOWN.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1173);
+		break;
+	case 11:
+		pr_err("[%s] %s %d: Gesture : Slide LEFT.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1177);
+		break;
+	case 12:
+		pr_err("[%s] %s %d: Gesture : Slide RIGHT.\n",
+		       "NVT-ts", "nvt_ts_wakeup_gesture_report", 1181);
+		break;
+	}
+	input_report_key(nvt_ts->input_dev, KEY_POWER, 1);
+	input_sync(nvt_ts->input_dev);
+	input_report_key(nvt_ts->input_dev, KEY_POWER, 0);
+	input_sync(nvt_ts->input_dev);
 }
 
 /* ---- nvt_gesture_switch ---- */
@@ -5189,8 +5239,9 @@ static int nvt_ts_probe(struct spi_device *client)
 	 * SAME key 12 times (idempotent), not 14 distinct keys 0x74..0x82.
 	 * Unique finger_dev caps: 0x25e + KEY_POWER + 0x20b. Registering the
 	 * 13 extra keys skewed the InputReader device class. No reporter
-	 * depends on 0x75..0x82: gesture wake reports KEY_POWER on
-	 * wake_input_dev (D67), stylus press reports 0x25e on finger_dev. */
+	 * depends on 0x75..0x82: gesture wake reports KEY_POWER on this
+	 * finger_dev (stock nvt_ts_wakeup_gesture_report tail), stylus press
+	 * reports 0x25e on finger_dev. */
 	input_set_capability(ts->input_dev, EV_KEY, KEY_POWER);
 	input_set_capability(ts->input_dev, EV_KEY, 0x20b);
 
@@ -5236,24 +5287,6 @@ static int nvt_ts_probe(struct spi_device *client)
 	}
 
 	device_init_wakeup(&client->dev, 1);
-
-	/* D67/p146: dedicated wake keyboard device (old-tree TASK-022).
-	 * A plain KEY_WAKEUP keyboard is treated as wake-capable by the
-	 * framework (like gpio-keys), unlike the touch panel device. */
-	nvt_ts->wake_input_dev = devm_input_allocate_device(&client->dev);
-	if (!nvt_ts->wake_input_dev) {
-		(void)0;
-		return -ENOMEM;
-	}
-	nvt_ts->wake_input_dev->name = "nvt_wake_key";
-	nvt_ts->wake_input_dev->id.bustype = BUS_SPI;
-	input_set_capability(nvt_ts->wake_input_dev, EV_KEY, KEY_WAKEUP);
-	input_set_capability(nvt_ts->wake_input_dev, EV_KEY, KEY_POWER);
-	ret = input_register_device(nvt_ts->wake_input_dev);
-	if (ret) {
-		(void)0;
-		return ret;
-	}
 
 	/* firmware names by panel vendor (normal + matching MP image) */
 	if (gpio_82 == 1) {
