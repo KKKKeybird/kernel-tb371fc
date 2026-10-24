@@ -1550,7 +1550,7 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *nb,
 		hall = gpiod_get_raw_value(hall_desc);
 		if (!bTouchIsAwake) {
 			pr_err("[%s] %s %d: Touch is already suspend\n",
-			       "NVT-ts", "nvt_ts_suspend", 3055);
+			       "NVT-ts", "nvt_ts_suspend", 3063);
 			kb_hid_suspend();
 			return NOTIFY_OK;
 		}

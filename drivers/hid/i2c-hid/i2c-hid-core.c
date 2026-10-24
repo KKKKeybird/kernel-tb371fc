@@ -1772,14 +1772,12 @@ static int i2c_hid_probe(struct i2c_client *client,
 
 	/* Old-firmware rejects are keyed by product only in stock. */
 	if (hid->product == 0x6103) {
-		printk("hid-keyboard,%s,failed,because of old kb fireware\n",
-		       "i2c_hid_probe");
+		(void)0;
 		ret = -ENODEV;
 		goto err_irq;
 	}
 	if (hid->product == 0x3164) {
-		printk("hid-keyboard,%s,failed,because of old mouse fireware\n",
-		       "i2c_hid_probe");
+		(void)0;
 		ret = -ENODEV;
 		goto err_irq;
 	}
@@ -1802,8 +1800,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 			 "%s %04hX:%04hX",
 			 client->name, (u16)hid->vendor, (u16)hid->product);
 	}
-	printk("hid-keyboard,%s,hid->version_id=0x%x\n",
-	       "i2c_hid_probe", le16_to_cpu(ihid->hdesc.bcdVersion));
+	(void)0;
 
 	if ((hid->vendor == VID_KB_LENOVO &&
 	     (hid->product == PID_KB_LENOVO || hid->product == PID_KB_LENOVO_V04)) ||
@@ -1857,8 +1854,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 	if (strstr(saved_command_line, "androidboot.mode=charger") &&
 	    regulator_is_enabled(ldo_keyboard)) {
 		regulator_force_disable(ldo_keyboard);
-		printk("hid-keyboard,%s,Power off and charge,disable ldo\n",
-		       "i2c_hid_probe");
+		(void)0;
 	}
 	regulator_put(ldo_keyboard);
 
