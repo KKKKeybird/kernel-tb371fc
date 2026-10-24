@@ -7,7 +7,6 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/err.h>
-#include <drm/drm_notifier_mi.h>
 
 #include "msm_drv.h"
 #include "sde_connector.h"
@@ -15,7 +14,6 @@
 #include "dsi_display.h"
 #include <drm/drm_panel.h>
 #include "dsi_panel.h"
-#include "dsi_panel_mi.h"
 #include "dsi_ctrl.h"
 #include "dsi_ctrl_hw.h"
 #include "dsi_drm.h"
@@ -37,8 +35,6 @@
 #define MAX_TE_SOURCE_ID  2
 
 DEFINE_MUTEX(dsi_display_clk_mutex);
-
-extern int mi_disp_lhbm_attach_primary_dsi_display(struct dsi_display *display);
 
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
@@ -238,24 +234,7 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 		goto error;
 	}
 
-		/* TB371FC: prevent SF hang if panel backlight path blocks. If
-	 * panel is not ready (bl_enable false or not initialized), skip
-	 * actual write and just record the level to avoid SF hang.
-	 */
-	/* TB371FC p97: mi_cfg.bl_enable stays false from parse on this panel
-	 * (mi,feature-enabled DT prop absent) and only flips true after the
-	 * first LP1 exit (p89), so a fresh boot swallowed every brightness
-	 * write here and froze the slider. Hang protection only needs the
-	 * panel-initialized check. */
-	if (!dsi_panel_initialized(panel)) {
-		panel->bl_config.bl_level = (u32)bl_temp;
-		DSI_DEBUG("skip backlight write: panel not ready, lvl=%u",
-			(u32)bl_temp);
-		rc = 0;
-		goto error;
-	}
-
-rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
+	rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
 	if (rc)
 		DSI_ERR("unable to set backlight\n");
 
@@ -672,10 +651,8 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 	lenp = config->status_valid_params ?: config->status_cmds_rlen;
 	count = config->status_cmd.count;
 	cmds = config->status_cmd.cmds;
-	flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ);
-
-	if (ctrl->ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE)
-		flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
+	flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ |
+		  DSI_CTRL_CMD_CUSTOM_DMA_SCHED);
 
 	for (i = 0; i < count; ++i) {
 		memset(config->status_buf, 0x0, SZ_4K);
@@ -683,9 +660,6 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 			cmds[i].msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
 			flags |= DSI_CTRL_CMD_LAST_COMMAND;
 		}
-		if ((cmds[i].msg.flags & MIPI_DSI_MSG_CMD_DMA_SCHED) &&
-			(panel->panel_initialized))
-			flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
 
 		if (config->status_cmd.state == DSI_CMD_SET_STATE_LP)
 			cmds[i].msg.flags |= MIPI_DSI_MSG_USE_LPM;
@@ -813,7 +787,6 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 					bool te_check_override)
 {
 	struct dsi_display *dsi_display = display;
-	struct drm_panel_esd_config *config;
 	struct dsi_panel *panel;
 	u32 status_mode;
 	int rc = 0x1, ret;
@@ -865,11 +838,6 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 	dsi_display_mask_ctrl_error_interrupts(dsi_display, mask, true);
 
 	if (status_mode == ESD_MODE_REG_READ) {
-		config = &(panel->esd_config);
-		if (config->offset_cmd.count != 0) {
-			rc = dsi_panel_write_cmd_set(panel, &config->offset_cmd);
-		}
-
 		rc = dsi_display_status_reg_read(dsi_display);
 	} else if (status_mode == ESD_MODE_SW_BTA) {
 		rc = dsi_display_status_bta_request(dsi_display);
@@ -1083,46 +1051,24 @@ int dsi_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
 	struct dsi_display *display = disp;
-	struct dsi_panel_mi_cfg *mi_cfg;
 	int rc = 0;
-	struct mi_drm_notifier notify_data;
 
 	if (!display || !display->panel) {
 		DSI_ERR("invalid display/panel\n");
 		return -EINVAL;
 	}
 
-	mi_cfg = &display->panel->mi_cfg;
-
-	notify_data.data = &power_mode;
-	notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
-
 	switch (power_mode) {
 	case SDE_MODE_DPMS_LP1:
-		mi_cfg->in_aod = true;
-		mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
 		rc = dsi_panel_set_lp1(display->panel);
-		if (mi_cfg->unset_doze_brightness)
-			dsi_panel_set_doze_brightness(display->panel,
-				mi_cfg->unset_doze_brightness, true);
-		mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
 		break;
 	case SDE_MODE_DPMS_LP2:
-		mi_cfg->in_aod = true;
-		mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
 		rc = dsi_panel_set_lp2(display->panel);
-		if (mi_cfg->unset_doze_brightness)
-			dsi_panel_set_doze_brightness(display->panel,
-				mi_cfg->unset_doze_brightness, true);
-		mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
 		break;
 	case SDE_MODE_DPMS_ON:
 		if ((display->panel->power_mode == SDE_MODE_DPMS_LP1) ||
-			(display->panel->power_mode == SDE_MODE_DPMS_LP2)) {
-			mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
+			(display->panel->power_mode == SDE_MODE_DPMS_LP2))
 			rc = dsi_panel_set_nolp(display->panel);
-			mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
-		}
 		break;
 	case SDE_MODE_DPMS_OFF:
 	default:
@@ -2820,12 +2766,6 @@ static int dsi_display_broadcast_cmd(struct dsi_display *display,
 		m_flags |= DSI_CTRL_CMD_LAST_COMMAND;
 	}
 
-	if ((msg->flags & MIPI_DSI_MSG_CMD_DMA_SCHED) &&
-			(display->panel->panel_initialized)) {
-		flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
-		m_flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
-	}
-
 	if (display->queue_cmd_waits ||
 			msg->flags & MIPI_DSI_MSG_ASYNC_OVERRIDE) {
 		flags |= DSI_CTRL_CMD_ASYNC_WAIT;
@@ -3005,10 +2945,6 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 		if (display->queue_cmd_waits ||
 				msg->flags & MIPI_DSI_MSG_ASYNC_OVERRIDE)
 			cmd_flags |= DSI_CTRL_CMD_ASYNC_WAIT;
-
-		if ((msg->flags & MIPI_DSI_MSG_CMD_DMA_SCHED) &&
-				(display->panel->panel_initialized))
-			cmd_flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
 
 		rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
 				&cmd_flags);
@@ -5156,13 +5092,6 @@ static int dsi_display_sysfs_deinit(struct dsi_display *display)
 	return 0;
 }
 
-void dsi_display_set_fod_ui(struct dsi_display *display, bool status)
-{
-	struct device *dev = &display->pdev->dev;
-	atomic_set(&display->fod_ui, status);
-	sysfs_notify(&dev->kobj, NULL, "fod_ui");
-}
-
 /**
  * dsi_display_bind - bind dsi device with controlling device
  * @dev:        Pointer to base of platform device
@@ -5376,10 +5305,6 @@ static int dsi_display_bind(struct device *dev,
 
 	/* register te irq handler */
 	dsi_display_register_te_irq(display);
-
-	rc = mi_disp_lhbm_attach_primary_dsi_display(display);
-	if (rc)
-		DSI_ERR("lhbm attach primary_dsi_display fail\n");
 
 	goto error;
 
@@ -6957,11 +6882,6 @@ int dsi_display_set_mode(struct dsi_display *display,
 			timing.h_active, timing.v_active,
 			timing.refresh_rate);
 
-	if (display->panel->cur_mode->timing.refresh_rate != timing.refresh_rate) {
-		if (display->drm_conn && display->drm_conn->kdev)
-			sysfs_notify(&display->drm_conn->kdev->kobj, NULL, "dynamic_fps");
-	}
-
 	memcpy(display->panel->cur_mode, &adj_mode, sizeof(adj_mode));
 error:
 	mutex_unlock(&display->display_lock);
@@ -7756,18 +7676,6 @@ int dsi_display_enable(struct dsi_display *display)
 		return -EINVAL;
 	}
 
-	/* TB371FC p174: notify drm_panel listeners (nt36532 wake gesture)
-	 * BEFORE the panel work. The touch recovery (full fw download,
-	 * ~190ms) must complete BEFORE the panel-on commands: a panel
-	 * enable against an IC still armed in gesture mode (0x13) blacks
-	 * the panel (n84 quick power-key wake, TASK-022). */
-	{
-		int p174_blank = DRM_PANEL_BLANK_UNBLANK;
-		struct drm_panel_notifier p174_ev = { .data = &p174_blank };
-		drm_panel_notifier_call_chain(&display->panel->drm_panel,
-			DRM_PANEL_EVENT_BLANK, &p174_ev);
-	}
-
 	if (!display->panel->cur_mode) {
 		DSI_ERR("no valid mode set for the display\n");
 		return -EINVAL;
@@ -7790,68 +7698,6 @@ int dsi_display_enable(struct dsi_display *display)
 
 		display->panel->panel_initialized = true;
 		DSI_DEBUG("cont splash enabled, display enable not required\n");
-
-		rc = dsi_panel_update_elvss_dimming(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to update elvss dimming parameter, rc=%d\n",
-			       display->name, rc);
-		}
-
-		rc = dsi_panel_read_gamma_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read gamma para, rc=%d\n",
-				display->name, rc);
-		} else {
-			rc = dsi_panel_update_gamma_param(display->panel);
-			if (rc) {
-				DSI_ERR("[%s] failed to update gamma para, rc=%d\n",
-					display->name, rc);
-			}
-		}
-
-		rc = dsi_panel_read_dc_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read DC para, rc=%d\n",
-				display->name, rc);
-		} else {
-			rc = dsi_panel_update_dc_param(display->panel);
-			if (rc) {
-				DSI_ERR("[%s] failed to update DC para, rc=%d\n",
-					display->name, rc);
-			}
-		}
-
-		rc = mi_dsi_panel_read_and_update_dc_param_v2(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read DC para, rc=%d\n",
-				display->name, rc);
-		}
-
-		rc = mi_dsi_panel_read_and_update_gir_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read and update gir  para, rc=%d\n",
-				display->name, rc);
-		}
-
-		rc = mi_dsi_panel_read_and_update_lhbm_green_500nit_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read and update fod lhbm green 500nit  para, rc=%d\n",
-				display->name, rc);
-		}
-
-		rc = mi_dsi_panel_read_lhbm_white_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read fod lhbm white para, rc=%d\n",
-				display->name, rc);
-		}
-
-		if (display->panel->mi_cfg.is_tddi_flag) {
-			rc = dsi_panel_lockdowninfo_param_read(display->panel);
-			if (!rc) {
-				DSI_ERR("[%s] failed to read lockdowninfo para, rc=%d\n",
-					display->name, rc);
-			}
-		}
 
 		return 0;
 	}
@@ -7897,22 +7743,6 @@ int dsi_display_enable(struct dsi_display *display)
 			goto error;
 		}
 
-		if ((display->panel->mi_cfg.panel_id >> 8) == 0x4A3153004202) {
-
-			rc = dsi_panel_dc_switch(display->panel);
-			if (rc) {
-				DSI_ERR("[%s] failed to set dc command, rc=%d\n",
-					display->name, rc);
-				goto error;
-			}
-		}
-
-		rc = dsi_panel_switch_disp_rate_gpio(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to set disp_rate gpio, rc=%d\n",
-				   display->name, rc);
-			goto error;
-		}
 		goto error;
 	}
 
@@ -8084,14 +7914,6 @@ int dsi_display_disable(struct dsi_display *display)
 	mutex_unlock(&display->display_lock);
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 
-	/* TB371FC p140: notify drm_panel listeners (nt36532 wake gesture)
-	 * before the panel powers down (TASK-022). */
-	if (rc == 0) {
-		int p140_blank = DRM_PANEL_BLANK_POWERDOWN;
-		struct drm_panel_notifier p140_ev = { .data = &p140_blank };
-		drm_panel_notifier_call_chain(&display->panel->drm_panel,
-			DRM_PANEL_EARLY_EVENT_BLANK, &p140_ev);
-	}
 	return rc;
 }
 
@@ -8229,5 +8051,60 @@ module_param_string(dsi_display1, dsi_display_secondary, MAX_CMDLINE_PARAM_LEN,
 								0600);
 MODULE_PARM_DESC(dsi_display1,
 	"msm_drm.dsi_display1=<display node>:<configX> where <display node> is 'secondary dsi display node name' and <configX> where x represents index in the topology list");
+/* TASK-081 D104: stock dsi_display.c exports dsi_display_mipi_reg_read/write
+ * (kallsyms 0x8f8acd0/0x8f8ac70): thin wrappers from the drm_sysfs connector
+ * device down to dsi_panel_mipi_reg_{read,write}, with the stock null-check
+ * chain and its verbatim error strings (stock typo "Invalid invalid" kept).
+ * Stock chain: connector -> panel -> display/panel -> inner func; ours uses
+ * the equivalent connector->panel (drm_panel) -> container_of(dsi_panel). */
+ssize_t dsi_display_mipi_reg_read(struct device *dev, char *buf)
+{
+	struct drm_connector *connector;
+	struct drm_panel *drm_p;
+	struct dsi_panel *panel;
+
+	if (!dev || !dev_get_drvdata(dev)) {
+		DSI_ERR("Invalid invalid connector/encoder/bridge ptr\n");
+		return -EINVAL;
+	}
+	connector = (struct drm_connector *)dev_get_drvdata(dev);
+	drm_p = connector->panel;
+	if (!drm_p) {
+		DSI_ERR("Invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+	panel = container_of(drm_p, struct dsi_panel, drm_panel);
+	if (!panel) {
+		DSI_ERR("Invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+	return dsi_panel_mipi_reg_read(panel, buf);
+}
+
+int dsi_display_mipi_reg_write(struct device *dev,
+			       const char *buf, size_t count)
+{
+	struct drm_connector *connector;
+	struct drm_panel *drm_p;
+	struct dsi_panel *panel;
+
+	if (!dev || !dev_get_drvdata(dev)) {
+		DSI_ERR("Invalid invalid connector/encoder/bridge ptr\n");
+		return -EINVAL;
+	}
+	connector = (struct drm_connector *)dev_get_drvdata(dev);
+	drm_p = connector->panel;
+	if (!drm_p) {
+		DSI_ERR("Invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+	panel = container_of(drm_p, struct dsi_panel, drm_panel);
+	if (!panel) {
+		DSI_ERR("Invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+	return dsi_panel_mipi_reg_write(panel, (char *)buf, count);
+}
+
 module_init(dsi_display_register);
 module_exit(dsi_display_unregister);

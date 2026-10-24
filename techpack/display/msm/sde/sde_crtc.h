@@ -377,7 +377,6 @@ struct sde_crtc {
 	int hist_irq_idx;
 
 	int comp_ratio;
-	uint32_t mi_dimlayer_type;
 
 	struct drm_property_blob *dspp_blob_info;
 };
@@ -416,17 +415,6 @@ typedef struct sde_crtc_mi_layer
 	int32_t layer_index;
 	enum sde_crtc_mi_layer_type last_state;
 } sde_crtc_mi_layer;
-
-/**
- * sde_crtc_mi_state - mi crtc state
- * @mi_dim_layer: dim layer added by Mi
- */
-struct sde_crtc_mi_state {
-	struct sde_hw_dim_layer *mi_dim_layer;
-	struct sde_crtc_mi_layer mi_layer;
-	uint32_t dimlayer_backlight_stash;
-	uint8_t  dimlayer_alpha_stash;
-};
 
 /**
  * struct sde_crtc_state - sde container for atomic crtc state
@@ -478,7 +466,6 @@ struct sde_crtc_state {
 	uint64_t input_fence_timeout_ns;
 	uint32_t num_dim_layers;
 	struct sde_hw_dim_layer dim_layer[SDE_MAX_DIM_LAYERS];
-	struct sde_hw_dim_layer *fod_dim_layer;
 	uint32_t num_ds;
 	uint32_t num_ds_enabled;
 	bool ds_dirty;
@@ -487,7 +474,6 @@ struct sde_crtc_state {
 
 	struct sde_core_perf_params new_perf;
     /* Mi crtc state */
-	struct sde_crtc_mi_state mi_state;
 	uint32_t num_dim_layers_bank;
   
 	int secure_session;
@@ -911,25 +897,6 @@ void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count);
  */
 void sde_crtc_get_misr_info(struct drm_crtc *crtc,
 		struct sde_crtc_misr_info *crtc_misr_info);
-
-/**
- * sde_crtc_mi_atomic_check - to do crtc mi atomic check
- * @crtc: Pointer to sde crtc state structure
- * @cstate: Pointer to sde crtc state structure
- * @pstates: Pointer to sde plane state structure
- * @cnt: plane refence count
- */
-int sde_crtc_mi_atomic_check(struct sde_crtc *sde_crtc, struct sde_crtc_state *cstate,
-		void *pstates, int cnt);
-
-/**
- * sde_crtc_mi_atomic_check - to do crtc mi atomic check
- * @crtc: Pointer to sde crtc state structure
- * @cstate: Pointer to sde crtc state structure
- * @pstates: Pointer to sde plane state structure
- * @cnt: plane refence count
- */
-uint32_t sde_crtc_get_mi_fod_sync_info(struct sde_crtc_state *cstate);
 
 /**
  * sde_crtc_get_num_datapath - get the number of datapath active

@@ -70,6 +70,10 @@ COMMON_DIR :=	include
 COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
 TFA_INC    :=   -I$(AUDIO_ROOT)/asoc/codecs/tfa98xx/inc
 
+# TASK-072: the TFA9894 device-specific unit lives next door; the codec pulls
+# its rotation-engine API from there.
+TFA9894_INC :=  -I$(AUDIO_ROOT)/asoc/codecs/tfa9894/inc
+
 # for TFA9874 Amplifer
 ifdef CONFIG_SND_SOC_TFA9874
 	TFA98XX_OBJS += src/tfa98xx.o
@@ -83,7 +87,8 @@ LINUX_INC += -Iinclude/linux
 
 INCS +=	$(COMMON_INC) \
 	$(UAPI_INC) \
-	$(TFA_INC)
+	$(TFA_INC) \
+	$(TFA9894_INC)
 
 EXTRA_CFLAGS += -I$(src)/inc
 

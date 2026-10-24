@@ -325,32 +325,21 @@ static void dsi_ctrl_dma_cmd_wait_for_done(struct work_struct *work)
 	if (atomic_read(&dsi_ctrl->dma_irq_trig))
 		goto done;
 
-	/* TB371FC p96: dsi_ctrl DMA-done IRQ is not delivered after the
-	 * first screen cycle on this self-built kernel (verified via
-	 * /proc/interrupts: count frozen at 2 while parent msm_drm IRQ
-	 * is healthy). Poll the done status at 1ms granularity instead of
-	 * blocking the full 200ms TX timeout per DCS command, which used
-	 * to stretch panel wake sequences and race the composer into a
-	 * backlight-on/black-panel state. */
-	{int i;
-
-		for (i = 0; i < 20; i++) {
-			ret = wait_for_completion_timeout(
-					&dsi_ctrl->irq_info.cmd_dma_done,
-					msecs_to_jiffies(1));
-			if (ret > 0 || atomic_read(&dsi_ctrl->dma_irq_trig))
-					goto done;
-			status = dsi_hw_ops.get_interrupt_status(&dsi_ctrl->hw);
-			if (status & mask) {
-				status |= (DSI_CMD_MODE_DMA_DONE | DSI_BTA_DONE);
-				dsi_hw_ops.clear_interrupt_status(&dsi_ctrl->hw,
-						status);
-				DSI_CTRL_DEBUG(dsi_ctrl,
-						"dma_tx done via poll\n");
-				goto done;
-			}
+	ret = wait_for_completion_timeout(
+			&dsi_ctrl->irq_info.cmd_dma_done,
+			msecs_to_jiffies(DSI_CTRL_TX_TO_MS));
+	if (ret == 0 && !atomic_read(&dsi_ctrl->dma_irq_trig)) {
+		status = dsi_hw_ops.get_interrupt_status(&dsi_ctrl->hw);
+		if (status & mask) {
+			status |= (DSI_CMD_MODE_DMA_DONE | DSI_BTA_DONE);
+			dsi_hw_ops.clear_interrupt_status(&dsi_ctrl->hw,
+					status);
+			DSI_CTRL_WARN(dsi_ctrl,
+					"dma_tx done but irq not triggered\n");
+		} else {
+			DSI_CTRL_ERR(dsi_ctrl,
+					"Command transfer failed\n");
 		}
-		DSI_CTRL_ERR(dsi_ctrl, "Command transfer failed\n");
 		dsi_ctrl_disable_status_interrupt(dsi_ctrl,
 					DSI_SINT_CMD_MODE_DMA_DONE);
 	}
@@ -563,7 +552,6 @@ static int dsi_ctrl_init_regmap(struct platform_device *pdev,
 		}
 		ctrl->hw.mmss_misc_base = ptr;
 		ctrl->hw.disp_cc_base = NULL;
-		ctrl->hw.mdp_intf_base = NULL;
 		break;
 	case DSI_CTRL_VERSION_2_2:
 	case DSI_CTRL_VERSION_2_3:
@@ -576,10 +564,6 @@ static int dsi_ctrl_init_regmap(struct platform_device *pdev,
 		}
 		ctrl->hw.disp_cc_base = ptr;
 		ctrl->hw.mmss_misc_base = NULL;
-
-		ptr = msm_ioremap(pdev, "mdp_intf_base", ctrl->name);
-		if (!IS_ERR(ptr))
-			ctrl->hw.mdp_intf_base = ptr;
 		break;
 	default:
 		break;
@@ -1242,61 +1226,6 @@ int dsi_message_validate_tx_mode(struct dsi_ctrl *dsi_ctrl,
 
 	return rc;
 }
-
-static void dsi_configure_command_scheduling(struct dsi_ctrl *dsi_ctrl,
-		struct dsi_ctrl_cmd_dma_info *cmd_mem)
-{
-	u32 line_no = 0, window = 0, sched_line_no = 0;
-	struct dsi_ctrl_hw_ops dsi_hw_ops = dsi_ctrl->hw.ops;
-	struct dsi_mode_info *timing = &(dsi_ctrl->host_config.video_timing);
-
-	line_no = dsi_ctrl->host_config.common_config.dma_sched_line;
-	window = dsi_ctrl->host_config.common_config.dma_sched_window;
-
-	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_ENTRY, line_no, window);
-	/*
-	 * In case of command scheduling in video mode, the line at which
-	 * the command is scheduled can revert to the default value i.e. 1
-	 * for the following cases:
-	 *      1) No schedule line defined by the panel.
-	 *      2) schedule line defined is greater than VFP.
-	 */
-	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) &&
-		dsi_hw_ops.schedule_dma_cmd &&
-		(dsi_ctrl->current_state.vid_engine_state ==
-					DSI_CTRL_ENGINE_ON)) {
-		sched_line_no = (line_no == 0) ? 1 : line_no;
-
-		if (timing) {
-			if (sched_line_no >= timing->v_front_porch)
-				sched_line_no = 1;
-			sched_line_no += timing->v_back_porch +
-				timing->v_sync_width + timing->v_active;
-		}
-		dsi_hw_ops.schedule_dma_cmd(&dsi_ctrl->hw, sched_line_no);
-	}
-
-	/*
-	 * In case of command scheduling in command mode, the window size
-	 * is reset to zero, if the total scheduling window is greater
-	 * than the panel height.
-	 */
-	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_CMD_MODE) &&
-			dsi_hw_ops.configure_cmddma_window) {
-		sched_line_no = line_no;
-
-		if ((sched_line_no + window) > timing->v_active)
-			window = 0;
-
-		sched_line_no += timing->v_active;
-
-		dsi_hw_ops.configure_cmddma_window(&dsi_ctrl->hw, cmd_mem,
-				sched_line_no, window);
-	}
-	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_EXIT,
-			sched_line_no, window);
-}
-
 static u32 calculate_schedule_line(struct dsi_ctrl *dsi_ctrl, u32 flags)
 {
 	u32 line_no = 0x1;
@@ -1305,7 +1234,7 @@ static u32 calculate_schedule_line(struct dsi_ctrl *dsi_ctrl, u32 flags)
 	/* check if custom dma scheduling line needed */
 	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) &&
 		(flags & DSI_CTRL_CMD_CUSTOM_DMA_SCHED))
-		line_no = dsi_ctrl->host_config.common_config.dma_sched_line;
+		line_no = dsi_ctrl->host_config.u.video_engine.dma_sched_line;
 
 	timing = &(dsi_ctrl->host_config.video_timing);
 
@@ -1323,31 +1252,20 @@ static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 				u32 flags)
 {
 	u32 hw_flags = 0;
+	u32 line_no = 0x1;
 	struct dsi_ctrl_hw_ops dsi_hw_ops = dsi_ctrl->hw.ops;
 
 	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_ENTRY, flags,
 		msg->flags);
 
-	if (dsi_ctrl->hw.reset_trig_ctrl)
-		dsi_hw_ops.reset_trig_ctrl(&dsi_ctrl->hw,
-			&dsi_ctrl->host_config.common_config);
+	line_no = calculate_schedule_line(dsi_ctrl, flags);
 
-	/*
-	 * Always enable DMA scheduling for video mode panel.
-	 *
-	 * In video mode panel, if the DMA is triggered very close to
-	 * the beginning of the active window and the DMA transfer
-	 * happens in the last line of VBP, then the HW state will
-	 * stay in âwaitâ and return to âidleâ in the first line of VFP.
-	 * But somewhere in the middle of the active window, if SW
-	 * disables DSI command mode engine while the HW is still
-	 * waiting and re-enable after timing engine is OFF. So the
-	 * HW never âseesâ another vblank line and hence it gets
-	 * stuck in the âwaitâ state.
-	 */
-	if ((flags & DSI_CTRL_CMD_CUSTOM_DMA_SCHED) ||
-		(dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE))
-		dsi_configure_command_scheduling(dsi_ctrl, cmd_mem);
+	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) &&
+		dsi_hw_ops.schedule_dma_cmd &&
+		(dsi_ctrl->current_state.vid_engine_state ==
+					DSI_CTRL_ENGINE_ON))
+		dsi_hw_ops.schedule_dma_cmd(&dsi_ctrl->hw,
+				line_no);
 
 	dsi_ctrl->cmd_mode = (dsi_ctrl->host_config.panel_mode ==
 				DSI_OP_CMD_MODE);

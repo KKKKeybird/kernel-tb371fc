@@ -273,6 +273,9 @@ DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
 # p229: tfa98xx codec (TASK-034 P4-A1, ported from alioth 16.0-alioth)
 obj-y += tfa98xx/
 
+# TASK-072: TB371FC TFA9894 device-specific unit (rotation engine).
+obj-y += tfa9894/
+
 # p229/p238: tfa98xx codec ported from alioth; built via 'obj-y += tfa98xx/' above
 
 # p229/p238: tfa98xx codec ported from alioth; built via 'obj-y += tfa98xx/' above

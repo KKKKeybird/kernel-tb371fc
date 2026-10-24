@@ -25,6 +25,16 @@ static struct list_head backlight_dev_list;
 static struct mutex backlight_dev_list_mutex;
 static struct blocking_notifier_head backlight_notifier;
 
+/* stock lenovo addition: LCD power state for jeita thermal gating
+ * (stock is_lcd_on @0x8629b90 reads this; updated on brightness change) */
+static bool lcd_on;
+
+bool is_lcd_on(void)
+{
+	return lcd_on;
+}
+EXPORT_SYMBOL(is_lcd_on);
+
 static const char *const backlight_types[] = {
 	[BACKLIGHT_RAW] = "raw",
 	[BACKLIGHT_PLATFORM] = "platform",
@@ -189,6 +199,7 @@ int backlight_device_set_brightness(struct backlight_device *bd,
 			}
 			pr_debug("set brightness to %lu\n", brightness);
 			bd->props.brightness = brightness;
+			lcd_on = (brightness != 0);
 			rc = backlight_update_status(bd);
 		}
 	}

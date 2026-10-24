@@ -1197,6 +1197,64 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 					&link[0], (cmds - link),
 					drawobj->timestamp, time);
 
+	/*
+	 * TASK-051 (F654): report the batch size on success. (cmds - link) is the
+	 * dword count that just went into the ringbuffer, and time->ticks is the
+	 * GPU always-on counter sampled in adreno_profile_submit_time(), which
+	 * places this batch on the GPU's own timeline (F226).
+	 */
+	if (!ret)
+		trace_adreno_ib_submit(context->id, context->priority,
+					numibs, (unsigned int)(cmds - link),
+					time->ticks);
+
+	/*
+	 * TASK-051 (F661): size the indirect buffers this batch points at. The
+	 * envelope above is a constant 24-40 dwords (F660), so the work has to be
+	 * measured in the IBs themselves - ib->size is the byte length straight
+	 * from kgsl_drawobj_add_memobject(), and the same cmdlist walk that emits
+	 * CP_INDIRECT_BUFFER_PFE is the authoritative source for what actually
+	 * reaches the GPU.
+	 */
+	if (!ret && numibs) {
+		unsigned int ib_dwords = 0, ib_max_dwords = 0, ib_count = 0;
+		unsigned int ib_idx = 0;
+
+		list_for_each_entry(ib, &cmdobj->cmdlist, node) {
+			unsigned int this_dwords;
+
+			/*
+			 * TASK-051 (F666): mirror the PFE loop's filter exactly.
+			 * MEMOBJ_SKIP is withheld from the GPU entirely; a
+			 * MEMOBJ_PREAMBLE IB whose preamble slot has already been
+			 * used still reaches the GPU, so it must be reported.
+			 */
+			if (ib->priv & MEMOBJ_SKIP)
+				continue;
+
+			this_dwords = (unsigned int)((ib->size >> 2) & 0xfffff);
+			ib_dwords += this_dwords;
+			if (this_dwords > ib_max_dwords)
+				ib_max_dwords = this_dwords;
+			ib_count++;
+
+			/*
+			 * Per-IB line. idx counts only the IBs that reach the GPU,
+			 * so the bundle's decomposition is directly comparable
+			 * with what the CP sees.
+			 */
+			trace_adreno_ib_entry(context->id, context->priority,
+					ib_idx, this_dwords,
+					(ib->priv & MEMOBJ_PREAMBLE) ? 1 : 0,
+					time->ticks);
+			ib_idx++;
+		}
+
+		trace_adreno_ib_content(context->id, context->priority,
+					ib_count, ib_dwords, ib_max_dwords,
+					time->ticks);
+	}
+
 	if (!ret) {
 		set_bit(KGSL_CONTEXT_PRIV_SUBMITTED, &context->priv);
 		cmdobj->global_ts = drawctxt->internal_timestamp;

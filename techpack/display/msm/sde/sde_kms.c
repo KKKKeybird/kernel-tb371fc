@@ -936,6 +936,12 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 		if ((old_mode != new_mode) || (old_fps != new_fps)) {
 			struct drm_panel_notifier notifier_data;
 
+			/* D54 forensics: verify blank event reaches the
+			 * notifier chain and which panel object it uses. */
+			pr_info("SDE: dpms change %d->%d fps %d->%d event=%lu panel=%p conn=%s\n",
+				old_mode, new_mode, old_fps, new_fps, event,
+				connector->panel, connector->name);
+
 			SDE_EVT32(old_mode, new_mode, old_fps, new_fps,
 				connector->panel, crtc->state->active,
 				old_conn_state->crtc, event);
@@ -1200,7 +1206,6 @@ static void sde_kms_complete_commit(struct msm_kms *kms,
 					 rc);
 		}
 
-		sde_connector_fod_notify(connector);
 	}
 
 	_sde_kms_drm_check_dpms(old_state, DRM_PANEL_EVENT_BLANK);

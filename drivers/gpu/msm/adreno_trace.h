@@ -162,6 +162,124 @@ TRACE_EVENT(adreno_cmdbatch_sync,
 	)
 );
 
+/*
+ * TASK-051 (F654): size the command batch that is about to be written into the
+ * ringbuffer. dwords is the direct proxy for how much work the GPU is being
+ * handed, and gpu_ticks is the always-on GPU free counter (reset on power-up,
+ * per F226) so a batch can be placed on the GPU's own timeline instead of the
+ * kernel clock. Nothing here changes control flow.
+ */
+TRACE_EVENT(adreno_ib_submit,
+	TP_PROTO(unsigned int ctx, int prio, unsigned int numibs,
+		unsigned int dwords, uint64_t gpu_ticks),
+	TP_ARGS(ctx, prio, numibs, dwords, gpu_ticks),
+	TP_STRUCT__entry(
+		__field(unsigned int, id)
+		__field(int, prio)
+		__field(unsigned int, numibs)
+		__field(unsigned int, dwords)
+		__field(uint64_t, ticks)
+	),
+	TP_fast_assign(
+		__entry->id = ctx;
+		__entry->prio = prio;
+		__entry->numibs = numibs;
+		__entry->dwords = dwords;
+		__entry->ticks = gpu_ticks;
+	),
+	TP_printk(
+		"ctx=%u ctx_prio=%d numibs=%u dwords=%u gpu_ticks=%lld",
+			__entry->id, __entry->prio, __entry->numibs,
+			__entry->dwords, __entry->ticks
+	)
+);
+
+/*
+ * TASK-051 (F661): F660 showed the ringbuffer envelope is a constant 24-40
+ * dwords in both fight and menu frames, so it says nothing about the work
+ * inside. The work lives in the indirect buffers that envelope points at, so
+ * size those instead: ib_dwords totals the sizedwords of every IB in the
+ * batch, ib_max_dwords is the largest single IB, and ib_count is how many
+ * survived the fault-recovery skip. gpu_ticks is the always-on GPU counter
+ * (F226), unchanged from adreno_ib_submit so the two stay comparable.
+ * Aggregation only - no control flow, no locking, no new state.
+ */
+TRACE_EVENT(adreno_ib_content,
+	TP_PROTO(unsigned int ctx, int prio, unsigned int ib_count,
+		unsigned int ib_dwords, unsigned int ib_max_dwords,
+		uint64_t gpu_ticks),
+	TP_ARGS(ctx, prio, ib_count, ib_dwords, ib_max_dwords, gpu_ticks),
+	TP_STRUCT__entry(
+		__field(unsigned int, id)
+		__field(int, prio)
+		__field(unsigned int, ib_count)
+		__field(unsigned int, ib_dwords)
+		__field(unsigned int, ib_max_dwords)
+		__field(uint64_t, ticks)
+	),
+	TP_fast_assign(
+		__entry->id = ctx;
+		__entry->prio = prio;
+		__entry->ib_count = ib_count;
+		__entry->ib_dwords = ib_dwords;
+		__entry->ib_max_dwords = ib_max_dwords;
+		__entry->ticks = gpu_ticks;
+	),
+	TP_printk(
+		"ctx=%u ctx_prio=%d ibs=%u ib_dwords=%u ib_max_dwords=%u gpu_ticks=%lld",
+			__entry->id, __entry->prio, __entry->ib_count,
+			__entry->ib_dwords, __entry->ib_max_dwords,
+			__entry->ticks
+	)
+);
+
+/*
+ * TASK-051 (F666): the per-IB view behind adreno_ib_content. That event
+ * aggregates a batch (3.39x fight/menu), but a batch is a bundle of IBs and the
+ * aggregation cannot say which IB in the bundle carries the cost. This emits
+ * one line per IB that actually reaches the GPU, in the same order and with the
+ * same filter as the loop that emits CP_INDIRECT_BUFFER_PFE, so the bundle can
+ * be decomposed.
+ *
+ * Fields:
+ *   idx        - position within this batch, 0-based, counting only IBs that
+ *                are really transmitted (same filter as the PFE loop)
+ *   sizedwords - the sizedwords value written into the PFE packet, i.e. what
+ *                the CP will execute, not the raw ib->size
+ *   preamble   - 1 when this IB carries the context preamble
+ *   gpu_ticks  - always-on GPU counter (F226), identical to the sibling events
+ *
+ * Aggregation only - no control flow, no locking, no new state.
+ */
+TRACE_EVENT(adreno_ib_entry,
+	TP_PROTO(unsigned int ctx, int prio, unsigned int idx,
+		unsigned int sizedwords, unsigned int preamble,
+		uint64_t gpu_ticks),
+	TP_ARGS(ctx, prio, idx, sizedwords, preamble, gpu_ticks),
+	TP_STRUCT__entry(
+		__field(unsigned int, id)
+		__field(int, prio)
+		__field(unsigned int, idx)
+		__field(unsigned int, sizedwords)
+		__field(unsigned int, preamble)
+		__field(uint64_t, ticks)
+	),
+	TP_fast_assign(
+		__entry->id = ctx;
+		__entry->prio = prio;
+		__entry->idx = idx;
+		__entry->sizedwords = sizedwords;
+		__entry->preamble = preamble;
+		__entry->ticks = gpu_ticks;
+	),
+	TP_printk(
+		"ctx=%u ctx_prio=%d idx=%u sizedwords=%u preamble=%u gpu_ticks=%lld",
+			__entry->id, __entry->prio, __entry->idx,
+			__entry->sizedwords, __entry->preamble,
+			__entry->ticks
+	)
+);
+
 TRACE_EVENT(adreno_cmdbatch_fault,
 	TP_PROTO(struct kgsl_drawobj_cmd *cmdobj, unsigned int fault),
 	TP_ARGS(cmdobj, fault),

@@ -5709,6 +5709,9 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 			smblib_err(chg, "Couldn't start SW thermal regulation WA, rc=%d\n",
 				rc);
 
+		queue_delayed_work_on(8, system_wq,
+					&chg->hq_conn_thermal_work, 250);
+
 		/* Remove FCC_STEPPER 1.5A init vote to allow FCC ramp up */
 		if (chg->fcc_stepper_enable)
 			vote(chg->fcc_votable, FCC_STEPPER_VOTER, false, 0);
@@ -5734,6 +5737,10 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 		if (rc < 0)
 			smblib_err(chg, "Couldn't stop SW thermal regulation WA, rc=%d\n",
 				rc);
+
+		cancel_delayed_work(&chg->hq_conn_thermal_work);
+		queue_delayed_work_on(8, system_wq,
+					&chg->hq_conn_temp_high_work, 250);
 
 		if (chg->wa_flags & BOOST_BACK_WA) {
 			data = chg->irq_info[SWITCHER_POWER_OK_IRQ].irq_data;
@@ -8626,6 +8633,93 @@ requeue:
 }
 #endif /* CONFIG_SPINEL_CHARGER */
 
+int hq_config_chg_max_fcc(struct power_supply *psy, int max_fcc_ua)
+{
+	struct smb_charger *chg = power_supply_get_drvdata(psy);
+
+	if (!chg)
+		return -EINVAL;
+
+	chg->param.fcc.max_u = max_fcc_ua;
+	return 0;
+}
+EXPORT_SYMBOL(hq_config_chg_max_fcc);
+
+static void hq_conn_thermal_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						hq_conn_thermal_work.work);
+	union power_supply_propval pval = {0, };
+	int rc;
+
+	chg->hq_conn_temp = -61;
+	if (chg->iio.connector_temp_chan) {
+		rc = iio_read_channel_processed(chg->iio.connector_temp_chan,
+						&chg->hq_conn_temp);
+		if (rc < 0) {
+			smblib_err(chg, "Error in reading IIO channel data, rc=%d\n",
+					rc);
+			smblib_err(chg, "Couldn't read CONN TEMP channel, rc=%d\n",
+					rc);
+			goto requeue;
+		}
+		chg->hq_conn_temp /= 100;
+	}
+
+	rc = power_supply_get_property(chg->batt_psy,
+					POWER_SUPPLY_PROP_TEMP, &pval);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't read battery TEMP, rc=%d\n", rc);
+
+	if (chg->hq_conn_temp >= 501 &&
+	    abs(chg->hq_conn_temp - pval.intval) >= 201) {
+		smblib_err(chg, "conn temp is high, conn temp=%d batt = %d\n",
+				chg->hq_conn_temp, pval.intval);
+		gpiod_set_raw_value(gpio_to_desc(chg->hq_conn_temp_high_gpio), 1);
+	}
+
+requeue:
+	queue_delayed_work_on(8, system_wq, &chg->hq_conn_thermal_work, 750);
+}
+
+static void hq_conn_temp_high_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						hq_conn_temp_high_work.work);
+	int raw, raw_temp, rc;
+
+	raw = gpiod_get_raw_value(gpio_to_desc(chg->hq_conn_temp_high_gpio));
+	if (!raw)
+		return;
+
+	chg->hq_conn_temp = -61;
+	if (chg->iio.connector_temp_chan) {
+		rc = iio_read_channel_processed(chg->iio.connector_temp_chan,
+						&raw_temp);
+		if (rc < 0) {
+			smblib_err(chg, "Error in reading IIO channel data, rc=%d\n",
+					rc);
+			smblib_err(chg, "Couldn't read CONN TEMP channel, rc=%d\n",
+					rc);
+			goto requeue;
+		}
+		chg->hq_conn_temp = raw_temp;
+		if (raw_temp <= 39999) {
+			gpiod_set_raw_value(gpio_to_desc(
+					chg->hq_conn_temp_high_gpio), 0);
+			return;
+		}
+		chg->hq_conn_temp /= 100;
+	} else {
+		gpiod_set_raw_value(gpio_to_desc(chg->hq_conn_temp_high_gpio), 0);
+		return;
+	}
+
+	smblib_err(chg, "conn temp is high, conn temp=%d\n", chg->hq_conn_temp);
+requeue:
+	queue_delayed_work_on(8, system_wq, &chg->hq_conn_temp_high_work, 250);
+}
+
 int smblib_init(struct smb_charger *chg)
 {
 	union power_supply_propval prop_val;
@@ -8666,6 +8760,9 @@ int smblib_init(struct smb_charger *chg)
 					smblib_typec_role_check_work);
 	INIT_DELAYED_WORK(&chg->usb_plugin_work,
 					smblib_usb_plugin_work);
+	INIT_DELAYED_WORK(&chg->hq_conn_thermal_work, hq_conn_thermal_work);
+	INIT_DELAYED_WORK(&chg->hq_conn_temp_high_work,
+					hq_conn_temp_high_work);
 #ifdef CONFIG_QPNP_FLOAT_CHG_RECHECK
 	INIT_DELAYED_WORK(&chg->float_chg_work, smblib_float_chg_work);
 #endif /* CONFIG_QPNP_FLOAT_CHG_RECHECK */
@@ -8821,6 +8918,8 @@ int smblib_deinit(struct smb_charger *chg)
 		cancel_work_sync(&chg->jeita_update_work);
 		cancel_work_sync(&chg->pl_update_work);
 		cancel_work_sync(&chg->dcin_aicl_work);
+		cancel_delayed_work_sync(&chg->hq_conn_thermal_work);
+		cancel_delayed_work_sync(&chg->hq_conn_temp_high_work);
 		cancel_work_sync(&chg->cp_status_change_work);
 #ifdef CONFIG_SPINEL_CHARGER
 		cancel_delayed_work_sync(&chg->battery_maintain_work);

@@ -14,6 +14,8 @@
 #include <linux/gpio.h>
 #include <linux/err.h>
 #include <linux/init.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/export.h>
 #include <linux/sysinfo.h>
 #include <linux/file.h>
@@ -927,6 +929,7 @@ static const struct of_device_id hwinfo_dt_match[] = {
 };
 
 static struct platform_driver HardwareInfo_driver = {
+
     .probe = HardwareInfo_driver_probe,
     .remove = HardwareInfo_driver_remove,
     .driver = {
@@ -937,11 +940,12 @@ static struct platform_driver HardwareInfo_driver = {
 
 static int __init HardwareInfo_mod_init(void)
 {
-    int ret = -1;
+    int ret;
+
     ret = platform_driver_register(&HardwareInfo_driver);
-    if (ret) {
+    if (ret)
         hwinfo_debug("[HWINFO] HardwareInfo_driver registed failed! (ret=%d)\n", ret);
-    }
+
     return ret;
 }
 

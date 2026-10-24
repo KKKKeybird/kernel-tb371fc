@@ -290,11 +290,7 @@ static int set_dspp_pcc_feature(struct sde_hw_dspp *hw_dspp,
 			pcc_cfg = hw_cfg->payload;
 		}
 
-		if (hw_crtc->mi_dimlayer_type & MI_DIMLAYER_FOD_HBM_OVERLAY) {
-			sde_dspp_clear_pcc(hw_cfg);
-		} else {
-			hw_cfg->payload_clear = NULL;
-		}
+		hw_cfg->payload_clear = NULL;
 
 		if (hw_cfg->payload_clear) {
 			pcc_cfg = hw_cfg->payload_clear;
@@ -1526,7 +1522,6 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			hw_cfg.mixer_info = hw_lm;
 			hw_cfg.displayh = num_mixers * hw_lm->cfg.out_width;
 			hw_cfg.displayv = hw_lm->cfg.out_height;
-			hw_cfg.mi_dimlayer_type = sde_crtc->mi_dimlayer_type;
 
 			ret = set_feature(hw_dspp, &hw_cfg, sde_crtc);
 			if (ret)
@@ -2007,14 +2002,6 @@ int sde_cp_crtc_set_property(struct drm_crtc *crtc,
 	if (!sde_crtc) {
 		DRM_ERROR("invalid sde_crtc %pK\n", sde_crtc);
 		return -EINVAL;
-	}
-
-	if (!strncmp(property->name, "mi_fod_sync_info", sizeof("mi_fod_sync_info"))
-		&& pcc_info.crtc_id == crtc->base.id) {
-		if ((val & MI_DIMLAYER_FOD_HBM_OVERLAY) != (pcc_info.fod_val & MI_DIMLAYER_FOD_HBM_OVERLAY)) {
-			fod_changed = true;
-		}
-		pcc_info.fod_val = val;
 	}
 
 	mutex_lock(&sde_crtc->crtc_cp_lock);

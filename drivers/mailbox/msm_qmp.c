@@ -986,10 +986,15 @@ static int qmp_mbox_probe(struct platform_device *pdev)
 			mdev->rx_irq_line, ret);
 		return ret;
 	}
-	ret = enable_irq_wake(mdev->rx_irq_line);
-	if (ret < 0)
-		QMP_ERR(mdev->ilc, "enable_irq_wake on %d failed: %d\n",
-			mdev->rx_irq_line, ret);
+	/* D69/TASK-082: do NOT arm the QMP RX IRQ as a system wakeup source.
+	 * The action already carries IRQF_NO_SUSPEND (the AP must stay able
+	 * to talk to the AOP through suspend), and combining that with
+	 * enable_irq_wake trips kernel/irq/chip.c irq_may_run() - logged as
+	 * "misconfigured IRQ %u %s" (measured: IRQ 409 qcom,qmp-aop) and the
+	 * qcom wakeup_reasons framework records it as an abnormal reason,
+	 * aborting every suspend attempt (/sys/power/suspend_stats success=0).
+	 * The AOP only answers AP-initiated requests, so a wakeup source is
+	 * meaningless here anyway. */
 
 	/* Trigger fake RX in case of missed interrupt */
 	if (of_property_read_bool(edge_node, "qcom,early-boot"))

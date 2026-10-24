@@ -69,8 +69,6 @@ struct backlight_ops {
 struct backlight_properties {
 	/* Current User requested brightness (0 - max_brightness) */
 	int brightness;
-	int brightness_clone;
-	int brightness_clone_backup;
 	/* Maximal value for brightness (read-only) */
 	int max_brightness;
 	/* Current FB Power mode (0: full on, 1..3: power saving
@@ -114,7 +112,6 @@ struct backlight_device {
 	/* Thermally limited max brightness */
 	int thermal_brightness_limit;
 	/* Thermally limited max brightness clone for 8192 hbm*/
-	int thermal_brightness_clone_limit;
 	/* User brightness request */
 	int usr_brightness_req;
 
@@ -186,6 +183,7 @@ extern struct backlight_device *devm_backlight_device_register(
 	void *devdata, const struct backlight_ops *ops,
 	const struct backlight_properties *props);
 extern void backlight_device_unregister(struct backlight_device *bd);
+extern bool is_lcd_on(void);
 extern void devm_backlight_device_unregister(struct device *dev,
 					struct backlight_device *bd);
 extern void backlight_force_update(struct backlight_device *bd,

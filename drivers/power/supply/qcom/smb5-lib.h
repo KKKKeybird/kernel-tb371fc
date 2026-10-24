@@ -658,6 +658,12 @@ struct smb_charger {
 	int			gpio_cradle;
 	/* lenovo jeita */
 	bool			lenovo_jeita;
+
+	/* connector thermal GPIO monitor */
+	int			hq_conn_temp_high_gpio;
+	int			hq_conn_temp;
+	struct delayed_work	hq_conn_thermal_work;
+	struct delayed_work	hq_conn_temp_high_work;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -891,6 +897,7 @@ int smblib_get_irq_status(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_qc3_main_icl_offset(struct smb_charger *chg, int *offset_ua);
 
+int hq_config_chg_max_fcc(struct power_supply *psy, int max_fcc_ua);
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
 int smblib_set_smb_en(struct smb_charger *chg, int enable);

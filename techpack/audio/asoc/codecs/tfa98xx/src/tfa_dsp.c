@@ -72,6 +72,9 @@ void tfa9894_ops(struct tfa_device_ops *ops);
 /* calibration done executed */
 #define TFA_MTPEX_POS           TFA98XX_KEY2_PROTECTED_MTP0_MTPEX_POS /**/
 
+/* TASK-072: TFA9894 rotation engine lives in the tfa9894 unit. */
+#include "../../tfa9894/inc/tfa9894.h"
+
 int tfa_get_calibration_info(struct tfa_device *tfa, int channel)
 {
 	return tfa->mohm[channel];
@@ -3041,6 +3044,24 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa, int next_profile, int vstep
 		if ( err != Tfa98xx_Error_Ok) {
 			pr_err("RunSpeakerBoost failed  %d\n", err);
 			goto error_exit;
+		}
+		/* p269: apply the stock 4-speaker rotation selector before the
+		 * amplifier enters operating state.  This is only for the direct
+		 * I2C TFA9894 path and mirrors the stock module. */
+		{
+			int sel = tfa9894_get_store_chan_sel();
+			int spks = 0;
+			int dcs = 0;
+			char *profile_name =
+				tfaContProfileName(tfa->cnt, tfa->dev_idx, next_profile);
+
+			if ((sel != -1) && ((tfa->rev & 0xff) == 0x94) &&
+			    (profile_name != NULL) &&
+			    (strstr(profile_name, "nonRotation") == NULL)) {
+				if (tfa9894_get_target_chan_sel(sel, tfa->dev_idx,
+								&spks, &dcs) == 0)
+					tfa9894_change_chan_sel(tfa, spks, dcs);
+			}
 		}
 		/* Make sure internal oscillator is running for DSP devices (non-dsp and max1 this is no-op) */
 		tfa98xx_set_osc_powerdown(tfa, 0);

@@ -14,6 +14,12 @@
 #ifndef __HARDWARE_INFO_H__
 #define __HARDWARE_INFO_H__
 
+/* There are two stock hardware-id namespaces: this one and hqsysfs.h.
+ * They share enumerator names but not values; include exactly one. */
+#ifdef __HQ_SYSFS_HEAD__
+#error "hardware_info.h and hqsysfs.h define conflicting enum hardware_id namespaces"
+#endif
+
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include <linux/fs.h>

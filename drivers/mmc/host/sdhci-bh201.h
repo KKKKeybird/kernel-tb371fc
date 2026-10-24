@@ -343,6 +343,7 @@ void set_gg_reg_cur_val(u8 * data);
 void get_gg_reg_cur_val(u8 * data);
 void ggc_dll_voltage_init(struct sdhci_host *  host);
 void ggc_chip_init(struct sdhci_host *host);
+int bht_mmc_select_card_spec(struct sdhci_host *host);
 
 
 

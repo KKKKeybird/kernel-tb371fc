@@ -35,6 +35,7 @@
 #include "../inc/tfa98xx.h"
 #include "../inc/tfa.h"
 #include "../inc/tfa_dsp_fw.h"
+#include "../../tfa9894/inc/tfa9894.h"
 
 #undef pr_info
 #undef pr_err
@@ -209,6 +210,113 @@ static const struct soc_enum nxp_vendor_id[] = {
 
 const struct snd_kcontrol_new nxp_spk_id_controls[] ={
 	SOC_ENUM_EXT("SPK ID", nxp_vendor_id, nxp_vendor_id_get, NULL),
+};
+
+static int tfa9894_info_chan_sel_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 3;
+
+	return 0;
+}
+
+static int tfa9894_get_chan_sel_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	mutex_lock(&tfa98xx_mutex);
+	ucontrol->value.integer.value[0] = tfa9894_get_store_chan_sel();
+	mutex_unlock(&tfa98xx_mutex);
+
+	return 0;
+}
+
+static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa98xx *tfa98xx;
+	long value = ucontrol->value.integer.value[0];
+	int ready = 0;
+	int change = 0;
+	int count = 0;
+	int rev_ok = 0;
+
+	if (no_start != 0)
+		return 0;
+
+	mutex_lock(&tfa98xx_mutex);
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		count++;
+		if ((tfa98xx->tfa->tfa_family == 2) &&
+			((tfa98xx->tfa->rev & 0xff) == 0x94))
+			rev_ok++;
+	}
+
+	if ((count != 4) || (rev_ok != 4)) {
+		pr_debug("p269: chan selector unsupported, count=%d rev_ok=%d\n",
+			count, rev_ok);
+		mutex_unlock(&tfa98xx_mutex);
+		return -ENODEV;
+	}
+
+	/* Stock parity: while a call profile (name contains "nonRotation") is
+	 * active the selector must not be applied.  The active profile is the
+	 * same across the device set, so the first entry is representative. */
+	{
+		struct tfa98xx *first =
+			list_first_entry(&tfa98xx_device_list, struct tfa98xx, list);
+		char *pname = (first->tfa->cnt != NULL) ?
+			tfaContProfileName(first->tfa->cnt, first->tfa->dev_idx,
+					   first->profile) : NULL;
+
+		if (pname != NULL && strstr(pname, "nonRotation") != NULL) {
+			pr_debug("p269: control disabled during a call (%s)\n", pname);
+			mutex_unlock(&tfa98xx_mutex);
+			return 0;
+		}
+	}
+
+	if (value < 0 || value > 3) {
+		pr_debug("p269: invalid chan selector %ld, fallback to 0\n", value);
+		value = 0;
+	}
+
+	if (value == tfa9894_get_store_chan_sel()) {
+		pr_debug("p269: the angle is same\n");
+		mutex_unlock(&tfa98xx_mutex);
+		return 0;
+	}
+
+	/* Stock parity: record the new selector before touching the devices.
+	 * The DSP may not be running yet (rotation while silent); tfa_dev_start
+	 * then applies the stored selector on the next start.  Updating only
+	 * after a successful send would lose the angle in that case. */
+	tfa9894_set_store_chan_sel((int)value);
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		ready = 0;
+		mutex_lock(&tfa98xx->dsp_lock);
+		tfa98xx_dsp_system_stable(tfa98xx->tfa, &ready);
+		if (!ready) {
+			mutex_unlock(&tfa98xx->dsp_lock);
+			continue;
+		}
+		if (tfa9894_send_chan_sel(tfa98xx->tfa,
+					  tfa98xx->i2c->name, (int)value) == 0)
+			change = 1;
+		mutex_unlock(&tfa98xx->dsp_lock);
+	}
+
+	mutex_unlock(&tfa98xx_mutex);
+
+	return change;
+}
+
+static const struct snd_kcontrol_new tfa9894_chan_sel_controls[] = {
+	SOC_SINGLE_EXT("TFA9894_CHAN_SELECTOR", 0, 0, 3, 0,
+		tfa9894_get_chan_sel_ctl, tfa9894_set_chan_sel_ctl),
 };
 
 static inline char *tfa_cont_profile_name(struct tfa98xx *tfa98xx, int prof_idx)
@@ -1852,6 +1960,12 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 		ret = snd_soc_add_component_controls(tfa98xx->component,
 				nxp_spk_id_controls, ARRAY_SIZE(nxp_spk_id_controls));
 	}
+	if (!ret && (tfa98xx->tfa->tfa_family == 2) &&
+	    ((tfa98xx->tfa->rev & 0xff) == 0x94)) {
+		ret = snd_soc_add_component_controls(tfa98xx->component,
+				tfa9894_chan_sel_controls,
+				ARRAY_SIZE(tfa9894_chan_sel_controls));
+	}
 #else
 
 	ret = snd_soc_add_codec_controls(tfa98xx->codec, tfa98xx_controls, mix_index);
@@ -1864,6 +1978,12 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	if (!ret) {
 		ret = snd_soc_add_codec_controls(tfa98xx->codec,
 				nxp_spk_id_controls, ARRAY_SIZE(nxp_spk_id_controls));
+	}
+	if (!ret && (tfa98xx->tfa->tfa_family == 2) &&
+	    ((tfa98xx->tfa->rev & 0xff) == 0x94)) {
+		ret = snd_soc_add_codec_controls(tfa98xx->codec,
+				tfa9894_chan_sel_controls,
+				ARRAY_SIZE(tfa9894_chan_sel_controls));
 	}
 #endif
 	return ret;
@@ -3802,6 +3922,10 @@ static int tfa98xx_read_memtrack_data(struct tfa98xx *tfa98xx, int *pLivedata)
 			sec_devcie = TFA_DEVICE_TYPE_9874_SECONDARY;
 			break;
 		case 0x94:
+			/* TFA9894 is single-channel: there is no secondary
+			 * channel, so sec_devcie deliberately stays at
+			 * TFA_DEVICE_TYPE_MAX and the stereo branch below
+			 * must not index the table with it. */
 			pri_devcie = TFA_DEVICE_TYPE_9894;
 			break;
 		default:
@@ -3849,7 +3973,10 @@ static int tfa98xx_read_memtrack_data(struct tfa98xx *tfa98xx, int *pLivedata)
 		}
 
 		/* build secondary channel struct. */
-		if (tfa98xx_device_count > 1) {
+		/* TFA9894 is single-channel: sec_devcie stays at
+		 * TFA_DEVICE_TYPE_MAX, so there is no secondary row to read.
+		 * Indexing livedata_table with MAX would walk off the array. */
+		if ((tfa98xx_device_count > 1) && (sec_devcie != TFA_DEVICE_TYPE_MAX)) {
 			j = 0;
 			for (i = MEMTRACK_ITEM_MAX*3; i < MEMTRACK_ITEM_MAX*6; i+=3) {
 				buffer[i+6] = (uint8_t)(livedata_table[sec_devcie][j].track & 0xff);
@@ -3947,18 +4074,22 @@ static long tfa98xx_misc_device_control_ioctl(struct file *file,
 			int livedata_length_bytes = 0;
 			void *pUserData = (void*)arg;
 			list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+				int per_dev_bytes;
+
 				/* clear buffer and read livedata from dsp.*/
 				memset((char*)(&livedata[0]), 0x00, sizeof(livedata));
-				/* read original memtrack data from device. */
-				if (Tfa98xx_Error_Ok == tfa98xx_read_memtrack_data(tfa98xx, &livedata[0])) {
+				if (Tfa98xx_Error_Ok ==
+					   tfa98xx_read_memtrack_data(tfa98xx, &livedata[0])) {
 					pr_debug("[TFA9874] Device 0x%x read memtrack data sucessed.\n", tfa98xx->i2c->addr);
+					per_dev_bytes = sizeof(int) * MEMTRACK_ITEM_MAX;
 				} else {
 					pr_err("Device 0x%x read memtrack data failed.\n", tfa98xx->i2c->addr);
+					per_dev_bytes = sizeof(int) * MEMTRACK_ITEM_MAX;
 				}
 
 				/* copy data to user spcace. if copied is successed,
 				will be returned actual size to user space. */
-				livedata_length_bytes = sizeof(int) * MEMTRACK_ITEM_MAX;
+				livedata_length_bytes = per_dev_bytes;
 				if ((tfa98xx->tfa->is_probus_device) && (tfa98xx_device_count > 1)) {
 					/* for stereo usecase, if the condition is true, we have already got livedata from host DSP.
 					otherwise, we don't need do anything. */
@@ -3970,9 +4101,11 @@ static long tfa98xx_misc_device_control_ioctl(struct file *file,
 				}
 
 				if (livedata_length_bytes != 0) {
-					result	= copy_to_user((void __user *)pUserData, &livedata[0], livedata_length_bytes);
-					if (result) {
-						pr_err("copy to user space failed(%d).\n", result);
+					int cpy = copy_to_user((void __user *)pUserData,
+							       &livedata[0],
+							       livedata_length_bytes);
+					if (cpy) {
+						pr_err("copy to user space failed(%d).\n", cpy);
 						result = -EINVAL;
 						break;
 					} else {

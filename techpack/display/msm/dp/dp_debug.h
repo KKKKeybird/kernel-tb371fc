@@ -130,4 +130,8 @@ struct dp_debug *dp_debug_get(struct dp_debug_in *in);
  * @dp_debug: instance of dp_debug
  */
 void dp_debug_put(struct dp_debug *dp_debug);
+
+/* TASK-081 D87: stock dp_debug_reset_override (0x8ee34c0) - clear the
+ * debugfs sim override and mode index on DP disconnect. */
+void dp_debug_reset_override(void);
 #endif /* _DP_DEBUG_H_ */

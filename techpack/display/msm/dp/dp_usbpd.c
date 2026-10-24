@@ -263,6 +263,9 @@ static void dp_usbpd_disconnect_cb(struct usbpd_svid_handler *hdlr)
 
 	pd->alt_mode = DP_USBPD_ALT_MODE_NONE;
 	pd->dp_usbpd.base.alt_mode_cfg_done = false;
+	/* stock 0x8ecbb9c: DP disconnect also resets the dp_debug sim
+	 * override and mode index (dp_debug_reset_override, TASK-081 D87). */
+	dp_debug_reset_override();
 	DP_DEBUG("\n");
 
 	if (pd->dp_cb && pd->dp_cb->disconnect)

@@ -9,6 +9,7 @@
 #include <linux/esoc_client.h>
 #include <linux/list.h>
 #include <linux/of.h>
+#include <linux/ipc_logging.h>
 #include <linux/memblock.h>
 #include <linux/module.h>
 #include <linux/msm-bus.h>

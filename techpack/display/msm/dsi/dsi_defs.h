@@ -618,10 +618,6 @@ struct dsi_host_common_cfg {
 	enum dsi_phy_type phy_type;
 	struct dsi_split_link_config split_link;
 	u32 byte_intf_clk_div;
-	u32 clk_strength;
-	bool cphy_strength;
-	u32 dma_sched_line;
-	u32 dma_sched_window;
 };
 
 /**

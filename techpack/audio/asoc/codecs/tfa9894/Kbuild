@@ -1,0 +1,10 @@
+# TB371FC TFA9894 device-specific unit.
+# Owns the four-speaker rotation engine; links into the same built-in audio
+# stack as the generic tfa98xx codec (obj-y under techpack/audio).
+
+TFA9894_ROOT := $(srctree)/techpack/audio/asoc/codecs/tfa9894
+
+ccflags-y += -I$(TFA9894_ROOT)/inc
+ccflags-y += -I$(srctree)/techpack/audio/asoc/codecs/tfa98xx/inc
+
+obj-y += src/tfa9894_rotation.o

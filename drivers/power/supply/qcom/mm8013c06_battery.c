@@ -34,10 +34,25 @@
 #define REG_HOUR                            0x78
 #define REG_CYCLECOUNT                     0x2A
 #define REG_REMAIN_CAPACITY                0x12
+/* Registers used by the stock driver's extended property set (TASK-076). */
+/*
+ * Register choices verified against the disassembled stock
+ * mm8013_get_property jump table (see
+ * notes/NOTES-tb371fc-mm8013-stock-props-rea.md):
+ *   CHARGE_FULL        -> 0x12
+ *   CHARGE_FULL_DESIGN -> 0x3c
+ *   CHARGE_COUNTER     -> 0x2e
+ */
+#define REG_CHARGE_COUNTER                 0x2e
+#define REG_CHARGE_FULL                    0x12
+#define REG_CHARGE_FULL_DESIGN             0x3c
+#define REG_NOMINAL_CAPACITY               0x0c
+#define REG_TIME_TO_EMPTY_AVG              0x16
 
 
 int last_temperature = 0;
 int last_cycle = 1;
+static int last_time_to_empty_avg;
 bool has_8013 = false;
 /*Linden code for JLINDEN-17 by kangkai4 at 20221128 start*/
 static int	fake_cycle_count;
@@ -67,10 +82,13 @@ static char battery_manufacturer[HQ_BATTERY_UNKNOW + 1][BATTERY_STRING_MAX] = {
 #define MM8013_DEFAULT_DAY              12
 #define MM8013_DEFAULT_HOUR             13
 #define MM8013_DEFAULT_CYCLE            1
+#define MM8013_STOCK_PROP_CHARGE_FULL   10200000
 
 struct mm8013_chip {
     struct i2c_client *client;
     struct power_supply *mm8013_psy;
+    struct delayed_work soc_updata_work;
+    int soc_updata_last;
 /*Linden code for JLINDEN-11308 by huyh10 at 20230711 start*/
     struct mutex suspend_lock;
     bool suspended;
@@ -84,6 +102,10 @@ struct mm8013_chip {
     int hours;
     int chg_volt;
 /*Linden code for JLINDEN-11308 by huyh10 at 20230711 end*/
+    /* Extended-property caches (TASK-076). */
+    int charge_full;
+    int charge_full_design;
+    int charge_counter;
 };
 struct mm8013_chip *chip = NULL;
 
@@ -533,6 +555,133 @@ done:
 }
 EXPORT_SYMBOL(mm8013_get_chg_voltage);
 
+/*
+ * Stock exports and property-only helpers.  The stock Image exposes five
+ * exported capacity/health ABI functions, while its property path itself
+ * reports fixed 10.2Ah values for CHARGE_FULL/CHARGE_FULL_DESIGN and 100 for
+ * CHARGE_COUNTER on suspend/read failure.
+ */
+int mm8013_full_charge_capacity(int *val)
+{
+	int v = 10000;
+
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_FULL);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_CHARGE_FULL, v);
+			v = 10000;
+		} else if (v > 10000) {
+			v -= 10000;
+		}
+	}
+	*val = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_full_charge_capacity);
+
+int mm8013_nominal_capacity(int *val)
+{
+	int v = 10000;
+
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_NOMINAL_CAPACITY);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_NOMINAL_CAPACITY, v);
+			v = 10000;
+		}
+	}
+	*val = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_nominal_capacity);
+
+int mm8013_design_capacity(int *val)
+{
+	int v = 10000;
+
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_FULL_DESIGN);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_CHARGE_FULL_DESIGN, v);
+			v = 10000;
+		}
+	}
+	*val = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_design_capacity);
+
+int mm8013_time_to_empty_avg(int *val)
+{
+	int v;
+
+	if (chip->suspended) {
+		v = last_time_to_empty_avg;
+	} else {
+		v = i2c_smbus_read_word_data(chip->client, REG_TIME_TO_EMPTY_AVG);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_TIME_TO_EMPTY_AVG, v);
+			v = last_time_to_empty_avg;
+		}
+	}
+	*val = v;
+	last_time_to_empty_avg = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_time_to_empty_avg);
+
+int mm8013_get_batt_state_of_health(int *val)
+{
+	int v = 100;
+
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_COUNTER);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_CHARGE_COUNTER, v);
+			v = 100;
+		}
+	}
+	*val = v;
+	return 0;
+}
+EXPORT_SYMBOL(mm8013_get_batt_state_of_health);
+
+static int mm8013_get_fixed_capacity(struct mm8013_chip *chip, u8 reg,
+				     int *val)
+{
+	int ret;
+
+	if (!chip->suspended) {
+		ret = i2c_smbus_read_word_data(chip->client, reg);
+		if (ret < 0)
+			dev_err(&chip->client->dev,
+				"mm8013_read_reg reg%02x: err %d\n", reg, ret);
+	}
+	*val = MM8013_STOCK_PROP_CHARGE_FULL;
+	return 0;
+}
+
+static int mm8013_get_charge_counter(struct mm8013_chip *chip, int *val)
+{
+	int v = 100;
+
+	if (!chip->suspended) {
+		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_COUNTER);
+		if (v < 0) {
+			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
+				REG_CHARGE_COUNTER, v);
+			v = 100;
+		}
+	}
+	*val = v;
+	return 0;
+}
+
 static enum hq_batteryID mm8013_get_bat_id(struct mm8013_chip *chip)
 {
     int ret = 0;
@@ -649,6 +798,16 @@ static enum power_supply_property mm8013_battery_props[] = {
     POWER_SUPPLY_PROP_TEMP,
     POWER_SUPPLY_PROP_CYCLE_COUNT,
     POWER_SUPPLY_PROP_VOLTAGE_MAX,
+    POWER_SUPPLY_PROP_CHARGE_FULL,
+    POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+    POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT,
+    POWER_SUPPLY_PROP_VOLTAGE_OCV,
+    POWER_SUPPLY_PROP_CHARGE_COUNTER,
+    POWER_SUPPLY_PROP_DEBUG_BATTERY,
+    POWER_SUPPLY_PROP_TIME_TO_FULL_AVG,
+    POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
+    POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG,
+    POWER_SUPPLY_PROP_VOLTAGE_AVG,
 };
 
 static int mm8013_get_property(struct power_supply *psy,
@@ -686,6 +845,29 @@ static int mm8013_get_property(struct power_supply *psy,
         break;
     case POWER_SUPPLY_PROP_VOLTAGE_MAX:
         ret = mm8013_get_chg_voltage(&val->intval);
+        break;
+    case POWER_SUPPLY_PROP_CHARGE_FULL:
+        ret = mm8013_get_fixed_capacity(chip, REG_CHARGE_FULL,
+                                        &val->intval);
+        break;
+    case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+        ret = mm8013_get_fixed_capacity(chip, REG_CHARGE_FULL_DESIGN,
+                                        &val->intval);
+        break;
+    case POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT:
+        ret = mm8013_soc(&val->intval);
+        break;
+    case POWER_SUPPLY_PROP_VOLTAGE_OCV:
+        ret = mm8013_voltage(&val->intval);
+        break;
+    case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+        ret = mm8013_get_charge_counter(chip, &val->intval);
+        break;
+    case POWER_SUPPLY_PROP_DEBUG_BATTERY:
+        val->intval = 0;
+        break;
+    case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
+        ret = mm8013_time_to_empty_avg(&val->intval);
         break;
     default:
         return -EINVAL;
@@ -754,6 +936,37 @@ static const struct of_device_id match_table[] = {
 	{ },
 };
 
+static void mm8013_soc_updata_work(struct work_struct *work)
+{
+    struct mm8013_chip *chip = container_of(work, struct mm8013_chip,
+                                            soc_updata_work.work);
+    union power_supply_propval val = { 0 };
+    int ret;
+
+    if (!chip)
+        return;
+
+    if (!chip->mm8013_psy) {
+        pr_err("mm8013 soc work: power supply is not ready\n");
+        goto requeue;
+    }
+
+    ret = power_supply_get_property(chip->mm8013_psy,
+                                    POWER_SUPPLY_PROP_CAPACITY, &val);
+    if (ret < 0) {
+        pr_err("mm8013 soc work: get capacity failed: %d\n", ret);
+        goto requeue;
+    }
+
+    if (val.intval != chip->soc_updata_last) {
+        power_supply_changed(chip->mm8013_psy);
+        chip->soc_updata_last = val.intval;
+    }
+
+requeue:
+    queue_delayed_work(system_wq, &chip->soc_updata_work, 2500);
+}
+
 static int mm8013_probe(struct i2c_client *client,
                  const struct i2c_device_id *id)
 {
@@ -774,6 +987,7 @@ static int mm8013_probe(struct i2c_client *client,
     if (!chip)
         return -ENOMEM;
     chip->client = client;
+    chip->soc_updata_last = -1;
 
 /*Linden code for JLINDEN-11308 by huyh10 at 20230711 start*/
     chip->bat_soc = MM8013_DEFAULT_SOC;
@@ -820,6 +1034,9 @@ static int mm8013_probe(struct i2c_client *client,
         return ret;
     }
 
+    INIT_DELAYED_WORK(&chip->soc_updata_work, mm8013_soc_updata_work);
+    queue_delayed_work(system_wq, &chip->soc_updata_work, 2500);
+
     pr_err("mm8013_probe success!\n");
 
     return 0;
@@ -829,6 +1046,7 @@ static int mm8013_remove(struct i2c_client *client)
 {
     chip = i2c_get_clientdata(client);
 
+    cancel_delayed_work_sync(&chip->soc_updata_work);
     power_supply_unregister(chip->mm8013_psy);
     i2c_set_clientdata(client, NULL);
     kfree(chip);

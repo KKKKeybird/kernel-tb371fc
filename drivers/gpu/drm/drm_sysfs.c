@@ -234,11 +234,36 @@ static DEVICE_ATTR_RO(enabled);
 static DEVICE_ATTR_RO(dpms);
 static DEVICE_ATTR_RO(modes);
 
+/* TASK-081 D104 (G2): stock connector attr family carries dev_attr_mipi_reg
+ * (kallsyms dev_attr_mipi_reg @0xa2ce040, mode 0644 = 0x1a4, rodata name
+ * "mipi_reg" @0x9b408fe) right next to dev_attr_dpms/modes, exposing the
+ * panel MIPI R/W debug path at /sys/class/drm/cardN-DSI-1/mipi_reg.
+ * Stock: mipi_reg_show 0x876fcf8 -> dsi_display_mipi_reg_read 0x8f8acd0,
+ * mipi_reg_store 0x876fd28 -> dsi_display_mipi_reg_write 0x8f8ac70. */
+extern ssize_t dsi_display_mipi_reg_read(struct device *dev, char *buf);
+extern int dsi_display_mipi_reg_write(struct device *dev,
+				      const char *buf, size_t count);
+
+static ssize_t mipi_reg_show(struct device *device,
+			     struct device_attribute *attr, char *buf)
+{
+	return dsi_display_mipi_reg_read(device, buf);
+}
+
+static ssize_t mipi_reg_store(struct device *device,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	return dsi_display_mipi_reg_write(device, buf, count);
+}
+static DEVICE_ATTR_RW(mipi_reg);
+
 static struct attribute *connector_dev_attrs[] = {
 	&dev_attr_status.attr,
 	&dev_attr_enabled.attr,
 	&dev_attr_dpms.attr,
 	&dev_attr_modes.attr,
+	&dev_attr_mipi_reg.attr,
 	NULL
 };
 

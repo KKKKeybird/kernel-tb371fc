@@ -17,6 +17,14 @@
 
 #define DEBUG_NAME "drm_dp"
 
+/* TASK-081 D87 (Round3 audit 1.9): stock dp_debug keeps a global
+ * debug_priv_ptr (0xa516718) and mode_index (0xa516720); DP disconnect
+ * calls dp_debug_reset_override() to clear a debugfs sim override and
+ * the mode index (stock 0x8ee34c0, called from dp_usbpd_disconnect_cb
+ * 0x8ecbb9c). Our rebuild had neither. */
+static struct dp_debug_private *debug_priv_ptr;
+static u32 mode_index;
+
 struct dp_debug_private {
 	struct dentry *root;
 	u8 *edid;
@@ -43,6 +51,14 @@ struct dp_debug_private {
 	struct dp_ctrl *ctrl;
 	struct mutex lock;
 };
+
+void dp_debug_reset_override(void)
+{
+	if (debug_priv_ptr)
+		debug_priv_ptr->dp_debug.sim_mode = false;
+	mode_index = 0;
+}
+
 
 static int dp_debug_get_edid_buf(struct dp_debug_private *debug)
 {
@@ -2243,6 +2259,7 @@ struct dp_debug *dp_debug_get(struct dp_debug_in *in)
 	}
 
 	debug = devm_kzalloc(in->dev, sizeof(*debug), GFP_KERNEL);
+	debug_priv_ptr = debug;
 	if (!debug) {
 		rc = -ENOMEM;
 		goto error;

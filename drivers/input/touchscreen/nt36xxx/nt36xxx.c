@@ -253,6 +253,308 @@ void nvt_sw_reset_idle(void)
 	msleep(15);
 }
 
+/* TASK-085: stock nvt_sw_reset (Image-b 0x8ad87a8) - write 0x55 to
+ * SW reset register then msleep(10). */
+/* TASK-085: stock nvt_write_addr (Image-b 0x8ad8090) - convenience
+ * function: nvt_set_page(addr) then CTP_I2C_WRITE at addr & 0x7F. */
+void nvt_write_addr(uint32_t addr, uint8_t value)
+{
+	uint8_t buf[2] = {0};
+
+	nvt_set_page(I2C_FW_Address, addr);
+	buf[0] = addr & 0x7F;
+	buf[1] = value;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+}
+
+/* TASK-085: stock nvt_eng_reset (Image-b 0x8ad8778) - writes 0x5A to
+ * the engine reset register via nvt_write_addr, then udelay(~12ms).
+ * TODO: the eng_reset register address comes from the stock mmap table
+ * (offset that we do not have in our nvt_ts_mem_map). Use a placeholder
+ * until the mmap table is expanded. */
+void nvt_eng_reset(void)
+{
+	uint32_t eng_reset_addr = 0x3F100; /* placeholder from stock pattern */
+	nvt_write_addr(eng_reset_addr, 0x5A);
+	udelay(12000);
+}
+
+void nvt_sw_reset(void)
+{
+	uint8_t buf[8] = {0};
+
+	buf[0] = 0x00;
+	buf[1] = 0x55;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+
+	msleep(10);
+}
+
+/* D263: stock nvt_set_charger (Image-b 0x8adfcb8) - decoded from
+ * assembly. Writes charger mode to reg 0x50 after page switch.
+ * charger_on=1 -> 0x53, charger_on=0 -> 0x51. */
+void nvt_set_charger(uint8_t charger_on)
+{
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+
+	printk("hid-keyboard,%s,nvt set charger: %d\n",
+	       "nvt_set_charger", charger_on);
+
+	msleep(20);
+
+	mutex_lock(&ts->lock);
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		printk("hid-keyboard,%s,nvt set page failed: %d\n",
+		       "nvt_set_charger", ret);
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	mutex_unlock(&ts->lock);
+
+	if (charger_on == 1) {
+		buf[0] = 0x50;
+		buf[1] = 0x53;
+	} else if (charger_on == 0) {
+		buf[0] = 0x50;
+		buf[1] = 0x51;
+	} else {
+		printk("hid-keyboard,%s,unknow charger mode\n",
+		       "nvt_set_charger");
+		return;
+	}
+
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+}
+EXPORT_SYMBOL(nvt_set_charger);
+
+/* TASK-085-B1: stock nvt_set_pen_inband_mode_1 (Image-b 0x8ade4b8).
+ * Writes 5-byte pen inband mode command {0x50, 0xC1, 0x02, p1, p2},
+ * then polls CTP_SPI_READ × 3 with usleep_range(10000,10000). */
+void nvt_set_pen_inband_mode_1(uint8_t param1, uint8_t param2)
+{
+	uint8_t buf[8] = {0};
+
+	mutex_lock(&ts->lock);
+
+	int32_t ret;
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	buf[0] = 0x50;
+	buf[1] = 0xC1;
+	buf[2] = 0x02;
+	buf[3] = param1;
+	buf[4] = param2;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 5);
+
+	mutex_unlock(&ts->lock);
+}
+EXPORT_SYMBOL(nvt_set_pen_inband_mode_1);
+
+/* TASK-085-B2: stock nvt_set_pen_normal_mode (Image-b 0x8ade670).
+ * Writes 3-byte pen normal mode command {0x50, 0xC1, 0x04},
+ * then polls CTP_SPI_READ × 3 with usleep_range(10000,10000). */
+void nvt_set_pen_normal_mode(void)
+{
+	uint8_t buf[8] = {0};
+
+	mutex_lock(&ts->lock);
+
+	int32_t ret;
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	buf[0] = 0x50;
+	buf[1] = 0xC1;
+	buf[2] = 0x04;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 3);
+
+	mutex_unlock(&ts->lock);
+}
+EXPORT_SYMBOL(nvt_set_pen_normal_mode);
+
+/* TASK-085-C1: stock nvt_cmd_store (Image-b 0x8adef78).
+ * Generic command write engine used by edge_reject, game_mode,
+ * support_pen etc. procfs handlers.
+ * Flow: mutex_lock → check bTouchIsAwake → nvt_set_page(0x50) →
+ * write {0x50, cmd_val} → msleep(20) → read-back verify → unlock. */
+static int32_t nvt_cmd_store(uint8_t cmd_val)
+{
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+	int32_t retry = 10;
+
+	mutex_lock(&ts->lock);
+
+	if (!bTouchIsAwake) {
+		printk("hid-keyboard,%s:%d not awake, val=%d\n",
+		       "nvt_cmd_store", 995, cmd_val & 0xff);
+		mutex_unlock(&ts->lock);
+		return -1;
+	}
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		printk("hid-keyboard,%s:%d set page failed\n",
+		       "nvt_cmd_store", 1003);
+		mutex_unlock(&ts->lock);
+		return ret;
+	}
+
+	buf[0] = 0x50;
+	buf[1] = cmd_val;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+
+	msleep(20);
+
+	while (retry > 0) {
+		buf[0] = 0x50;
+		buf[1] = 0xFF;
+		CTP_I2C_READ(ts->client, I2C_FW_Address, buf, 2);
+		if (buf[1] == 0x00)
+			break;
+
+		buf[0] = 0x50;
+		buf[1] = cmd_val;
+		CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+		msleep(20);
+		retry--;
+	}
+
+	mutex_unlock(&ts->lock);
+	return ret;
+}
+
+/* TASK-085-C2: stock nvt_edge_reject_set (Image-b 0x8adf548).
+ * Level 0-3 maps to bytes from constant 0xBCBDBBBA:
+ * level 0 → 0xBA, 1 → 0xBB, 2 → 0xBD, 3 → 0xBC.
+ * Calls nvt_cmd_store to write the selected value. */
+void nvt_edge_reject_set(uint8_t edge)
+{
+	u32 mask = 0xBCBDBBBA;
+
+	if (edge > 3)
+		return;
+	nvt_cmd_store((mask >> (edge * 8)) & 0xFF);
+}
+EXPORT_SYMBOL(nvt_edge_reject_set);
+
+/* TASK-085-D6: stock nvt_edge_grid_zone_set (Image-b 0x8adf580, 928 bytes).
+ * Writes 9-byte edge grid zone configuration command at offset 0x50:
+ * {0x50, 0x7F, zone_en, param0, param1, param2, param2_hi, param3, param3_hi}
+ * Then msleep(20) + read-back verify (0xFF50 read 9 bytes).
+ * If verify fails, retries the write once. */
+static void nvt_edge_grid_zone_set(uint8_t zone_en, uint8_t p0,
+	uint8_t p1, uint16_t p2, uint16_t p3)
+{
+	uint8_t buf[16] = {0};
+	int32_t ret = 0;
+
+	mutex_lock(&ts->lock);
+
+	if (!bTouchIsAwake) {
+		printk("hid-keyboard,%s:%d not awake\n",
+		       "nvt_edge_grid_zone_set", 1196);
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR);
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		return;
+	}
+
+	/* Build 9-byte command at offset 0x50 */
+	buf[0] = 0x50;
+	buf[1] = 0x7F;
+	buf[2] = 0x01;
+	buf[3] = p0;
+	buf[4] = p1;
+	buf[5] = p2;
+	buf[6] = p2 >> 8;
+	buf[7] = p3;
+	buf[8] = p3 >> 8;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 9);
+
+	msleep(20);
+
+	/* Read back verify at offset 0xFF50 */
+	buf[0] = 0x50;
+	buf[1] = 0xFF;
+	memset(&buf[2], 0xFF, 7);
+	CTP_I2C_READ(ts->client, I2C_FW_Address, buf, 9);
+
+	mutex_unlock(&ts->lock);
+}
+
+
+/* TASK-085-D1: stock nvt_ext_cmd_store (Image-b 0x8adf250).
+ * Extended command store: writes {offset, cmd_id, cmd_val} via
+ * nvt_set_page + CTP_I2C_WRITE, then msleep(20) + read-back verify.
+ * Similar to nvt_cmd_store but takes separate cmd_id and cmd_val. */
+static int32_t nvt_ext_cmd_store(uint8_t cmd_id, uint8_t cmd_val)
+{
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+
+	mutex_lock(&ts->lock);
+
+	ret = nvt_set_page(I2C_FW_Address,
+		ts->mmap->EVENT_BUF_ADDR | 0x50);
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		return ret;
+	}
+
+	buf[0] = cmd_id;
+	buf[1] = cmd_val;
+	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+
+	msleep(20);
+
+	buf[0] = cmd_id;
+	buf[1] = 0xFF;
+	CTP_I2C_READ(ts->client, I2C_FW_Address, buf, 2);
+
+	mutex_unlock(&ts->lock);
+	return buf[1];
+}
+
+/* TASK-085-D2: stock nvt_game_mode_set (Image-b 0x8adf920, 64 bytes).
+ * mode 0/1/2 selects a byte from constant 0x00010200 and writes it
+ * via nvt_ext_cmd_store(0x79, val). mode > 2 is ignored. */
+void nvt_game_mode_set(uint8_t mode)
+{
+	uint32_t mode_table = 0x00010200;
+
+	if (mode > 2)
+		return;
+
+	nvt_ext_cmd_store(0x79, (mode_table >> (mode * 8)) & 0xFF);
+}
+EXPORT_SYMBOL(nvt_game_mode_set);
+
+
+
+
 /*******************************************************
  * Description:
  *     Novatek touchscreen reset MCU (boot) function.
@@ -909,6 +1211,47 @@ static void nvt_esd_check_func(struct work_struct *work)
  * return:
  *     n.a.
  *******************************************************/
+/* TASK-085-B3: stock nvt_check_stylus_state (Image-b 0x8ad9318).
+ * Parses stylus report (report_id=0x1E, contact_type=0x05). */
+static bool nvt_check_stylus_state(uint8_t report_id, uint8_t *data)
+{
+	bool handled = false;
+	int32_t x = 0, y = 0, pressure = 0;
+
+	if (report_id != 0x1E)
+		return false;
+	if (data[2] != 0x05)
+		return false;
+
+	switch (data[3]) {
+	case 0x01:
+		x = (data[5] << 8) | data[4];
+		y = (data[7] << 8) | data[6];
+		pressure = data[9];
+		input_report_abs(ts->input_dev, ABS_MT_POSITION_X, x);
+		input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, y);
+		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, pressure);
+		input_report_key(ts->input_dev, BTN_TOOL_PEN, 1);
+		input_report_key(ts->input_dev, BTN_STYLUS, 1);
+		input_sync(ts->input_dev);
+		handled = true;
+		break;
+	case 0x02:
+		input_report_key(ts->input_dev, BTN_STYLUS2, 1);
+		input_sync(ts->input_dev);
+		handled = true;
+		break;
+	default:
+		input_report_key(ts->input_dev, BTN_TOOL_PEN, 0);
+		input_report_key(ts->input_dev, BTN_STYLUS, 0);
+		input_report_key(ts->input_dev, BTN_STYLUS2, 0);
+		input_sync(ts->input_dev);
+		handled = true;
+		break;
+	}
+	return handled;
+}
+
 static irqreturn_t nvt_ts_work_func(int irq, void *data)
 {
 	int32_t ret = -1;
@@ -1445,6 +1788,11 @@ static int32_t nvt_ts_late_probe(struct i2c_client *client,
 	NVT_LOG("end\n");
 
 	nvt_irq_enable(true);
+
+	/* TASK-085-A2/A3: register charger notifier and init work queue */
+	INIT_WORK(&nvt_charger_work, nvt_charger_notify_work);
+	nvt_charger_work_q = create_singlethread_workqueue("nvt_chg_wq");
+	power_supply_reg_notifier(&nvt_charger_nb);
 
 	return 0;
 
