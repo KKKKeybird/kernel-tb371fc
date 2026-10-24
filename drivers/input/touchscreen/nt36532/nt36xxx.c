@@ -627,8 +627,8 @@ int nvt_edge_grid_zone_set(u8 x1, u8 y1, u16 x2, u16 y2)
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
 	if (!bTouchIsAwake) {
-		pr_err("3[%s] %s %d: Touch is already suspend, ignore cmd\n",
-		       __func__, __func__, 1196);
+		pr_err("[%s] %s %d: Touch is already suspend, ignore cmd",
+		       "NVT-ts", __func__, 1196);
 		mutex_unlock(&nvt_ts->lock);
 		return -1;
 	}
@@ -650,15 +650,15 @@ int nvt_edge_grid_zone_set(u8 x1, u8 y1, u16 x2, u16 y2)
 		memset(&buf[1], 0xff, sizeof(buf) - 1);
 		CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf));
 		if (buf[1] == 0x00) {
-			pr_info("3[%s] %s %d: send Cmd 0x%02X 0x%02X success, tried %d times\n",
-				__func__, __func__, 1242, 0x7f, 0x01, attempt);
+			pr_err("[%s] %s %d: send Cmd 0x%02X 0x%02X success, tried %d times\n",
+				"NVT-ts", __func__, 1242, 0x7f, 0x01, attempt);
 			mutex_unlock(&nvt_ts->lock);
 			return 0;
 		}
 	}
 
-	pr_err("3[%s] %s %d: send Cmd 0x%02X 0x%02X failed, buf[1]=0x%02X\n",
-	       __func__, __func__, 1237, 0x7f, 0x01, buf[1]);
+	pr_err("[%s] %s %d: send Cmd 0x%02X 0x%02X failed, buf[1]=0x%02X\n",
+	       "NVT-ts", __func__, 1237, 0x7f, 0x01, buf[1]);
 	mutex_unlock(&nvt_ts->lock);
 	return -1;
 }
@@ -814,8 +814,8 @@ int nvt_support_pen_set(u8 enable, u8 version)
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
 	if (!bTouchIsAwake) {
-		pr_err("3[%s] %s %d: Touch is already suspend, ignore cmd\n",
-		       "nvt_support_pen_set", "nvt_support_pen_set", 1413);
+		pr_err("[%s] %s %d: Touch is already suspend, ignore cmd",
+		       "NVT-ts", "nvt_support_pen_set", 1413);
 		mutex_unlock(&nvt_ts->lock);
 		return -1;
 	}
@@ -837,14 +837,14 @@ int nvt_support_pen_set(u8 enable, u8 version)
 		buf[3] = 0xff;
 		CTP_SPI_READ(nvt_ts->client, buf, 4);
 		if (buf[1] == 0) {
-			pr_info("3[%s] %s %d: send Cmd 0x%02X 0x%02X 0x%02X success, tried %d times\n",
-				__func__, __func__, 1448, 0x7b, enable, version, retry);
+			pr_err("[%s] %s %d: send Cmd 0x%02X 0x%02X 0x%02X success, tried %d times\n",
+				"NVT-ts", __func__, 1448, 0x7b, enable, version, retry);
 			mutex_unlock(&nvt_ts->lock);
 			return 0;
 		}
 	}
-	pr_err("3[%s] %s %d: send Cmd 0x%02X 0x%02X 0x%02X failed, buf[1]=0x%02X\n",
-	       __func__, __func__, 1443, 0x7b, enable, version, buf[1]);
+	pr_err("[%s] %s %d: send Cmd 0x%02X 0x%02X 0x%02X failed, buf[1]=0x%02X\n",
+	       "NVT-ts", __func__, 1443, 0x7b, enable, version, buf[1]);
 	mutex_unlock(&nvt_ts->lock);
 	return -1;
 }
@@ -856,8 +856,8 @@ void nvt_support_pen_set_nfc(bool normal)
 		if (nvt_ts->pen_enable == 1)
 			nvt_support_pen_set(1, nvt_ts->pen_version);
 		else
-			pr_info("3[%s] %s %d: The pen no connect!\n",
-			       "nvt_support_pen_set_nfc",
+			pr_err("[%s] %s %d: The pen no connect!",
+			       "NVT-ts",
 			       "nvt_support_pen_set_nfc", 1387);
 	} else {
 		nvt_support_pen_set(0, 0);
@@ -886,8 +886,8 @@ int nvt_set_pen_inband_mode_1(u8 enable, u8 version)
 			return 0;
 		usleep_range(10000, 10000);
 	}
-	pr_err("3[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
-	       "nvt_set_pen_inband_mode_1", "nvt_set_pen_inband_mode_1",
+	pr_err("[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
+	       "NVT-ts", "nvt_set_pen_inband_mode_1",
 	       155, 5, buf[1]);
 	return -1;
 }
@@ -911,8 +911,8 @@ int nvt_set_pen_normal_mode(void)
 			return 0;
 		usleep_range(10000, 10000);
 	}
-	pr_err("3[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
-	       "nvt_set_pen_normal_mode", "nvt_set_pen_normal_mode",
+	pr_err("[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
+	       "NVT-ts", "nvt_set_pen_normal_mode",
 	       189, 5, buf[1]);
 	return -1;
 }
@@ -1321,8 +1321,8 @@ static int nvt_flash_open(struct inode *inode, struct file *file)
 {
 	file->private_data = kzalloc(8, GFP_KERNEL);
 	if (!file->private_data) {
-		pr_err("3[%s] %s %d: Failed to allocate memory for nvt flash data\n",
-		       "nvt_flash_open", "nvt_flash_open", 1005);
+		pr_err("[%s] %s %d: Failed to allocate memory for nvt flash data\n",
+		       "NVT-ts", "nvt_flash_open", 1005);
 		return -ENOMEM;
 	}
 	return 0;
@@ -1345,29 +1345,29 @@ static ssize_t nvt_flash_read(struct file *file, char __user *buff,
 	bool read_ok;
 
 	if (count - 3 > 0xfc00) {
-		pr_err("3[%s] %s %d: invalid transfer len!\n",
-		       "nvt_flash_read", "nvt_flash_read", 899);
+		pr_err("[%s] %s %d: invalid transfer len!\n",
+		       "NVT-ts", "nvt_flash_read", 899);
 		return -EFAULT;
 	}
 
 	buf = kmalloc(count, GFP_KERNEL);
 	if (!buf) {
-		pr_err("3[%s] %s %d: kzalloc for buf failed!\n",
-		       "nvt_flash_read", "nvt_flash_read", 906);
+		pr_err("[%s] %s %d: kzalloc for buf failed!\n",
+		       "NVT-ts", "nvt_flash_read", 906);
 		return -ENOMEM;
 	}
 
 	rbuf = kmalloc(count, GFP_KERNEL | __GFP_ZERO);
 	if (!rbuf) {
-		pr_err("3[%s] %s %d: kzalloc for buf failed!\n",
-		       "nvt_flash_read", "nvt_flash_read", 913);
+		pr_err("[%s] %s %d: kzalloc for buf failed!\n",
+		       "NVT-ts", "nvt_flash_read", 913);
 		kfree(buf);
 		return -ENOMEM;
 	}
 
 	if (copy_from_user(buf, buff, count)) {
-		pr_err("3[%s] %s %d: copy from user error\n",
-		       "nvt_flash_read", "nvt_flash_read", 921);
+		pr_err("[%s] %s %d: copy from user error\n",
+		       "NVT-ts", "nvt_flash_read", 921);
 		ret = -EFAULT;
 		goto out;
 	}
@@ -1383,8 +1383,8 @@ static ssize_t nvt_flash_read(struct file *file, char __user *buff,
 				read_ok = true;
 				break;
 			}
-			pr_err("3[%s] %s %d: error, retries=%d, ret=%d\n",
-			       "nvt_flash_read", "nvt_flash_read", 960,
+			pr_err("[%s] %s %d: error, retries=%d, ret=%d\n",
+			       "NVT-ts", "nvt_flash_read", 960,
 			       retry, ret);
 		}
 		if (read_ok) {
@@ -1392,8 +1392,8 @@ static ssize_t nvt_flash_read(struct file *file, char __user *buff,
 			if (copy_to_user(buff, buf, count))
 				ret = -EFAULT;
 		} else {
-			pr_err("3[%s] %s %d: error, ret = %d\n",
-			       "nvt_flash_read", "nvt_flash_read", 975, ret);
+			pr_err("[%s] %s %d: error, ret = %d\n",
+			       "NVT-ts", "nvt_flash_read", 975, ret);
 			ret = -EIO;
 		}
 	} else {
@@ -1401,13 +1401,13 @@ static ssize_t nvt_flash_read(struct file *file, char __user *buff,
 			ret = CTP_SPI_WRITE(nvt_ts->client, rbuf, addr);
 			if (ret == 0)
 				break;
-			pr_err("3[%s] %s %d: error, retries=%d, ret=%d\n",
-			       "nvt_flash_read", "nvt_flash_read", 944,
+			pr_err("[%s] %s %d: error, retries=%d, ret=%d\n",
+			       "NVT-ts", "nvt_flash_read", 944,
 			       retry, ret);
 		}
 		if (ret) {
-			pr_err("3[%s] %s %d: error, ret = %d\n",
-			       "nvt_flash_read", "nvt_flash_read", 950, ret);
+			pr_err("[%s] %s %d: error, ret = %d\n",
+			       "NVT-ts", "nvt_flash_read", 950, ret);
 			ret = -EIO;
 		}
 	}
@@ -2286,8 +2286,8 @@ int nvt_clear_fw_status(void)
 			return 0;
 		usleep_range(10000, 10000);
 	}
-	pr_err("3[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
-	       "nvt_clear_fw_status", "nvt_clear_fw_status", 711, 20, buf[1]);
+	pr_err("[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
+	       "NVT-ts", "nvt_clear_fw_status", 711, 20, buf[1]);
 	return -1;
 }
 
@@ -2324,8 +2324,8 @@ int nvt_check_fw_status(void)
 			return 0;
 		usleep_range(10000, 10000);
 	}
-	pr_err("3[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
-	       "nvt_check_fw_status", "nvt_check_fw_status", 749, 50, buf[1]);
+	pr_err("[%s] %s %d: failed, i=%d, buf[1]=0x%02X\n",
+	       "NVT-ts", "nvt_check_fw_status", 749, 50, buf[1]);
 	return -1;
 }
 
@@ -2611,8 +2611,8 @@ static ssize_t nvt_edge_grid_zone_store(struct file *file,
 	nvt_ts->edge_grid_x2 = x2;
 	nvt_ts->edge_grid_y2 = y2;
 
-	pr_info("3[%s] %s %d: cmd_parm = %d,%d,%d,%d\n",
-		__func__, __func__, 1270, x1, y1, x2, y2);
+	pr_err("[%s] %s %d: cmd_parm = %d,%d,%d,%d\n",
+		"NVT-ts", __func__, 1270, x1, y1, x2, y2);
 	nvt_edge_grid_zone_set(nvt_ts->edge_grid_x1, nvt_ts->edge_grid_y1,
 			       nvt_ts->edge_grid_x2, nvt_ts->edge_grid_y2);
 	return count;
@@ -2734,7 +2734,7 @@ static int nvt_baseline_open(struct inode *inode, struct file *file)
 
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	pr_info("3[%s] %s %d: ++\n", "nvt_baseline_open", "nvt_baseline_open", 639);
+	pr_err("[%s] %s %d: ++\n", "NVT-ts", "nvt_baseline_open", 639);
 	if (nvt_clear_fw_status() == 0) {
 		buf[0] = 0x50;
 		buf[1] = 0x22;
@@ -2752,8 +2752,8 @@ static int nvt_baseline_open(struct inode *inode, struct file *file)
 			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
 			usleep_range(20000, 20000);
 			mutex_unlock(&nvt_ts->lock);
-			pr_info("3[%s] %s %d: --\n",
-				"nvt_baseline_open", "nvt_baseline_open", 668);
+			pr_err("[%s] %s %d: --\n",
+				"NVT-ts", "nvt_baseline_open", 668);
 			return seq_open(file, &nvt_seq_ops);
 		}
 	}
@@ -2768,7 +2768,7 @@ static int nvt_raw_open(struct inode *inode, struct file *file)
 
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	pr_info("3[%s] %s %d: ++\n", "nvt_raw_open", "nvt_raw_open", 703);
+	pr_err("[%s] %s %d: ++\n", "NVT-ts", "nvt_raw_open", 703);
 	if (nvt_clear_fw_status() == 0) {
 		buf[0] = 0x50;
 		buf[1] = 0x22;
@@ -2794,8 +2794,8 @@ static int nvt_raw_open(struct inode *inode, struct file *file)
 			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
 			usleep_range(20000, 20000);
 			mutex_unlock(&nvt_ts->lock);
-			pr_info("3[%s] %s %d: --\n",
-				"nvt_raw_open", "nvt_raw_open", 735);
+			pr_err("[%s] %s %d: --\n",
+				"NVT-ts", "nvt_raw_open", 735);
 			return seq_open(file, &nvt_seq_ops);
 		}
 	}
@@ -2810,7 +2810,7 @@ static int nvt_diff_open(struct inode *inode, struct file *file)
 
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	pr_info("3[%s] %s %d: ++\n", "nvt_diff_open", "nvt_diff_open", 770);
+	pr_err("[%s] %s %d: ++\n", "NVT-ts", "nvt_diff_open", 770);
 	if (nvt_clear_fw_status() == 0) {
 		buf[0] = 0x50;
 		buf[1] = 0x22;
@@ -2836,8 +2836,8 @@ static int nvt_diff_open(struct inode *inode, struct file *file)
 			CTP_SPI_WRITE(nvt_ts->client, buf, 2);
 			usleep_range(20000, 20000);
 			mutex_unlock(&nvt_ts->lock);
-			pr_info("3[%s] %s %d: --\n",
-				"nvt_diff_open", "nvt_diff_open", 802);
+			pr_err("[%s] %s %d: --\n",
+				"NVT-ts", "nvt_diff_open", 802);
 			return seq_open(file, &nvt_seq_ops);
 		}
 	}
@@ -2851,7 +2851,7 @@ static int nvt_pen_diff_open(struct inode *inode, struct file *file)
 
 	if (mutex_lock_interruptible(&nvt_ts->lock))
 		return -ERESTARTSYS;
-	pr_info("3[%s] %s %d: ++\n", "nvt_pen_diff_open", "nvt_pen_diff_open", 857);
+	pr_err("[%s] %s %d: ++\n", "NVT-ts", "nvt_pen_diff_open", 857);
 	if (nvt_set_pen_inband_mode_1(0xff, 0) == 0 &&
 	    nvt_check_fw_reset_state(0xa3) == 0 &&
 	    nvt_clear_fw_status() == 0) {
@@ -2881,8 +2881,8 @@ static int nvt_pen_diff_open(struct inode *inode, struct file *file)
 			nvt_set_pen_normal_mode();
 			nvt_check_fw_reset_state(0xa3);
 			mutex_unlock(&nvt_ts->lock);
-			pr_info("3[%s] %s %d: --\n",
-				"nvt_pen_diff_open", "nvt_pen_diff_open", 903);
+			pr_err("[%s] %s %d: --\n",
+				"NVT-ts", "nvt_pen_diff_open", 903);
 			return seq_open(file, &nvt_pen_diff_seq_ops);
 		}
 	}
@@ -2930,14 +2930,14 @@ int nvt_extra_proc_init(void)
 	do { \
 		e = proc_create((nm), (mode), NULL, (fops)); \
 		if (!e) { \
-			pr_err("3[%s] %s %d: create proc/%s Failed!\n", \
-			       "nvt_extra_proc_init", "nvt_extra_proc_init", \
+			pr_err("[%s] %s %d: create proc/%s Failed!\n", \
+			       "NVT-ts", "nvt_extra_proc_init", \
 			       (fail_L), (nm)); \
 			nvt_extra_proc_deinit(); \
 			return -ENOMEM; \
 		} \
-		pr_info("3[%s] %s %d: create proc/%s Succeeded!\n", \
-			"nvt_extra_proc_init", "nvt_extra_proc_init", \
+		pr_err("[%s] %s %d: create proc/%s Succeeded!\n", \
+			"NVT-ts", "nvt_extra_proc_init", \
 			(succ_L), (nm)); \
 		(store) = e; \
 	} while (0)
@@ -2969,8 +2969,8 @@ void nvt_extra_proc_deinit(void)
 		if (store) { \
 			remove_proc_entry((nm), NULL); \
 			(store) = NULL; \
-			pr_info("3[%s] %s %d: Removed /proc/%s \n", \
-				"nvt_extra_proc_deinit", "nvt_extra_proc_deinit", \
+			pr_err("[%s] %s %d: Removed /proc/%s \n", \
+				"NVT-ts", "nvt_extra_proc_deinit", \
 				__LINE__, (nm)); \
 		} \
 	} while (0)
@@ -3321,7 +3321,7 @@ static void nvt_mp_print_result_log(const u8 *data, u32 count)
 
 	buf = kmalloc(count * 6 + 1, GFP_KERNEL);
 	if (!buf) {
-		pr_err("3[%s] %s %d: kzalloc for tmp_log failed!\n ",
+		pr_err("[%s] %s %d: kzalloc for tmp_log failed!\n ",
 		       "NVT-ts", __func__, 608);
 		return;
 	}
@@ -3340,7 +3340,7 @@ static void nvt_mp_print_data_log(const s32 *data, u32 count)
 
 	buf = kmalloc(count * 7 + 1, GFP_KERNEL);
 	if (!buf) {
-		pr_err("3[%s] %s %d: kzalloc for tmp_log failed!\n ",
+		pr_err("[%s] %s %d: kzalloc for tmp_log failed!\n ",
 		       "NVT-ts", __func__, 584);
 		return;
 	}
@@ -3357,11 +3357,11 @@ static int nvt_mp_parse_u32(struct device_node *child, const char *name,
 	int ret = of_property_read_u32(child, name, out);
 
 	if (ret < 0) {
-		pr_err("3[%s] %s %d: error reading %s. ret=%d\n",
-		       __func__, __func__, 2453, name, ret);
+		pr_err("[%s] %s %d: error reading %s. ret=%d\n",
+		       "NVT-ts", __func__, 2453, name, ret);
 		return -1;
 	}
-	pr_info("3[%s] %s %d: %s=%d\n", __func__, __func__, 2457, name, *out);
+	pr_err("[%s] %s %d: %s=%d\n", "NVT-ts", __func__, 2457, name, *out);
 	return 0;
 }
 
@@ -3382,15 +3382,15 @@ static int nvt_mp_parse_ain(struct device_node *child, const char *name,
 	prop = of_find_property(child, name, &len);
 	actual = len / sizeof(u32);
 	if (!prop || !actual || actual != count) {
-		pr_err("3[%s] %s %d: error find %s. len=%d\n",
-		       __func__, __func__, 2417, name, actual);
+		pr_err("[%s] %s %d: error find %s. len=%d\n",
+		       "NVT-ts", __func__, 2417, name, actual);
 		return -1;
 	}
-	pr_info("3[%s] %s %d: %s. len=%d\n",
-		__func__, __func__, 2420, name, actual);
+	pr_err("[%s] %s %d: %s. len=%d\n",
+		"NVT-ts", __func__, 2420, name, actual);
 	if (of_property_read_u32_array(child, name, tmp, count) < 0) {
-		pr_err("3[%s] %s %d: error find %s. len=%d\n",
-		       __func__, __func__, 2423, name, actual);
+		pr_err("[%s] %s %d: error find %s. len=%d\n",
+		       "NVT-ts", __func__, 2423, name, actual);
 		return -1;
 	}
 	for (i = 0; i < count; i++)
@@ -3415,15 +3415,15 @@ static int nvt_mp_parse_array(struct device_node *child, const char *name,
 	actual = len / sizeof(u32);
 	if (!prop || !actual || actual < total ||
 	    actual > NVT_MP_X_Y_DIMENSION_MAX) {
-		pr_err("3[%s] %s %d: error find %s. len=%d\n",
-		       __func__, __func__, 2481, name, actual);
+		pr_err("[%s] %s %d: error find %s. len=%d\n",
+		       "NVT-ts", __func__, 2481, name, actual);
 		return -1;
 	}
-	pr_info("3[%s] %s %d: %s. len=%d\n",
-		__func__, __func__, 2484, name, actual);
+	pr_err("[%s] %s %d: %s. len=%d\n",
+		"NVT-ts", __func__, 2484, name, actual);
 	if (of_property_read_u32_array(child, name, (u32 *)out, actual) < 0) {
-		pr_err("3[%s] %s %d: error find %s. len=%d\n",
-		       __func__, __func__, 2487, name, actual);
+		pr_err("[%s] %s %d: error find %s. len=%d\n",
+		       "NVT-ts", __func__, 2487, name, actual);
 		return -1;
 	}
 	for (row = 0; row < y_channel; row++) {
@@ -3448,15 +3448,15 @@ static int nvt_mp_parse_pen_array(struct device_node *child, const char *name,
 	actual = len / sizeof(u32);
 	if (!prop || !actual || actual < total ||
 	    actual > NVT_MP_PEN_X_Y_DIMENSION_MAX) {
-		pr_err("3[%s] %s %d: error find %s. len=%d, size=%d, x_num=%d, y_num=%d\n",
-		       __func__, __func__, 2521, name, actual, total, x_num, y_num);
+		pr_err("[%s] %s %d: error find %s. len=%d, size=%d, x_num=%d, y_num=%d\n",
+		       "NVT-ts", __func__, 2521, name, actual, total, x_num, y_num);
 		return -1;
 	}
-	pr_info("3[%s] %s %d: %s. len=%d\n",
-		__func__, __func__, 2524, name, actual);
+	pr_err("[%s] %s %d: %s. len=%d\n",
+		"NVT-ts", __func__, 2524, name, actual);
 	if (of_property_read_u32_array(child, name, (u32 *)out, actual) < 0) {
-		pr_err("3[%s] %s %d: error find %s. len=%d\n",
-		       __func__, __func__, 2527, name, actual);
+		pr_err("[%s] %s %d: error find %s. len=%d\n",
+		       "NVT-ts", __func__, 2527, name, actual);
 		return -1;
 	}
 	for (row = 0; row < y_num; row++) {
@@ -3476,19 +3476,19 @@ static int nvt_mp_parse_dt(struct device_node *parent, const char *name)
 	u32 x_cfg, y_cfg;
 	int ret = -1;
 
-	pr_info("3[%s] %s %d: Parse mp criteria for node %s\n",
-		__func__, __func__, 2555, name);
+	pr_err("[%s] %s %d: Parse mp criteria for node %s\n",
+		"NVT-ts", __func__, 2555, name);
 	for_each_child_of_node(parent, child) {
 		if (of_node_name_eq(child, name))
 			break;
 	}
 	if (!child) {
-		pr_err("3[%s] %s %d: Not found compatible node %s!\n",
-		       __func__, __func__, 2567, name);
+		pr_err("[%s] %s %d: Not found compatible node %s!\n",
+		       "NVT-ts", __func__, 2567, name);
 		return -1;
 	}
-	pr_info("3[%s] %s %d: found child node %s\n",
-		__func__, __func__, 2561, name);
+	pr_err("[%s] %s %d: found child node %s\n",
+		"NVT-ts", __func__, 2561, name);
 
 	if (nvt_mp_parse_u32(child, "IC_X_CFG_SIZE", &x_cfg) ||
 	    nvt_mp_parse_u32(child, "IC_Y_CFG_SIZE", &y_cfg) ||
@@ -3499,8 +3499,8 @@ static int nvt_mp_parse_dt(struct device_node *parent, const char *name)
 	nvt_mp_ic_y_cfg_size = y_cfg;
 
 	if (x_cfg > NVT_MP_AIN_MAX || y_cfg > NVT_MP_AIN_MAX) {
-		pr_err("3[%s] %s %d: AIN size %u/%u exceeds %u\n",
-		       __func__, __func__, 2572, x_cfg, y_cfg, NVT_MP_AIN_MAX);
+		pr_err("[%s] %s %d: AIN size %u/%u exceeds %u\n",
+		       "NVT-ts", __func__, 2572, x_cfg, y_cfg, NVT_MP_AIN_MAX);
 		goto out_put;
 	}
 	if (nvt_mp_parse_ain(child, "AIN_X", nvt_mp_ain_x, x_cfg) ||
@@ -3611,8 +3611,8 @@ static int nvt_mp_parse_dt(struct device_node *parent, const char *name)
 			     &nvt_mp_diff_test_frame))
 		goto out_put;
 
-	pr_info("3[%s] %s %d: Parse mp criteria done!\n",
-		__func__, __func__, 2710);
+	pr_err("[%s] %s %d: Parse mp criteria done!\n",
+		"NVT-ts", __func__, 2710);
 	ret = 0;
 out_put:
 	of_node_put(child);
@@ -3637,15 +3637,15 @@ static int nvt_polling_hand_shake_status(void)
 		usleep_range(10000, 10000);
 	}
 
-	pr_err("3[%s] %s %d: polling hand shake status failed, buf[1]=0x%02X\n",
-	       __func__, __func__, 341, buf[1]);
+	pr_err("[%s] %s %d: polling hand shake status failed, buf[1]=0x%02X\n",
+	       "NVT-ts", __func__, 341, buf[1]);
 
 	nvt_set_page(NVT_MM->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
 	buf[0] = EVENT_MAP_HOST_CMD;
 	memset(&buf[1], 0, sizeof(buf) - 1);
 	CTP_SPI_READ(nvt_ts->client, buf, sizeof(buf));
-	pr_err("3[%s] %s %d: Read back 5 bytes from offset EVENT_MAP_HOST_CMD: 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
-	       __func__, __func__, 351, buf[1], buf[2], buf[3], buf[4], buf[5]);
+	pr_err("[%s] %s %d: Read back 5 bytes from offset EVENT_MAP_HOST_CMD: 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
+	       "NVT-ts", __func__, 351, buf[1], buf[2], buf[3], buf[4], buf[5]);
 
 	nvt_read_fw_history(NVT_MM->MMAP_HISTORY_EVENT0);
 	nvt_read_fw_history(NVT_MM->MMAP_HISTORY_EVENT1);
@@ -3710,16 +3710,16 @@ static int nvt_save_rawdata_to_csv(const s32 *data, u8 x_num, u8 y_num,
 		       (offset ? 0 : O_TRUNC), 0666);
 	if (IS_ERR(fp)) {
 		ret = PTR_ERR(fp);
-		pr_err("3[%s] %s %d: open %s failed\n",
-		       __func__, __func__, 3725, path);
+		pr_err("[%s] %s %d: open %s failed\n",
+		       "NVT-ts", __func__, 3725, path);
 		kfree(buf);
 		return ret;
 	}
 
 	ret = kernel_write(fp, buf, output_len, &pos);
 	if (ret <= 0) {
-		pr_err("3[%s] %s %d: write %s failed\n",
-		       __func__, __func__, 3776, path);
+		pr_err("[%s] %s %d: write %s failed\n",
+		       "NVT-ts", __func__, 3776, path);
 		ret = -EIO;
 	} else {
 		ret = 0;
@@ -4210,8 +4210,8 @@ static int nvt_mp_disable_freq_hop(void)
 		if (buf[1] == 0x00)
 			return 0;
 	}
-	pr_err("3[%s] %s %d: switch FreqHopEnDis 0x%02X failed, buf[1]=0x%02X\n",
-	       __func__, __func__, 911, NVT_MP_FREQ_HOP_DISABLE, buf[1]);
+	pr_err("[%s] %s %d: switch FreqHopEnDis 0x%02X failed, buf[1]=0x%02X\n",
+	       "NVT-ts", __func__, 911, NVT_MP_FREQ_HOP_DISABLE, buf[1]);
 	return -1;
 }
 
@@ -4264,15 +4264,15 @@ static int nvt_selftest_run(void)
 	}
 
 	if (nvt_update_firmware(MP_UPDATE_FIRMWARE_NAME) < 0) {
-		pr_err("3[%s] %s %d: update mp firmware failed!\n",
-		       __func__, __func__, 2150);
+		pr_err("[%s] %s %d: update mp firmware failed!\n",
+		       "NVT-ts", __func__, 2150);
 		ret = -EAGAIN;
 		goto out_unlock;
 	}
 
 	if (nvt_get_fw_info()) {
-		pr_err("3[%s] %s %d: get fw info failed!\n",
-		       __func__, __func__, 2156);
+		pr_err("[%s] %s %d: get fw info failed!\n",
+		       "NVT-ts", __func__, 2156);
 		ret = -EAGAIN;
 		goto out_unlock;
 	}
@@ -4283,20 +4283,20 @@ static int nvt_selftest_run(void)
 			 nvt_ts->nvt_pid);
 		if (nvt_mp_parse_dt(np, mp_node)) {
 			nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
-			pr_err("3[%s] %s %d: mp parse device tree failed!\n",
-			       __func__, __func__, 2189);
+			pr_err("[%s] %s %d: mp parse device tree failed!\n",
+			       "NVT-ts", __func__, 2189);
 			ret = -EINVAL;
 			goto out_unlock;
 		}
 	} else {
-		pr_info("3[%s] %s %d: Not found novatek,mp-support-dt, use default setting\n",
-			__func__, __func__, 2189);
+		pr_err("[%s] %s %d: Not found novatek,mp-support-dt, use default setting\n",
+			"NVT-ts", __func__, 2189);
 		nvt_mp_load_default_criteria();
 	}
 
 	if (nvt_check_fw_reset_state(0xa1)) {
-		pr_err("3[%s] %s %d: check fw reset state failed!\n",
-		       __func__, __func__, 2200);
+		pr_err("[%s] %s %d: check fw reset state failed!\n",
+		       "NVT-ts", __func__, 2200);
 		ret = -EAGAIN;
 		goto out_unlock;
 	}
@@ -4307,8 +4307,8 @@ static int nvt_selftest_run(void)
 	}
 
 	if (nvt_check_fw_reset_state(0xa3)) {
-		pr_err("3[%s] %s %d: check fw reset state failed!\n",
-		       __func__, __func__, 2216);
+		pr_err("[%s] %s %d: check fw reset state failed!\n",
+		       "NVT-ts", __func__, 2216);
 		ret = -EAGAIN;
 		goto out_unlock;
 	}
@@ -4882,8 +4882,8 @@ static int nvt_mp_buffer_init(void)
 	return 0;
 
 fail:
-	pr_err("3[%s] %s %d: Allocate mp memory failed\n",
-	       __func__, __func__, 2737);
+	pr_err("[%s] %s %d: Allocate mp memory failed\n",
+	       "NVT-ts", __func__, 2737);
 	nvt_mp_buffer_deinit();
 	return -ENOMEM;
 }
@@ -4901,14 +4901,14 @@ int nvt_mp_proc_init(void)
 	 */
 	dir = proc_mkdir("android_touch", NULL);
 	if (!dir) {
-		pr_err("3[%s] %s %d: create proc/%s Failed!\n", "nvt_mp_proc_init", "nvt_mp_proc_init", 2728, "android_touch");
+		pr_err("[%s] %s %d: create proc/%s Failed!\n", "NVT-ts", "nvt_mp_proc_init", 2728, "android_touch");
 		return -ENOMEM;
 	}
 	nvt_ts->proc_nvt_dir = dir;
 
 	e = proc_create("self_test", 0x124, dir, &nvt_selftest_fops);
 	if (!e) {
-		pr_err("3[%s] %s %d: create proc/%s Failed!\n", "nvt_mp_proc_init", "nvt_mp_proc_init", 2733, "self_test");
+		pr_err("[%s] %s %d: create proc/%s Failed!\n", "NVT-ts", "nvt_mp_proc_init", 2733, "self_test");
 		remove_proc_entry("android_touch", NULL);
 		nvt_ts->proc_nvt_dir = NULL;
 		return -ENOMEM;
@@ -4920,7 +4920,7 @@ int nvt_mp_proc_init(void)
 		return -ENOMEM;
 	}
 
-	pr_info("3[%s] %s %d: create proc/%s Succeeded!\n", "nvt_mp_proc_init", "nvt_mp_proc_init", 2741, "self_test");
+	pr_err("[%s] %s %d: create proc/%s Succeeded!\n", "NVT-ts", "nvt_mp_proc_init", 2741, "self_test");
 	return 0;
 }
 
@@ -5274,7 +5274,7 @@ static int nvt_ts_probe(struct spi_device *client)
 	nvt_fwu_wq = alloc_workqueue("nvt_fwu_wq",
 					 WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
 	if (!nvt_fwu_wq) {
-		pr_err("3[%s] %s %d: nvt_fwu_wq create workqueue failed\n", "nvt_ts_probe", "nvt_ts_probe", 2673);
+		pr_err("[%s] %s %d: nvt_fwu_wq create workqueue failed\n", "NVT-ts", "nvt_ts_probe", 2673);
 		return -ENOMEM;
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, nvt_boot_update_firmware_work);
@@ -5285,7 +5285,7 @@ static int nvt_ts_probe(struct spi_device *client)
 	/* stock flags 0x40008 = __WQ_LEGACY|WQ_MEM_RECLAIM == create_workqueue */
 	nvt_hall_check_wq = create_workqueue("nvt_hall_check_wq");
 	if (!nvt_hall_check_wq) {
-		pr_err("3[%s] %s %d: nvt_hall_check_wqsd_check_wq create workqueue failed\n", "nvt_ts_probe", "nvt_ts_probe", 2700);
+		pr_err("[%s] %s %d: nvt_hall_check_wqsd_check_wq create workqueue failed\n", "NVT-ts", "nvt_ts_probe", 2700);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 		return -ENOMEM;
@@ -5294,27 +5294,27 @@ static int nvt_ts_probe(struct spi_device *client)
 	/* stock: /proc/NVT-ts-flash (nvt_flash_fops) */
 	NVT_proc_entry = proc_create("NVTSPI", 0x124, NULL, &nvt_flash_fops);
 	if (!NVT_proc_entry) {
-		pr_err("3[%s] %s %d: Failed!\n", "nvt_flash_proc_init", "nvt_flash_proc_init", 1058);
-		pr_err("3[%s] %s %d: nvt flash proc init failed. ret=%d\n", "nvt_ts_probe", "nvt_ts_probe", 2710, -ENOMEM);
+		pr_err("[%s] %s %d: Failed!\n", "NVT-ts", "nvt_flash_proc_init", 1058);
+		pr_err("[%s] %s %d: nvt flash proc init failed. ret=%d\n", "NVT-ts", "nvt_ts_probe", 2710, -ENOMEM);
 		destroy_workqueue(nvt_hall_check_wq);
 		nvt_hall_check_wq = NULL;
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 		return -ENOMEM;
 	}
-	pr_info("3[%s] %s %d: Succeeded!\n", "nvt_flash_proc_init", "nvt_flash_proc_init", 1061);
-	pr_info("3[%s] %s %d: ============================================================\n", "nvt_flash_proc_init", "nvt_flash_proc_init", 1064);
-	pr_info("3[%s] %s %d: Create /proc/%s\n", "nvt_flash_proc_init", "nvt_flash_proc_init", 1065, "NVTSPI");
-	pr_info("3[%s] %s %d: ============================================================\n", "nvt_flash_proc_init", "nvt_flash_proc_init", 1066);
+	pr_err("[%s] %s %d: Succeeded!\n", "NVT-ts", "nvt_flash_proc_init", 1061);
+	pr_err("[%s] %s %d: ============================================================\n", "NVT-ts", "nvt_flash_proc_init", 1064);
+	pr_err("[%s] %s %d: Create /proc/%s\n", "NVT-ts", "nvt_flash_proc_init", 1065, "NVTSPI");
+	pr_err("[%s] %s %d: ============================================================\n", "NVT-ts", "nvt_flash_proc_init", 1066);
 
 	ret = nvt_extra_proc_init();
 	if (ret) {
-		pr_err("3[%s] %s %d: nvt extra proc init failed. ret=%d\n", "nvt_ts_probe", "nvt_ts_probe", 2718, ret);
+		pr_err("[%s] %s %d: nvt extra proc init failed. ret=%d\n", "NVT-ts", "nvt_ts_probe", 2718, ret);
 		goto err_extra_proc;
 	}
 	ret = nvt_mp_proc_init();
 	if (ret) {
-		pr_err("3[%s] %s %d: nvt mp proc init failed. ret=%d\n", "nvt_ts_probe", "nvt_ts_probe", 2726, ret);
+		pr_err("[%s] %s %d: nvt mp proc init failed. ret=%d\n", "NVT-ts", "nvt_ts_probe", 2726, ret);
 		goto err_mp_proc;
 	}
 
@@ -5348,7 +5348,7 @@ static int nvt_ts_probe(struct spi_device *client)
 	if (active_panel) {
 		ret = drm_panel_notifier_register(active_panel, &ts->drm_nb);
 		if (ret < 0) {
-			pr_err("3[%s] %s %d: register drm_panel_notifier failed. ret=%d\n", "nvt_ts_probe", "nvt_ts_probe", 2736, ret);
+			pr_err("[%s] %s %d: register drm_panel_notifier failed. ret=%d\n", "NVT-ts", "nvt_ts_probe", 2736, ret);
 			goto err_mp_proc;
 		}
 		nvt_panel_notifier_registered = true;
@@ -5376,7 +5376,7 @@ static int nvt_ts_probe(struct spi_device *client)
 	{
 		struct irq_desc *d = irq_to_desc(ts->irq);
 
-		pr_info("3[%s] %s %d: enable=%d, desc->depth=%d\n", "nvt_irq_enable", "nvt_irq_enable", 230, 0, d ? d->depth : -1);
+		pr_err("[%s] %s %d: enable=%d, desc->depth=%d\n", "NVT-ts", "nvt_irq_enable", 230, 0, d ? d->depth : -1);
 	}
 
 	/* stock success tail */
@@ -5385,14 +5385,14 @@ static int nvt_ts_probe(struct spi_device *client)
 	INIT_WORK(&nvt_restore_cmd_work, nvt_restore_cmd_func);
 	ts->restore_pending = 0;
 	check_tp_state(1);
-	pr_info("3[%s] %s %d: end\n", "nvt_ts_probe", "nvt_ts_probe", 2782);
+	pr_err("[%s] %s %d: end\n", "NVT-ts", "nvt_ts_probe", 2782);
 	if (!ts->irq_enabled) {
 		enable_irq(ts->irq);
 		ts->irq_enabled = 1;
 	}
 	{
 		struct irq_desc *d = irq_to_desc(ts->irq);
-		pr_info("3[%s] %s %d: enable=%d, desc->depth=%d\n", "nvt_irq_enable", "nvt_irq_enable", 230, 1, d ? d->depth : -1);
+		pr_err("[%s] %s %d: enable=%d, desc->depth=%d\n", "NVT-ts", "nvt_irq_enable", 230, 1, d ? d->depth : -1);
 	}
 	return 0;
 
@@ -5407,7 +5407,7 @@ err_extra_proc:
 	if (NVT_proc_entry) {
 		remove_proc_entry("NVTSPI", NULL);
 		NVT_proc_entry = NULL;
-		pr_info("3[%s] %s %d: nvt flash proc init failed. ret=%d\n", "nvt_ts_remove", "nvt_ts_remove", 1083, -ENOMEM);
+		pr_err("[%s] %s %d: nvt flash proc init failed. ret=%d\n", "NVT-ts", "nvt_ts_remove", 1083, -ENOMEM);
 	}
 	if (nvt_hall_check_wq) {
 		cancel_delayed_work_sync(&nvt_hall_check_work);
@@ -5444,11 +5444,11 @@ err_extra_proc:
  */
 static int nvt_ts_remove(struct spi_device *client)
 {
-	pr_info("3[%s] %s %d: ++\n", "nvt_ts_remove", "nvt_ts_remove", 2907);
+	pr_err("[%s] %s %d: ++\n", "NVT-ts", "nvt_ts_remove", 2907);
 	if (active_panel && nvt_panel_notifier_registered) {
 		if (drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
-			pr_info("3[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
-				"nvt_ts_remove", "nvt_ts_remove", 2912);
+			pr_err("[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
+				"NVT-ts", "nvt_ts_remove", 2912);
 		nvt_panel_notifier_registered = false;
 	}
 	power_supply_unreg_notifier(&nvt_ts->psy_nb);
@@ -5457,8 +5457,8 @@ static int nvt_ts_remove(struct spi_device *client)
 	if (NVT_proc_entry) {
 		remove_proc_entry("NVTSPI", NULL);
 		NVT_proc_entry = NULL;
-		pr_info("3[%s] %s %d: Removed /proc/%s\n",
-			"nvt_ts_remove", "nvt_ts_remove", 1083, "NVTSPI");
+		pr_err("[%s] %s %d: Removed /proc/%s\n",
+			"NVT-ts", "nvt_ts_remove", 1083, "NVTSPI");
 	}
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&nvt_ts->nvt_fwu_work);
@@ -5471,8 +5471,8 @@ static int nvt_ts_remove(struct spi_device *client)
 	{
 		struct irq_desc *d = irq_to_desc(nvt_ts->irq);
 
-		pr_info("3[%s] %s %d: enable=%d, desc->depth=%d\n",
-			"nvt_irq_enable", "nvt_irq_enable", 230, 0,
+		pr_err("[%s] %s %d: enable=%d, desc->depth=%d\n",
+			"NVT-ts", "nvt_irq_enable", 230, 0,
 			d ? d->depth : -1);
 	}
 	free_irq(nvt_ts->irq, nvt_ts);
@@ -5492,21 +5492,21 @@ static int nvt_ts_remove(struct spi_device *client)
 /* ---- nvt_ts_shutdown (stock @0xffffff8008adb5a0, TASK-081) ---- */
 static void nvt_ts_shutdown(struct spi_device *client)
 {
-	pr_info("3[%s] %s %d: Shutdown driver...\n",
-		"nvt_ts_shutdown", "nvt_ts_shutdown", 2994);
+	pr_err("[%s] %s %d: Shutdown driver...\n",
+		"NVT-ts", "nvt_ts_shutdown", 2994);
 	if (nvt_ts->irq_enabled)
 		nvt_irq_enable(false);
 	{
 		struct irq_desc *d = irq_to_desc(nvt_ts->irq);
 
-		pr_info("3[%s] %s %d: enable=%d, desc->depth=%d\n",
-			"nvt_irq_enable", "nvt_irq_enable", 230, 0,
+		pr_err("[%s] %s %d: enable=%d, desc->depth=%d\n",
+			"NVT-ts", "nvt_irq_enable", 230, 0,
 			d ? d->depth : -1);
 	}
 	if (active_panel && nvt_panel_notifier_registered) {
 		if (drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
-			pr_info("3[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
-				"nvt_ts_shutdown", "nvt_ts_shutdown", 3001);
+			pr_err("[%s] %s %d: Error occurred while unregistering drm_panel_notifier.\n",
+				"NVT-ts", "nvt_ts_shutdown", 3001);
 		nvt_panel_notifier_registered = false;
 	}
 	nvt_mp_proc_deinit();
@@ -5514,8 +5514,8 @@ static void nvt_ts_shutdown(struct spi_device *client)
 	if (NVT_proc_entry) {
 		remove_proc_entry("NVTSPI", NULL);
 		NVT_proc_entry = NULL;
-		pr_info("3[%s] %s %d: Removed /proc/%s\n",
-			"nvt_ts_shutdown", "nvt_ts_shutdown", 1083, "NVTSPI");
+		pr_err("[%s] %s %d: Removed /proc/%s\n",
+			"NVT-ts", "nvt_ts_shutdown", 1083, "NVTSPI");
 	}
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&nvt_ts->nvt_fwu_work);
