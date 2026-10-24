@@ -1503,7 +1503,16 @@ static inline int i2c_hid_of_probe(struct i2c_client *client,
 static void i2c_hid_fwnode_probe(struct i2c_client *client,
 				 struct i2c_hid_platform_data *pdata)
 {
-	/* Stock does not consume post-power-on-delay-ms from DT. */
+	u32 val;
+	int ret;
+
+	/* Stock pre-probe delay: of_property_read_variable_u32_array()
+	 * at 0x8cb32e0 reads "post-power-on-delay-ms" and stores it at
+	 * ihid+184 for the msleep at 0x8cb3044. */
+	ret = of_property_read_u32(client->dev.of_node,
+				   "post-power-on-delay-ms", &val);
+	if (!ret)
+		pdata->post_power_delay_ms = val;
 }
 
 /* Stock register_kb_wakeup_devices @0xffffff8008cb18c8. */
