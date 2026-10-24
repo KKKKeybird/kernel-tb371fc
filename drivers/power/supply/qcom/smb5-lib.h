@@ -651,11 +651,8 @@ struct smb_charger {
 	int			last_wls_vout;
 
 	/* otg boost gpio */
-	int			gpio_boost_en;
 
 	/* pogo */
-	bool 			pogo_5v;
-	int			gpio_cradle;
 	/* lenovo jeita */
 	bool			lenovo_jeita;
 

@@ -568,8 +568,7 @@ int mm8013_full_charge_capacity(int *val)
 	if (!chip->suspended) {
 		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_FULL);
 		if (v < 0) {
-			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
-				REG_CHARGE_FULL, v);
+			(void)0;
 			v = 10000;
 		} else if (v > 10000) {
 			v -= 10000;
@@ -587,8 +586,7 @@ int mm8013_nominal_capacity(int *val)
 	if (!chip->suspended) {
 		v = i2c_smbus_read_word_data(chip->client, REG_NOMINAL_CAPACITY);
 		if (v < 0) {
-			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
-				REG_NOMINAL_CAPACITY, v);
+			(void)0;
 			v = 10000;
 		}
 	}
@@ -604,8 +602,7 @@ int mm8013_design_capacity(int *val)
 	if (!chip->suspended) {
 		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_FULL_DESIGN);
 		if (v < 0) {
-			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
-				REG_CHARGE_FULL_DESIGN, v);
+			(void)0;
 			v = 10000;
 		}
 	}
@@ -623,8 +620,7 @@ int mm8013_time_to_empty_avg(int *val)
 	} else {
 		v = i2c_smbus_read_word_data(chip->client, REG_TIME_TO_EMPTY_AVG);
 		if (v < 0) {
-			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
-				REG_TIME_TO_EMPTY_AVG, v);
+			(void)0;
 			v = last_time_to_empty_avg;
 		}
 	}
@@ -641,8 +637,7 @@ int mm8013_get_batt_state_of_health(int *val)
 	if (!chip->suspended) {
 		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_COUNTER);
 		if (v < 0) {
-			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
-				REG_CHARGE_COUNTER, v);
+			(void)0;
 			v = 100;
 		}
 	}
@@ -659,8 +654,7 @@ static int mm8013_get_fixed_capacity(struct mm8013_chip *chip, u8 reg,
 	if (!chip->suspended) {
 		ret = i2c_smbus_read_word_data(chip->client, reg);
 		if (ret < 0)
-			dev_err(&chip->client->dev,
-				"mm8013_read_reg reg%02x: err %d\n", reg, ret);
+			(void)0;
 	}
 	*val = MM8013_STOCK_PROP_CHARGE_FULL;
 	return 0;
@@ -673,8 +667,7 @@ static int mm8013_get_charge_counter(struct mm8013_chip *chip, int *val)
 	if (!chip->suspended) {
 		v = i2c_smbus_read_word_data(chip->client, REG_CHARGE_COUNTER);
 		if (v < 0) {
-			dev_err(&chip->client->dev, "mm8013_read_reg reg%02x: err %d\n",
-				REG_CHARGE_COUNTER, v);
+			(void)0;
 			v = 100;
 		}
 	}
@@ -692,7 +685,7 @@ static enum hq_batteryID mm8013_get_bat_id(struct mm8013_chip *chip)
         if (ret < 0)
             pr_err("[%s] write %d error!\n", __func__, REG_CTRL_0);
         ret = mm8013_read_reg(chip->client, REG_CTRL_0);
-        pr_err("[%s] read %d reg:%x!\n", __func__, REG_CTRL_0, ret);
+        (void)0;
         switch(ret)
         {
             case 0x0101:
@@ -947,14 +940,14 @@ static void mm8013_soc_updata_work(struct work_struct *work)
         return;
 
     if (!chip->mm8013_psy) {
-        pr_err("mm8013 soc work: power supply is not ready\n");
+        (void)0;
         goto requeue;
     }
 
     ret = power_supply_get_property(chip->mm8013_psy,
                                     POWER_SUPPLY_PROP_CAPACITY, &val);
     if (ret < 0) {
-        pr_err("mm8013 soc work: get capacity failed: %d\n", ret);
+        (void)0;
         goto requeue;
     }
 
@@ -1006,7 +999,7 @@ static int mm8013_probe(struct i2c_client *client,
 
     ret = mm8013_checkdevice(chip);
     if (ret < 0) {
-        dev_err(&client->dev, "failed to access ret = %d\n", ret);
+        (void)0;
 /*Linden code for JLINDEN-17 by kangkai4 at 20221128 start*/
         #ifdef CONFIG_HQ_SYSFS_SUPPORT
         hq_register_hw_info(HWID_BATTERY, "fail");

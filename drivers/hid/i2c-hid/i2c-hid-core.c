@@ -120,9 +120,7 @@ static bool spec_key_splitscreen;
 static bool spec_key_superintcon;
 static bool spec_key_customerapp1;
 static bool spec_key_customerapp2;
-static char versions_info[64] = "Not detected";
 static char kb_status = 0;
-static char KB_BT_MAC_info[64] = "00:00:00:00:00:00";
 extern unsigned int pm_wakeup_irq;
 #define VID_KB_LENOVO 0x17ef
 #define PID_KB_LENOVO 0x6127
@@ -670,12 +668,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	u32 ret_size;
 	int size = le16_to_cpu(ihid->hdesc.wMaxInputLength);
 	bool lenovo_kb;
-	static bool hw_info_registed = false;
-	static char last_tpd_status = 0;
-	static bool first_tpd_status_reported = false;
-	static char last_kbd_status = 0;
-	static bool first_kbd_status_reported = false;
-
 	/* IRQ is registered before hid_allocate_device in this probe. */
 	if (!ihid->hid)
 		return;
@@ -745,64 +737,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			device_keyboard->online = ihid->inbuf[3] & 0x01;
 			device_keyboard->hall = (ihid->inbuf[3] >> 1) & 0x01;
 		}
-		if (hw_info_registed) {
-			unregister_hardware_info("KB_INFO");
-		}
-		if (kb_connect) {
-			char *status_event[2] = {NULL, NULL};
-			char curr_tpd_status = (ihid->inbuf[3] >> 6) & 0x01;
-			char curr_kbd_status = (ihid->inbuf[3] >> 4) & 0x03;
-			status_event[0] = kzalloc(64, GFP_KERNEL);
-			if (status_event[0]) {
-				// Report the battery level
-				sprintf(status_event[0], "kb_batt_level=%d", ihid->inbuf[9]);
-				kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-
-				if (ihid->inbuf[0] == 0x12) {
-					// Report the keyboard BT paired
-					int need_clear = (ihid->inbuf[17] == 0x03)?1:0;
-					if (ihid->inbuf[17] & 0x02) {
-						sprintf(status_event[0], "kb_clear_pair=%d", need_clear);
-						kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-					}
-				}
-
-				// Report the touch pad status
-				if ((!first_tpd_status_reported) || (curr_tpd_status != last_tpd_status)) {
-					sprintf(status_event[0], "kb_tpd_disabled=%d", curr_tpd_status);
-					kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-					last_tpd_status = curr_tpd_status;
-					first_tpd_status_reported = true;
-				}
-
-				// Report the keyboard status
-				if ((!first_kbd_status_reported) || (curr_kbd_status != last_kbd_status)) {
-					sprintf(status_event[0], "kb_kbd_status=%d", curr_kbd_status);
-					kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-					last_kbd_status = curr_kbd_status;
-					first_kbd_status_reported = true;
-				}
-
-				if (ihid->inbuf[3] & 0x02) {
-					/* BT address should be reported */
-					sprintf(KB_BT_MAC_info, "%02x:%02x:%02x:%02x:%02x:%02x", ihid->inbuf[15],
-							ihid->inbuf[14], ihid->inbuf[13], ihid->inbuf[12], ihid->inbuf[11], ihid->inbuf[10]);
-
-					sprintf(status_event[0], "kb_bt_addr=%s", KB_BT_MAC_info);
-					kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-				}
-				kfree(status_event[0]);
-			}
-			sprintf(versions_info, "MCU:%d,KB:%d,TP:%d,BT:%d,online:%d,MAC:%s", ihid->inbuf[4],
-				ihid->inbuf[5], ihid->inbuf[6], ihid->inbuf[16], kb_connect, KB_BT_MAC_info);
-		} else {
-			sprintf(KB_BT_MAC_info, "00:00:00:00:00:00");
-			sprintf(versions_info, "HOST_MCU:%d, online:%d", ihid->inbuf[4], kb_connect);
-			first_tpd_status_reported = false;
-			first_kbd_status_reported = false;
-		}
-		register_hardware_info("KB_INFO", versions_info);
-		hw_info_registed = true;
 		/* stock i2c_hid_irq 0xffffff8008cb3cdc-d8: inject the soft power
 		 * key when the frame reports online==1 and g_screen_on==0. */
 		if (kb_connect == 1 && !g_screen_on) {
@@ -1145,10 +1079,6 @@ static int i2c_hid_parse(struct hid_device *hid)
 
 
 
-	if (ihid->pdata.preset_descriptors && (rdesc[0] != 0x05 || rdesc[1] != 0x01)) {
-		memcpy(rdesc, ihid->pdata.hid_report_descriptor, ihid->pdata.hid_report_descriptor_len);
-		rsize = ihid->pdata.hid_report_descriptor_len;
-	}
 
 	ret = hid_parse_report(hid, rdesc, rsize);
 	if (!use_override)
@@ -1345,11 +1275,6 @@ static int i2c_hid_fetch_hid_descriptor(struct i2c_hid *ihid)
 	return -ENXIO;
 
 validate:
-	if (ihid->pdata.preset_descriptors &&
-		le16_to_cpu(hdesc->wHIDDescLength) != 0x001E) {
-		memcpy(ihid->hdesc_buffer, ihid->pdata.hid_descriptor,
-			ihid->pdata.hid_descriptor_len);
-	}
 	if (le16_to_cpu(hdesc->bcdVersion) != 0x0100) {
 		printk("hid-keyboard,%s,unexpected HID descriptor bcdVersion (0x%04hx)\n",
 			"i2c_hid_fetch_hid_descriptor",
@@ -1475,15 +1400,6 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 	}
 	pdata->hid_descriptor_address = val;
 
-pdata->hid_descriptor = (u8*)of_get_property(dev->of_node, "hid-descr-preset", &(pdata->hid_descriptor_len));
-	pdata->hid_report_descriptor = (u8*)of_get_property(dev->of_node, "hid-report-descr-preset", &(pdata->hid_report_descriptor_len));
-	if (!pdata->hid_report_descriptor || !pdata->hid_descriptor) {
-		pdata->preset_descriptors = false;
-		return 0;
-	} else {
-		pdata->preset_descriptors = true;
-	}
-	
 	return 0;
 }
 
@@ -1856,14 +1772,12 @@ static int i2c_hid_probe(struct i2c_client *client,
 
 	/* Old-firmware rejects are keyed by product only in stock. */
 	if (hid->product == 0x6103) {
-		printk("hid-keyboard,%s,failed,because of old kb fireware\n",
-		       "i2c_hid_probe");
+		(void)0;
 		ret = -ENODEV;
 		goto err_irq;
 	}
 	if (hid->product == 0x3164) {
-		printk("hid-keyboard,%s,failed,because of old mouse fireware\n",
-		       "i2c_hid_probe");
+		(void)0;
 		ret = -ENODEV;
 		goto err_irq;
 	}
@@ -1886,8 +1800,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 			 "%s %04hX:%04hX",
 			 client->name, (u16)hid->vendor, (u16)hid->product);
 	}
-	printk("hid-keyboard,%s,hid->version_id=0x%x\n",
-	       "i2c_hid_probe", le16_to_cpu(ihid->hdesc.bcdVersion));
+	(void)0;
 
 	if ((hid->vendor == VID_KB_LENOVO &&
 	     (hid->product == PID_KB_LENOVO || hid->product == PID_KB_LENOVO_V04)) ||
@@ -1941,8 +1854,7 @@ static int i2c_hid_probe(struct i2c_client *client,
 	if (strstr(saved_command_line, "androidboot.mode=charger") &&
 	    regulator_is_enabled(ldo_keyboard)) {
 		regulator_force_disable(ldo_keyboard);
-		printk("hid-keyboard,%s,Power off and charge,disable ldo\n",
-		       "i2c_hid_probe");
+		(void)0;
 	}
 	regulator_put(ldo_keyboard);
 

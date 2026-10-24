@@ -617,10 +617,6 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 	if (chg->chg_param.qc4_max_icl_ua <= 0)
 		chg->chg_param.qc4_max_icl_ua = MICRO_4PA;
 
-	chg->gpio_boost_en = of_get_named_gpio(node, "qcom,gpio_boost_en", 0);
-		pr_err( "gpio_boost_en :%d\n", chg->gpio_boost_en);
-	chg->gpio_cradle = of_get_named_gpio(node, "qcom,gpio_cradle", 0);
-		pr_err("gpio_cradle :%d\n", chg->gpio_cradle);
 	chg->hq_conn_temp_high_gpio = of_get_named_gpio_flags(node,
 			"qcom,chg-control-gpio", 0, NULL);
 	if ((u32)chg->hq_conn_temp_high_gpio > 0x4ff) {
@@ -634,10 +630,8 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 			pr_err("failed to request gpio %d, error %d\n",
 				chg->hq_conn_temp_high_gpio, rc);
 	}
-	chg->pogo_5v = of_property_read_bool(node, "lenovo,pogo-5v");
-		pr_err( "pogo_5v :%d\n", chg->pogo_5v);
 	chg->lenovo_jeita = of_property_read_bool(node, "lenovo,jeita_enable");
-		pr_err( "lenovo_jeita :%d\n", chg->lenovo_jeita);
+		pr_err( "lenovo_jeita :%d", chg->lenovo_jeita);
 
 	return 0;
 }
@@ -2673,10 +2667,9 @@ static int smb5_configure_recharging(struct smb5 *chip)
 		rc = power_supply_get_property(exfg_psy,
 				POWER_SUPPLY_PROP_GAUGE_VOLTAGE, &pval);
 	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't configure POWER_SUPPLY_PROP_GAUGE_VOLTAGE rc=%d\n",
-			rc);
+		(void)0;
 	} else {
-		dev_err(chg->dev, "current gauge voltage = %d\n",pval.intval);
+		(void)0;
 		switch (pval.intval) {
 		case EXFG_STEP3_VOLTAGE_MV:
 			chip->dt.auto_recharge_vbat_mv = EXFG_STEP3_RECHARGE_VOLTAGE_MV;
@@ -2825,7 +2818,7 @@ static int smb5_init_connector_type(struct smb_charger *chg)
 		type = !!(val & EN_MICRO_USB_MODE_BIT);
 	}
 
-	pr_err("Connector type=%s\n", type ? "Micro USB" : "TypeC");
+	(void)0;
 
 	if (type) {
 		chg->connector_type = POWER_SUPPLY_CONNECTOR_MICRO_USB;
@@ -3156,17 +3149,13 @@ static int smb5_init_hw(struct smb5 *chip)
 	rc = smblib_masked_write(chg, DEBUG_ACCESS_SRN_CFG_REG,
                        EN_DEBUG_ACCESS_SNK_BIT, EN_DEBUG_ACCESS_SNK_BIT);
 	if (rc < 0) {
-		dev_err(chg->dev,
-			"Couldn't configure DEBUG_ACCESS_SRN_CFG_REG rc=%d\n",
-			 rc);
+		(void)0;
 		return rc;
 	}
 	rc = smblib_masked_write(chg, DEBUG_ACCESS_SRN_CFG_REG,
                        DAM_DIS_AICL_BIT, 0);
 	if (rc < 0) {
-		dev_err(chg->dev,
-			"Couldn't configure DEBUG_ACCESS_SRN_CFG_REG rc=%d\n",
-			 rc);
+		(void)0;
 		return rc;
 	}
 
@@ -3174,9 +3163,7 @@ static int smb5_init_hw(struct smb5 *chip)
 	rc = smblib_masked_write(chg, HVDCP_PULSE_COUNT_MAX_REG,
 			HVDCP_PULSE_COUNT_MAX_QC2_MASK, HVDCP_PULSE_COUNT_MAX_QC2_5V);
 	if (rc < 0){
-		dev_err(chg->dev,
-			"Couldn't configure max vol of qc2.0 to 5V rc=%d\n",
-			rc);
+		(void)0;
 		return rc;
 	}
 
@@ -3728,7 +3715,7 @@ static int smb5_show_charger_status(struct smb5 *chip)
 	}
 	batt_charge_type = val.intval;
 
-	pr_info("SMB5 status - usb:present=%d type=%d batt:present = %d health = %d charge = %d\n",
+	pr_err("SMB5 status - usb:present=%d type=%d batt:present = %d health = %d charge = %d\n",
 		usb_present, chg->real_charger_type,
 		batt_present, batt_health, batt_charge_type);
 	return rc;

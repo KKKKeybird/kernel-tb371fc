@@ -157,13 +157,13 @@ static int read_range_data_from_node(struct device_node *node,
 	int rc = 0, i, length, per_tuple_length, tuples;
 
 	if (!node || !prop_str || !ranges) {
-		pr_err("Invalid parameters passed\n");
+		pr_err("Invalid parameters passed");
 		return -EINVAL;
 	}
 
 	rc = of_property_count_elems_of_size(node, prop_str, sizeof(u32));
 	if (rc < 0) {
-		pr_err("Count %s failed, rc=%d\n", prop_str, rc);
+		pr_err("Count %s failed, rc=%d", prop_str, rc);
 		return rc;
 	}
 
@@ -172,13 +172,13 @@ static int read_range_data_from_node(struct device_node *node,
 	per_tuple_length = sizeof(struct range_data) / sizeof(u32);
 
 	if (length % per_tuple_length) {
-		pr_err("%s length (%d) should be multiple of %d\n",
+		pr_err("%s length (%d) should be multiple of %d",
 				prop_str, length, per_tuple_length);
 		return -EINVAL;
 	}
 	tuples = length / per_tuple_length;
 	if (tuples > JEITA_STEP) {
-		pr_err("too many entries(%d), only %d allowed\n",
+		pr_err("too many entries(%d), only %d allowed",
 				tuples, JEITA_STEP);
 		return -EINVAL;
 	}
@@ -186,14 +186,14 @@ static int read_range_data_from_node(struct device_node *node,
 	rc = of_property_read_u32_array(node, prop_str,
 			(u32 *)ranges, length);
 	if (rc) {
-		pr_err("Read %s failed, rc=%d\n", prop_str, rc);
+		pr_err("Read %s failed, rc=%d", prop_str, rc);
 		return rc;
 	}
 
 	for (i = 0; i < tuples; i++) {
 		if (ranges[i].low_threshold >
 				ranges[i].high_threshold) {
-			pr_err("%s thresholds should be in ascendant ranges\n",
+			pr_err("%s thresholds should be in ascendant ranges",
 						prop_str);
 			rc = -EINVAL;
 			goto clean;
@@ -202,7 +202,7 @@ static int read_range_data_from_node(struct device_node *node,
 		if (i != 0) {
 			if (ranges[i - 1].high_threshold >
 					ranges[i].low_threshold) {
-				pr_err("%s thresholds should be in ascendant ranges\n",
+				pr_err("%s thresholds should be in ascendant ranges",
 							prop_str);
 				rc = -EINVAL;
 				goto clean;
@@ -233,21 +233,21 @@ static int get_jeita_setting_from_profile(struct lenovo_jeita_info *chip)
 	 * qcom,qpnp-smb5 device node (live.dts:4880-4886); there is no
 	 * battery-data best-profile lookup in stock. */
 	if (!profile_node) {
-		pr_err("no device node for jeita settings\n");
+		(void)0;
 		return -ENODEV;
 	}
 
 	rc = of_property_read_u32(profile_node, "qcom,max-voltage-uv",
 					&max_fv_uv);
 	if (rc < 0) {
-		pr_err("max-voltage_uv reading failed, rc=%d\n", rc);
+		pr_err("max-voltage_uv reading failed, rc=%d", rc);
 		return rc;
 	}
 
 	rc = of_property_read_u32(profile_node, "qcom,fastchg-current-ma",
 					&max_fcc_ma);
 	if (rc < 0) {
-		pr_err("max-fastchg-current-ma reading failed, rc=%d\n", rc);
+		pr_err("max-fastchg-current-ma reading failed, rc=%d", rc);
 		return rc;
 	}
 
@@ -285,12 +285,12 @@ static int get_jeita_setting_from_profile(struct lenovo_jeita_info *chip)
 			chip->jeita_fv_config->fv_cfg,
 			BATT_HOT_DECIDEGREE_MAX, max_fv_uv);
 	if (rc < 0) {
-		pr_err("Read qcom,jeita-fv-ranges failed from battery profile, rc=%d\n",
+		pr_err("Read qcom,jeita-fv-ranges failed from battery profile, rc=%d",
 					rc);
 		chip->sw_jeita_cfg_valid = false;
 	}
 
-	pr_err("sw_jeita_cfg_valid :%d\n", chip->sw_jeita_cfg_valid);
+	pr_err("sw_jeita_cfg_valid :%d", chip->sw_jeita_cfg_valid);
 	return rc;
 }
 
@@ -307,7 +307,7 @@ static void get_config_work(struct work_struct *work)
 		if (rc == -ENODEV || rc == -EBUSY) {
 			if (chip->get_config_retry_count++
 					< GET_CONFIG_RETRY_COUNT) {
-				pr_err("bms_psy is not ready, retry: %d\n",
+				pr_err("bms_psy is not ready, retry: %d",
 						chip->get_config_retry_count);
 				goto reschedule;
 			}
@@ -316,12 +316,12 @@ static void get_config_work(struct work_struct *work)
 
 	chip->config_is_read = true;
 	for (i = 0; i < JEITA_STEP; i++)
-		pr_err("jeita-fcc-cfg: %ddecidegree ~ %ddecidegre, %duA\n",
+		pr_err("jeita-fcc-cfg: %ddecidegree ~ %ddecidegre, %duA",
 			chip->jeita_fcc_config->fcc_cfg[i].low_threshold,
 			chip->jeita_fcc_config->fcc_cfg[i].high_threshold,
 			chip->jeita_fcc_config->fcc_cfg[i].value);
 	for (i = 0; i < JEITA_STEP; i++)
-		pr_err("jeita-fv-cfg: %ddecidegree ~ %ddecidegre, %duV\n",
+		pr_err("jeita-fv-cfg: %ddecidegree ~ %ddecidegre, %duV",
 			chip->jeita_fv_config->fv_cfg[i].low_threshold,
 			chip->jeita_fv_config->fv_cfg[i].high_threshold,
 			chip->jeita_fv_config->fv_cfg[i].value);
@@ -488,13 +488,13 @@ static void status_change_work(struct work_struct *work)
 	rc = power_supply_get_property(chip->batt_psy,
 			chip->jeita_fcc_config->param.psy_prop, &pval);
 	if (rc < 0) {
-		pr_err("Couldn't read sw term %d\n", rc);
+		pr_err("Couldn't read sw term %d", rc);
 		goto relax_exit;
 	}
 	temp = pval.intval;
 	rc = hq_config_chg_max_fcc(chip->batt_psy, 8000000);
 	if (rc < 0)
-		pr_err("Couldn't config max fcc rc=%d\n", rc);
+		pr_err("Couldn't config max fcc rc=%d", rc);
 
 	/* sec4 0x1ce8..0x1d0c: get_val -> jeita_fcc_index */
 	rc = get_val(chip->jeita_fcc_config->fcc_cfg,
@@ -516,13 +516,13 @@ static void status_change_work(struct work_struct *work)
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
 	if (rc < 0)
-		pr_err("Couldn't read pd status from usb psy rc=%d\n", rc);
+		pr_err("Couldn't read pd status from usb psy rc=%d", rc);
 	else
 		pd_val = pval.intval;
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_REAL_TYPE, &pval);
 	if (rc < 0)
-		pr_err("Couldn't read usb type from usb psy rc=%d\n", rc);
+		pr_err("Couldn't read usb type from usb psy rc=%d", rc);
 	else
 		type_val = pval.intval;
 
@@ -578,19 +578,19 @@ after_usb:
 	rc = power_supply_set_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &pval);
 	if (rc < 0)
-		pr_err("Couldn't set term current property rc=%d\n", rc);
+		pr_err("Couldn't set term current property rc=%d", rc);
 
 	/* sec9 0x1f14..0x1f4c: usb ONLINE/PD gate */
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_ONLINE, &pval);
 	if (rc < 0)
-		pr_err("Couldn't read sw term %d\n", rc);
+		pr_err("Couldn't read sw term %d", rc);
 	else
 		online = pval.intval;
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
 	if (rc < 0)
-		pr_err("Couldn't read sw term %d\n", rc);
+		pr_err("Couldn't read sw term %d", rc);
 	else
 		pd2 = pval.intval;
 	if (online == 0 && pd2 == 0)
@@ -637,7 +637,7 @@ after_usb:
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_ENABLE_SW_TERM, &pval);
 	if (rc < 0)
-		pr_err("Couldn't read sw term %d\n", rc);
+		pr_err("Couldn't read sw term %d", rc);
 	else
 		usb_209 = pval.intval;
 	chip->usb209_flag = (usb_209 != 0);
@@ -650,10 +650,10 @@ after_usb:
 		rc = power_supply_set_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_ENABLE_SW_TERM, &pval);
 		if (rc < 0) {
-			pr_err("Couldn't set term current property rc=%d\n", rc);
+			pr_err("Couldn't set term current property rc=%d", rc);
 			goto sec12_fcc;
 		}
-		pr_err("iterm = 1600mA, vbat = %d, ibat = %d\n", vbat, ibat);
+		pr_err("iterm = 1600mA, vbat = %d, ibat = %d, enable sw term.", vbat, ibat);
 		goto sec12_fcc;
 	}
 
@@ -664,10 +664,10 @@ after_usb:
 		rc = power_supply_set_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_ENABLE_SW_TERM, &pval);
 		if (rc < 0) {
-			pr_err("Couldn't set term current property rc=%d\n", rc);
+			pr_err("Couldn't set term current property rc=%d", rc);
 			goto sec12_fcc;
 		}
-		pr_err("iterm = 1600mA, vbat = %d, ibat = %d\n", vbat, ibat);
+		pr_err("iterm = 1600mA, vbat = %d, ibat = %d, disable sw term.", vbat, ibat);
 		goto sec12_fcc;
 	}
 
@@ -677,7 +677,7 @@ after_usb:
 	rc = power_supply_set_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_ENABLE_SW_TERM, &pval);
 	if (rc < 0)
-		pr_err("Couldn't set term current property rc=%d\n", rc);
+		pr_err("Couldn't set term current property rc=%d", rc);
 
 sec12_fcc:
 	/* sec12a 0x222c/0x2234: fcc_votable lazy; fail -> 0x2898 */
@@ -732,13 +732,13 @@ sec13_fv:
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_PD_ACTIVE, &pval);
 	if (rc < 0)
-		pr_err("Couldn't read pd status from usb psy rc=%d\n", rc);
+		pr_err("Couldn't read pd status from usb psy rc=%d", rc);
 	else
 		pd_val = pval.intval;
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_REAL_TYPE, &pval);
 	if (rc < 0)
-		pr_err("Couldn't read usb type from usb psy rc=%d\n", rc);
+		pr_err("Couldn't read usb type from usb psy rc=%d", rc);
 	else
 		type_val = pval.intval;
 	if (type_val == 2 || pd_val == 13) {
@@ -758,13 +758,13 @@ sec13_fv:
 	rc = power_supply_set_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_RECHARGE_SOC, &pval);
 	if (rc < 0)
-		pr_err("Couldn't set term current property rc=%d\n", rc);
+		pr_err("Couldn't set term current property rc=%d", rc);
 
 	/* sec13b 0x25cc..0x2634: chg_disable lazy + batt 17/12 */
 	if (!chip->chg_disable_votable) {
 		chip->chg_disable_votable = find_votable("CHG_DISABLE");
 		if (!chip->chg_disable_votable) {
-			pr_err("Couldn't read sw term %d\n", rc);
+			pr_err("Couldn't read sw term %d", rc);
 			goto sec13_tail;
 		}
 	}
@@ -821,7 +821,7 @@ sec14_softhot:
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_ONLINE, &pval);
 	if (rc < 0) {
-		pr_err("Couldn't read sw term %d\n", rc);
+		pr_err("Couldn't read sw term %d", rc);
 		goto sec13_tail;
 	}
 	pd_val = pval.intval;
@@ -838,9 +838,7 @@ sec14_softhot:
 	chip->recharge_retry_count = 0;
 
 sec14_print:
-	pr_err("temp = %d, ibat = %d, vbat = %d, iterm = %d/%d/%d\n",
-		temp, ibat, vbat, chip->iterm_retry_count,
-		chip->hot_vbat_flag, chip->recharge_retry_count);
+	(void)0;
 	if (temp < 450 || temp > 499)
 		goto sec14_warm;
 	if (ibat > 0x8164f || vbat < 0x3fef30)
@@ -862,7 +860,7 @@ sec14_hot_check:
 	vote(chip->chg_disable_votable, "SOFT_HOT_CHG_VOTER", false, 0);
 	chip->hot_vbat_flag = 0;
 	chip->recharge_retry_count = 0;
-	pr_err("hot environment vbat < recharge_volt\n");
+	pr_err("hot environment vbat < recharge_volt, enable chg!");
 	goto sec13_tail;
 
 sec14_warm:
@@ -887,7 +885,7 @@ sec14_ibat_low:
 			POWER_SUPPLY_PROP_FORCE_5V, &pval);
 	chip->iterm_retry_count = 0;
 	chip->hot_vbat_flag = 1;
-	pr_err("hot environment ibat < 500mA, disable sw term\n");
+	(void)0;
 	goto sec14_hot_check;
 
 sec15_fv_vote:
@@ -916,7 +914,7 @@ tail_usb_dc:
 
 err_exit:
 	/* 0x2898: "Couldn't handle sw jeita rc = %d" then fall through to tail */
-	pr_err("Couldn't handle sw jeita rc = %d\n", -EINVAL);
+	pr_err("Couldn't handle sw jeita rc = %d", -EINVAL);
 	goto tail_usb_dc;
 
 relax_exit:
@@ -948,7 +946,7 @@ static int jeita_register_notifier(struct lenovo_jeita_info *chip)
 	chip->nb.notifier_call = jeita_notifier_call;
 	rc = power_supply_reg_notifier(&chip->nb);
 	if (rc < 0) {
-		pr_err("Couldn't register psy notifier rc = %d\n", rc);
+		pr_err("Couldn't register psy notifier rc = %d", rc);
 		return rc;
 	}
 
@@ -961,11 +959,11 @@ int lenovo_jeita_init(struct device *dev, bool lenovo_jeita_en)
 	struct lenovo_jeita_info* chip;
 
 	if(!lenovo_jeita_en){
-		pr_err("lenovo_jeita_en:%d,return\n",lenovo_jeita_en);
+		pr_err("lenovo_jeita_en:%d,return",lenovo_jeita_en);
 		return 0;
 	}
 	if (the_chip) {
-		pr_err("Already initialized\n");
+		pr_err("Already initialized");
 		return -EINVAL;
 	}
 
@@ -1002,7 +1000,7 @@ int lenovo_jeita_init(struct device *dev, bool lenovo_jeita_en)
 
 	rc = jeita_register_notifier(chip);
 	if (rc < 0) {
-		pr_err("Couldn't register psy notifier rc = %d\n", rc);
+		pr_err("Couldn't register psy notifier rc = %d", rc);
 		goto release_wakeup_source;
 	}
 
@@ -1010,7 +1008,7 @@ int lenovo_jeita_init(struct device *dev, bool lenovo_jeita_en)
 			msecs_to_jiffies(GET_CONFIG_DELAY_MS));
 
 	the_chip = chip;
-	pr_err("lenovo_jeita_init success\n");
+	pr_err("lenovo_jeita_init success");
 	
 	return 0;
 

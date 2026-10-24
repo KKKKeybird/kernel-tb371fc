@@ -111,7 +111,7 @@ otherwise the probe function will not be executed!
 
 int lcd_set_bias(bool enable)
 {
-        dev_warn(&lcd_bl_bias_i2c_client->dev, "bias:value = %d", enable);
+        dev_warn(&lcd_bl_bias_i2c_client->dev, "[%s], bias:value = %d", enable);
         if (enable) {
                 if (strstr(saved_command_line,
                            "mdss_dsi_panel_spinel_boe_nt36532_dsc_3k_video"))
