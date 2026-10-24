@@ -121,7 +121,6 @@ static bool spec_key_superintcon;
 static bool spec_key_customerapp1;
 static bool spec_key_customerapp2;
 static char kb_status = 0;
-static char KB_BT_MAC_info[64] = "00:00:00:00:00:00";
 extern unsigned int pm_wakeup_irq;
 #define VID_KB_LENOVO 0x17ef
 #define PID_KB_LENOVO 0x6127
@@ -669,11 +668,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	u32 ret_size;
 	int size = le16_to_cpu(ihid->hdesc.wMaxInputLength);
 	bool lenovo_kb;
-	static char last_tpd_status = 0;
-	static bool first_tpd_status_reported = false;
-	static char last_kbd_status = 0;
-	static bool first_kbd_status_reported = false;
-
 	/* IRQ is registered before hid_allocate_device in this probe. */
 	if (!ihid->hid)
 		return;
@@ -742,56 +736,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 		if (device_keyboard) {
 			device_keyboard->online = ihid->inbuf[3] & 0x01;
 			device_keyboard->hall = (ihid->inbuf[3] >> 1) & 0x01;
-		}
-		if (kb_connect) {
-			char *status_event[2] = {NULL, NULL};
-			char curr_tpd_status = (ihid->inbuf[3] >> 6) & 0x01;
-			char curr_kbd_status = (ihid->inbuf[3] >> 4) & 0x03;
-			status_event[0] = kzalloc(64, GFP_KERNEL);
-			if (status_event[0]) {
-				// Report the battery level
-				sprintf(status_event[0], "kb_batt_level=%d", ihid->inbuf[9]);
-				kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-
-				if (ihid->inbuf[0] == 0x12) {
-					// Report the keyboard BT paired
-					int need_clear = (ihid->inbuf[17] == 0x03)?1:0;
-					if (ihid->inbuf[17] & 0x02) {
-						sprintf(status_event[0], "kb_clear_pair=%d", need_clear);
-						kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-					}
-				}
-
-				// Report the touch pad status
-				if ((!first_tpd_status_reported) || (curr_tpd_status != last_tpd_status)) {
-					sprintf(status_event[0], "kb_tpd_disabled=%d", curr_tpd_status);
-					kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-					last_tpd_status = curr_tpd_status;
-					first_tpd_status_reported = true;
-				}
-
-				// Report the keyboard status
-				if ((!first_kbd_status_reported) || (curr_kbd_status != last_kbd_status)) {
-					sprintf(status_event[0], "kb_kbd_status=%d", curr_kbd_status);
-					kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-					last_kbd_status = curr_kbd_status;
-					first_kbd_status_reported = true;
-				}
-
-				if (ihid->inbuf[3] & 0x02) {
-					/* BT address should be reported */
-					sprintf(KB_BT_MAC_info, "%02x:%02x:%02x:%02x:%02x:%02x", ihid->inbuf[15],
-							ihid->inbuf[14], ihid->inbuf[13], ihid->inbuf[12], ihid->inbuf[11], ihid->inbuf[10]);
-
-					sprintf(status_event[0], "kb_bt_addr=%s", KB_BT_MAC_info);
-					kobject_uevent_env(&ihid->hid->dev.kobj, KOBJ_CHANGE, status_event);
-				}
-				kfree(status_event[0]);
-			}
-		} else {
-			sprintf(KB_BT_MAC_info, "00:00:00:00:00:00");
-			first_tpd_status_reported = false;
-			first_kbd_status_reported = false;
 		}
 		/* stock i2c_hid_irq 0xffffff8008cb3cdc-d8: inject the soft power
 		 * key when the frame reports online==1 and g_screen_on==0. */
