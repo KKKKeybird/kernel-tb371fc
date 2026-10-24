@@ -120,7 +120,6 @@ static bool spec_key_splitscreen;
 static bool spec_key_superintcon;
 static bool spec_key_customerapp1;
 static bool spec_key_customerapp2;
-static char versions_info[64] = "Not detected";
 static char kb_status = 0;
 static char KB_BT_MAC_info[64] = "00:00:00:00:00:00";
 extern unsigned int pm_wakeup_irq;
@@ -670,7 +669,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	u32 ret_size;
 	int size = le16_to_cpu(ihid->hdesc.wMaxInputLength);
 	bool lenovo_kb;
-	static bool hw_info_registed = false;
 	static char last_tpd_status = 0;
 	static bool first_tpd_status_reported = false;
 	static char last_kbd_status = 0;
@@ -745,9 +743,6 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			device_keyboard->online = ihid->inbuf[3] & 0x01;
 			device_keyboard->hall = (ihid->inbuf[3] >> 1) & 0x01;
 		}
-		if (hw_info_registed) {
-			unregister_hardware_info("KB_INFO");
-		}
 		if (kb_connect) {
 			char *status_event[2] = {NULL, NULL};
 			char curr_tpd_status = (ihid->inbuf[3] >> 6) & 0x01;
@@ -793,16 +788,11 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 				}
 				kfree(status_event[0]);
 			}
-			sprintf(versions_info, "MCU:%d,KB:%d,TP:%d,BT:%d,online:%d,MAC:%s", ihid->inbuf[4],
-				ihid->inbuf[5], ihid->inbuf[6], ihid->inbuf[16], kb_connect, KB_BT_MAC_info);
 		} else {
 			sprintf(KB_BT_MAC_info, "00:00:00:00:00:00");
-			sprintf(versions_info, "HOST_MCU:%d, online:%d", ihid->inbuf[4], kb_connect);
 			first_tpd_status_reported = false;
 			first_kbd_status_reported = false;
 		}
-		register_hardware_info("KB_INFO", versions_info);
-		hw_info_registed = true;
 		/* stock i2c_hid_irq 0xffffff8008cb3cdc-d8: inject the soft power
 		 * key when the frame reports online==1 and g_screen_on==0. */
 		if (kb_connect == 1 && !g_screen_on) {
@@ -1145,10 +1135,6 @@ static int i2c_hid_parse(struct hid_device *hid)
 
 
 
-	if (ihid->pdata.preset_descriptors && (rdesc[0] != 0x05 || rdesc[1] != 0x01)) {
-		memcpy(rdesc, ihid->pdata.hid_report_descriptor, ihid->pdata.hid_report_descriptor_len);
-		rsize = ihid->pdata.hid_report_descriptor_len;
-	}
 
 	ret = hid_parse_report(hid, rdesc, rsize);
 	if (!use_override)
@@ -1345,11 +1331,6 @@ static int i2c_hid_fetch_hid_descriptor(struct i2c_hid *ihid)
 	return -ENXIO;
 
 validate:
-	if (ihid->pdata.preset_descriptors &&
-		le16_to_cpu(hdesc->wHIDDescLength) != 0x001E) {
-		memcpy(ihid->hdesc_buffer, ihid->pdata.hid_descriptor,
-			ihid->pdata.hid_descriptor_len);
-	}
 	if (le16_to_cpu(hdesc->bcdVersion) != 0x0100) {
 		printk("hid-keyboard,%s,unexpected HID descriptor bcdVersion (0x%04hx)\n",
 			"i2c_hid_fetch_hid_descriptor",
@@ -1475,15 +1456,6 @@ static int i2c_hid_of_probe(struct i2c_client *client,
 	}
 	pdata->hid_descriptor_address = val;
 
-pdata->hid_descriptor = (u8*)of_get_property(dev->of_node, "hid-descr-preset", &(pdata->hid_descriptor_len));
-	pdata->hid_report_descriptor = (u8*)of_get_property(dev->of_node, "hid-report-descr-preset", &(pdata->hid_report_descriptor_len));
-	if (!pdata->hid_report_descriptor || !pdata->hid_descriptor) {
-		pdata->preset_descriptors = false;
-		return 0;
-	} else {
-		pdata->preset_descriptors = true;
-	}
-	
 	return 0;
 }
 
