@@ -87,7 +87,7 @@ Full patch history in
 1. 从 [Release v2.1](https://github.com/smith-dog/kernel-tb371fc/releases/tag/v2.1)
    下载 `boot-v2.1-kspatched-flash.img`（内嵌 `#743`，KernelSU v3.3.1+ LKM 已在内），
    并安装同 Release 附带的 KernelSU 管理器 APK（v3.3.1+）。纯净镜像（无
-   KernelSU）暂沿用 [v2.0 的 pure 变体](https://github.com/smith-dog/kernel-tb371fc/releases/tag/v2.0)。旧 v2.0 双镜像（#312 谱系）——两镜像内嵌 Image 字节相同，只差 ramdisk 里
+   KernelSU）= [`boot-v2.1-pure-flash.img`](https://github.com/smith-dog/kernel-tb371fc/releases/download/v2.1/boot-v2.1-pure-flash.img)（同一枚 #743 + 原厂 ramdisk）。旧 v2.0 双镜像（#312 谱系）——两镜像内嵌 Image 字节相同，只差 ramdisk 里
    有没有 KernelSU：
    - [`boot-v2.0-kspatched-flash.img`](https://github.com/smith-dog/kernel-tb371fc/releases/download/v2.0/boot-v2.0-kspatched-flash.img)
      （md5 `b7f5b9284a14c8faabb0a6f6c7d379f6`）——KernelSU LKM 已内置，直刷即有 root
