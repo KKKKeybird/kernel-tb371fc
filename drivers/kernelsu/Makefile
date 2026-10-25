@@ -152,3 +152,6 @@ clean:
 	$(MAKE) -C $(KDIR) M=$(MDIR) clean
 
 # Keep a new line here!! Because someone may append config
+
+# tb371fc quirk: force non-weak path_umount reference (kernel provides 4.20 backport)
+ccflags-y += -DKSU_TB371FC_PATH_UMOUNT
