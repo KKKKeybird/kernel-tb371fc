@@ -6,6 +6,8 @@
 #define KSU_SYS_PREFIX(name) __arm64_sys_##name
 #elif defined(__x86_64__)
 #define KSU_SYS_PREFIX(name) __x64_sys_##name
+#elif defined(__riscv)
+#define KSU_SYS_PREFIX(name) __riscv_sys_##name
 #elif defined(__arm__)
 #define KSU_SYS_PREFIX(name) sys_##name
 #else // wire up your arch here.
@@ -22,7 +24,7 @@ static_assert(1 == 0, "Unsupported architecture!");
 #define __ksyscall(name, a, b, c, d, e, f) ({				\
 	extern long KSU_SYS_PREFIX(name)(const struct pt_regs *);	\
 	struct pt_regs __ksu_regs = { 0 };				\
-	PT_REGS_PARM1(&__ksu_regs) = (unsigned long)(a);		\
+	PT_REGS_SYSCALL_PARM1(&__ksu_regs) = (unsigned long)(a);	\
 	PT_REGS_PARM2(&__ksu_regs) = (unsigned long)(b);		\
 	PT_REGS_PARM3(&__ksu_regs) = (unsigned long)(c);		\
 	PT_REGS_SYSCALL_PARM4(&__ksu_regs) = (unsigned long)(d);	\
@@ -87,13 +89,48 @@ static_assert(1 == 0, "Unsupported architecture!");
 #define __ksyscall_exp(func, arg) __ksyscall_concat(func, arg)
 #define ksyscall(...) __ksyscall_exp(ksyscall_, __ksyscall_count_args(__VA_ARGS__))(__VA_ARGS__)
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+static void __user *userspace_stack_buffer(const void *d, size_t len)
+{
+	// To avoid having to mmap a page in userspace, just write below the stack
+	// pointer.
+	char __user *p = (void __user *)current_user_stack_pointer() - len;
+
+	return copy_to_user(p, d, len) ? NULL : p;
+}
+#else
+static void __user *userspace_stack_buffer(const void *d, size_t len)
+{
+	if (!current->mm)
+		return nullptr;
+
+	volatile unsigned long start_stack = current->mm->start_stack;
+	unsigned int step = 32;
+	
+start_loop:;
+	char __user *p = (void __user *)(start_stack - step - len);
+
+	if (IS_ENABLED(CONFIG_KSU_DEBUG))
+		pr_info("%s: start_stack: %lx p: %lx len: %zu\n", __func__, start_stack, (unsigned long)p, len );
+
+	if (!copy_to_user(p, d, len))
+		return p;
+
+	step = step + step;
+
+	if (step <= 2048)
+		goto start_loop;
+
+	return nullptr;
+}
+#endif
+
 #define ksu_close_fd(fd) ({ ksyscall(close, fd); })
-#define ksu_sys_setns(fd, flags) ({ ksyscall(setns, fd, flags); })
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-static __always_inline int ksu_sys_umount(char __user *name, int flags)
+static __always_inline long ksu_sys_umount(char __user *name, int flags)
 { 
-	return (int)ksyscall(umount, name, flags);
+	return ksyscall(umount, name, flags);
 }
 #endif
 
