@@ -14,11 +14,20 @@ driver-core `needs_suppliers` 链表、eMMC 调参 hold、TCP 数据竞争、
 early-entropy 初始化等，清单见下）。诊断插桩按发布惯例在本版关闭
 （dev 分支常驻，发布件 `strings Image` 已验无残留）。
 
+**v2.1 = 驱动原厂看齐收官 + KernelSU v3.3.1+**：完成全部 21 个驱动记账单元
+对 stock 原厂二进制的全链对齐复审（函数面 / 反汇编逐簇 / 打印语料 / DT
+消费链四层，裁决链全部落档），随复审修复一批真实缺陷——充电 charger 命令
+0x51/0x53 双分支缺失（关闭充电命令从未发出）、i2c-hid 键盘幽灵输入设备、
+背光打印格式串、触摸/充电四单元非原厂打印与死配置项清理等；DT2W 双击
+亮屏路径改为 stock 原生形态（见 Release 说明的注意事项）。KernelSU 同步
+backslashxx 上游 **v3.3.1+**（145 提交；fork 的 boot v1/v2 修补支持保留；
+内核侧补两个符号导出与 path_umount 4.20 回移）。发布构建 **#743**。
+
 **A custom kernel for the Lenovo Xiaoxin Pad Pro 12.7 2021 (TB371FC,
 Qualcomm SM8250/kona)**, built from the official Lenovo GPL source dump
 plus a full bring-up patch series. v2.0 additionally adopts the whole
 linux-stable range **v4.19.157 → v4.19.325** into this vendor tree.
-KernelSU (backslashxx fork, staging-synced 32651) runs as an **LKM**
+KernelSU (backslashxx fork, master-synced to v3.3.1+ / 32704) runs as an **LKM**
 (loadable module) — fully decoupled from the kernel image, so KernelSU
 upgrades never require a kernel rebuild.
 
@@ -52,7 +61,7 @@ upgrades never require a kernel rebuild.
   在 .325 下的两处冻结（`dmac_inv_range` / `add_hwgenerator_randomness` 节流）→
   修好并恢复完整 harvest；TCP `sock->sk` 数据竞争标注与原型；perf
   `PERF_FORMAT_LOST` 系列（`read()` 由 32 B 变 40 B 可测）
-- **Root**：KernelSU 32651（backslashxx fork，已同步上游 staging）以 LKM 运行，管理器一键修补升级
+- **Root**：KernelSU v3.3.1+（32704，2026-10-25 同步上游 master e0183047）以 LKM 运行，管理器（Release 附带）授权即用
 - **Docker**：iptables 全套 + xt_addrtype（docker0 网络初始化规则依赖）已齐
 - **零依赖（v1.5）**：WiFi（2022 世代 qcacld 三仓）、音频全栈（Lenovo machine
   驱动源码化重建 + tfa98xx codec）、rmnet 加速、gspca 全部内建；功放固件烤入；
@@ -75,8 +84,10 @@ Full patch history in
 
 **一枚内核、两种 root 形态，各一个镜像即完成全部安装（v1.5 起的形态，v2.0 沿用）。**
 
-1. 从 [Release v2.0](https://github.com/smith-dog/kernel-tb371fc/releases/tag/v2.0)
-   下载下列其一——两个镜像内嵌的 Image **字节相同**（同一枚 `#312`），只差 ramdisk 里
+1. 从 [Release v2.1](https://github.com/smith-dog/kernel-tb371fc/releases/tag/v2.1)
+   下载 `boot-v2.1-kspatched-flash.img`（内嵌 `#743`，KernelSU v3.3.1+ LKM 已在内），
+   并安装同 Release 附带的 KernelSU 管理器 APK（v3.3.1+）。纯净镜像（无
+   KernelSU）暂沿用 [v2.0 的 pure 变体](https://github.com/smith-dog/kernel-tb371fc/releases/tag/v2.0)。旧 v2.0 双镜像（#312 谱系）——两镜像内嵌 Image 字节相同，只差 ramdisk 里
    有没有 KernelSU：
    - [`boot-v2.0-kspatched-flash.img`](https://github.com/smith-dog/kernel-tb371fc/releases/download/v2.0/boot-v2.0-kspatched-flash.img)
      （md5 `b7f5b9284a14c8faabb0a6f6c7d379f6`）——KernelSU LKM 已内置，直刷即有 root
@@ -86,7 +97,7 @@ Full patch history in
 2. 刷入并重启（`fastboot` 走 USB，刷前核对 `fastboot getvar current-slot`）：
    ```
    adb reboot bootloader
-   fastboot flash boot boot-v2.0-kspatched-flash.img   # 或 boot-v2.0-pure-flash.img
+   fastboot flash boot boot-v2.1-kspatched-flash.img   # v2.0 pure 用户继续用旧名
    fastboot reboot
    ```
 3. 完成。开机后 `/proc/version` 应为 `Linux version 4.19.325-perf++ ... #312`。
@@ -127,7 +138,7 @@ dtbo 组合），不必依赖任何旧版纯净包：
    再从**输出字节**读回内嵌 Image 的 md5 与 ramdisk 清单（Release v2.0 的 pure 资产即由它产出）。
 
 **自己 insmod KernelSU LKM** 的，用 Release v2.0 的
-[`ksu-v2.0.ko`](https://github.com/smith-dog/kernel-tb371fc/releases/download/v2.0/ksu-v2.0.ko)
+[`ksu-v2.1.ko`](https://github.com/smith-dog/kernel-tb371fc/releases/download/v2.1/ksu-v2.1.ko)
 （305608 B，md5 `e451369be5765ad517312e9f545698f0`，与 kspatched 镜像 ramdisk 内嵌那枚**字节相同**，
 vermagic `4.19.325-perf++ SMP preempt mod_unload modversions aarch64`）。
 ⚠ v1.5 及更早的 `ksu-v27n*.ko` vermagic 仍是 `4.19.198-perf++`，且 `CONFIG_MODVERSIONS=y` 要求符号 CRC
@@ -202,7 +213,7 @@ techpack 说明：display/audio/camera/video 四个驱动目录的源码已全�
 | 音频 machine | 本树 kona.c 按联想 `audio_machine_kona.ko` 逆向重建（ELF 表级对齐，v1.5 内建） |
 | 功放固件 | 联想原厂 `tfa98xx_QS.cnt`（提取自 stock /vendor/firmware），经 CONFIG_EXTRA_FIRMWARE 烤入内核（v1.5） |
 | rmnet 加速 | [MiCode/vendor_qcom_opensource_data-kernel](https://github.com/MiCode/vendor_qcom_opensource_data-kernel) alioth-r-oss 分支 drivers/rmnet/{perf,shs}（v1.5 内建） |
-| KernelSU | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) staging 同步（驱动 32651；管理器 APK = 本项目 fork 构建：[smith-dog/KernelSU](https://github.com/smith-dog/KernelSU) master，含 boot v1/v2 修补支持 1099b137） |
+| KernelSU | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) master 同步（v3.3.1+ / 32704 = e0183047；管理器 APK = 本项目 fork 构建：[smith-dog/KernelSU](https://github.com/smith-dog/KernelSU) master，含 boot v1/v2 修补支持 ver<1 补丁） |
 | 本项目 | p1~p371 补丁（[tb371fc/scripts](https://github.com/smith-dog/kernel-tb371fc/tree/main/tb371fc/scripts)），全部以上述来源为基础 |
 
 联想未随 GPL dump 公开的部分（如 144Hz 显示驱动、部分面板参数）不在本树，
