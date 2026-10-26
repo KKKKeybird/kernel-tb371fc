@@ -1,0 +1,102 @@
+name: build-kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      variants:
+        description: "Which variants to build: a, b, or ab"
+        required: false
+        default: "a"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-kernel.yml"
+      - "drivers/kernelsu/**"
+      - "tb371fc/ci/**"
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [a, b]
+    steps:
+      - name: Check selection
+        id: gate
+        run: |
+          want="${{ github.event.inputs.variants }}"
+          case "$want" in
+            ab|a-b) want="ab" ;;
+            "") want="a" ;;
+          esac
+          v="${{ matrix.variant }}"
+          if [ "$want" = "ab" ] || [ "$want" = "$v" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "skipping variant $v (requested: $want)"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          fetch-depth: 1
+
+      - name: Free disk space
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Install build dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bc bison flex libssl-dev libelf-dev \
+            python3 git zip unzip curl xz-utils \
+            binutils-aarch64-linux-gnu gcc-aarch64-linux-gnu
+          df -h /
+
+      - name: Install clang 21
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get install -y clang-21 lld-21 llvm-21
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 200
+          sudo update-alternatives --install /usr/bin/llvm-nm llvm-nm /usr/bin/llvm-nm-21 200
+          clang --version
+
+      - name: Build kernel (variant ${{ matrix.variant }})
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          chmod +x tb371fc/ci/build-kernel.sh
+          ./tb371fc/ci/build-kernel.sh ${{ matrix.variant }} 2>&1 | tee build-${{ matrix.variant }}.log
+
+      - name: Repack boot image
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          chmod +x tb371fc/ci/repack.sh
+          ./tb371fc/ci/repack.sh ${{ matrix.variant }} 2>&1 | tee repack-${{ matrix.variant }}.log
+
+      - name: Upload artifacts
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-variant-${{ matrix.variant }}
+          retention-days: 30
+          path: |
+            out/boot-tb371fc-ReSukiSU-${{ matrix.variant }}-permissive.img
+            arch/arm64/boot/Image
+            build-${{ matrix.variant }}.log
+            repack-${{ matrix.variant }}.log

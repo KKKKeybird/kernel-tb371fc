@@ -1,149 +1,143 @@
-// Block kernel modules from loading by reusing the kernel's native
-// `module_blacklist` (consulted by blacklisted() before a module is laid out),
-// instead of hooking init_module/finit_module. It is the standard mechanism and
-// needs nothing maintained on our side.
+#include <linux/init.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+
+#ifdef CONFIG_KSU_TRACEPOINT_HOOK
+#include "hook/syscall_hook.h"
+#endif
+#include "feature/module_blacklist.h"
+#include "infra/symbol_resolver.h"
+#include "klog.h" // IWYU pragma: keep
+
+#if defined(KSU_COMPAT_HAS_INSMOD_HOOK) || defined(CONFIG_KSU_TRACEPOINT_HOOK)
+static char *blacklist = NULL;
+static char *orig_blacklist = NULL;
+static char **module_blacklist = NULL;
+
+// workaround https://cs.android.com/android/platform/superproject/+/android-latest-release:system/core/libmodprobe/utils.cpp;l=73
+// userspace will throw error when ret != 0
+// Android using __NR_finit_module, so we should hook this syscall
 //
-// The list is supplied via the `block_modules=name1,name2,...` module param,
-// which flows in through ksu_config (boot-patch / boot-patch-v2) or the kernel
-// cmdline (built-in). Names use the kernel form (underscores, e.g.
-// `oplus_secure_guard`).
-//
-// Developer only: a blocked module fails to load with EPERM, which first stage
-// init treats as fatal for anything in modules.load / modules.load.recovery
-// that is not in modules.blocklist. Picking safe names is up to the user.
+// https://github.com/tiann/KernelSU/blob/8948025de525cbf1ee03a895505a0a79ec283a7f/userspace/ksuinit/src/lib.rs#L365
+// https://github.com/bytecodealliance/rustix/blob/287214b889865d8e1406a0ee71cc409b6f6191c8/src/system.rs#L265
+// https://github.com/bytecodealliance/rustix/blob/1e2954a46ecffa6b30426ad7b1833b226530dcf4/src/backend/libc/system/syscalls.rs#L125
+// ksuinit using __NR_init_module, so we also need hook this syscall
 
-#define KSU_MODULES_TO_BLOCK "ksu,kernelsu"
-
-static char block_modules[256];
-
-// The param may be parsed before the slab allocator is up (built-in), so copy
-// into a static buffer instead of allocating. Truncate rather than fail: a
-// param error would abort the whole KernelSU load.
-static int block_modules_param_set(const char *val, const struct kernel_param *kp)
+// this just for hook check, in fact we can directly inline for perf opt, but..
+void ksu_handle_init_module(int *result)
 {
-	if (!val || !val[0])
-		return 0;
-
-	if (strscpy(block_modules, val, sizeof(block_modules)) < 0)
-		pr_err("module_blacklist: block_modules too long, truncated — some modules will not be blocked\n");
-
-	return 0;
+    if (*result == -EPERM)
+        *result = 0;
 }
 
-static const struct kernel_param_ops block_modules_param_ops = {
-	// A bare `block_modules` would otherwise fail parse_args() and the load
-	.flags = KERNEL_PARAM_OPS_FL_NOARG,
-	.set = block_modules_param_set,
-};
-module_param_cb(block_modules, &block_modules_param_ops, NULL, 0);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) && defined(CONFIG_ARM64)
-#define __AARCH64_init_module 105
-static syscall_fn_t aarch64_init_module __read_mostly = nullptr;
-asmlinkage long hook_aarch64_init_module_ret(const struct pt_regs *regs)
+void ksu_handle_finit_module(int *result)
 {
-	extern long __arm64_sys_init_module(const struct pt_regs *regs);
-	long ret = __arm64_sys_init_module(regs);
-	if (ret == -EPERM)
-		return 0;
-	return ret;
+    if (*result == -EPERM)
+        *result = 0;
 }
 
-#define __AARCH64_finit_module 273
-static syscall_fn_t aarch64_finit_module __read_mostly = nullptr;
-asmlinkage long hook_aarch64_finit_module_ret(const struct pt_regs *regs)
+#ifdef CONFIG_KSU_TRACEPOINT_HOOK
+static long (*orig_sys_init_module)(const struct pt_regs *regs);
+static long ksu_sys_init_module(const struct pt_regs *regs)
 {
-	extern long __arm64_sys_finit_module(const struct pt_regs *regs);
-	long ret = __arm64_sys_finit_module(regs);
-	if (ret == -EPERM)
-		return 0;
-	return ret;
+    int ret = orig_sys_init_module(regs);
+
+    ksu_handle_init_module(&ret);
+
+    return ret;
 }
 
-static int ksu_unhook_syscall_init_module(void *unused)
+static long (*orig_sys_finit_module)(const struct pt_regs *regs);
+static long ksu_sys_finit_module(const struct pt_regs *regs)
 {
-	set_user_nice(current, 19); // low prio
-	pr_info("%s: kthread init!\n", __func__);
+    int ret = orig_sys_finit_module(regs);
 
-start: // watchdog will flip this anyway, we can loop forever
-	if (!!*(volatile bool *)&ksu_boot_completed)
-		goto cleanup;
-	msleep(10000);
-	goto start;
+    ksu_handle_finit_module(&ret);
 
-cleanup:
-	restore_syscall((void *)&aarch64_init_module, __AARCH64_init_module, (void *)hook_aarch64_init_module_ret, (void *)sys_call_table);
-	restore_syscall((void *)&aarch64_finit_module, __AARCH64_finit_module, (void *)hook_aarch64_finit_module_ret, (void *)sys_call_table);
-
-	pr_info("%s: kthread exit!\n", __func__);
-	return 0;
-}
-
-static inline void ksu_hook_syscall_init_module(void)
-{
-	read_and_replace_syscall((void *)&aarch64_init_module, __AARCH64_init_module, (void *)hook_aarch64_init_module_ret, (void *)sys_call_table);
-	read_and_replace_syscall((void *)&aarch64_finit_module, __AARCH64_finit_module, (void *)hook_aarch64_finit_module_ret, (void *)sys_call_table);
-
-	kthread_run(ksu_unhook_syscall_init_module, NULL, "kthread");
+    return ret;
 }
 #endif
 
-// Merge the configured names into the kernel's native module_blacklist.
-void __init ksu_module_blacklist_init(void)
+void __init ksu_module_blacklist_init(const char *modules)
 {
-	char **native_blacklist;
-	const char *existing;
-	char *merged;
-	size_t existing_len;
+    const char *existing;
+    const char *extra = "";
+    char *name;
+    size_t existing_len;
 
-	static_assert(sizeof(KSU_MODULES_TO_BLOCK) > 0);
-	char combined[256 + sizeof(KSU_MODULES_TO_BLOCK)];
+#ifndef MODULE
+    extra = modules[0] ? ",kernelsu" : "kernelsu";
+#endif
+    if (!modules[0] && !extra[0])
+        return;
 
-	if (!block_modules[0])
-		snprintf(combined, sizeof(combined), "%s", KSU_MODULES_TO_BLOCK);
-	else
-		snprintf(combined, sizeof(combined), "%s,%s", KSU_MODULES_TO_BLOCK, block_modules);
+    module_blacklist = (char **)find_kernel_symbol_exact("module_blacklist");
+    if (!module_blacklist) {
+        pr_warn("module_blacklist: kernel symbol not found, skipping blocked modules\n");
+        return;
+    }
 
-	native_blacklist = (char **)find_kernel_symbol_exact("module_blacklist");
-	if (!native_blacklist) {
-		pr_warn("module_blacklist: symbol not found, cannot block modules\n");
-		return;
-	}
+    existing = *module_blacklist;
+    existing_len = existing ? strlen(existing) : 0;
+    blacklist =
+        kasprintf(GFP_KERNEL, "%s%s%s%s", existing_len ? existing : "", existing_len ? "," : "", modules, extra);
+    if (!blacklist) {
+        pr_err("module_blacklist: cannot allocate blacklist\n");
+        return;
+    }
 
-	existing = *native_blacklist;
-	existing_len = existing ? strlen(existing) : 0;
+    *module_blacklist = blacklist;
+    orig_blacklist = (char *)existing;
+    pr_info("module_blacklist: blocked modules: %s\n", blacklist);
 
-	// Merge with any existing blacklist (e.g. one set on the kernel cmdline).
-	merged = kasprintf(GFP_KERNEL, "%s%s%s", existing_len ? existing : "", existing_len ? "," : "", combined);
-	if (!merged) {
-		pr_err("module_blacklist: cannot allocate blacklist\n");
-		return;
-	}
-
-	// Release-publish: pairs with the address dependency in the lockless
-	// blacklisted() reader so it can never observe the new pointer before the
-	// string contents are visible.
-	smp_store_release(native_blacklist, merged);
-	// Force every other CPU through a memory barrier so any module load already
-	// in flight observes the new list right away (suggested by @backslashxx).
-	kick_all_cpus_sync();
-	pr_info("module_blacklist: blocking modules: %s\n", merged);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) && defined(CONFIG_ARM64)
-	ksu_hook_syscall_init_module();
+#ifdef CONFIG_KSU_TRACEPOINT_HOOK
+    ksu_syscall_table_hook(__NR_init_module, ksu_sys_init_module, &orig_sys_init_module);
+    ksu_syscall_table_hook(__NR_finit_module, ksu_sys_finit_module, &orig_sys_finit_module);
+    pr_info("module_blacklist: syscall hooked\n");
 #endif
 }
 
-#undef KSU_MODULES_TO_BLOCK
-
-void __exit ksu_module_blacklist_exit(void)
+void __exit ksu_module_blacklist_exit()
 {
-	// Intentionally does NOT restore the original module_blacklist pointer.
-	// The module loader reads module_blacklist in blacklisted() without any
-	// lock or READ_ONCE, testing it for NULL and then dereferencing it; swapping
-	// the pointer back (especially to the common NULL) could race that reader
-	// into a NULL dereference. The merged string already contains any
-	// pre-existing entries and lives on the kernel heap, so leaving it installed
-	// stays valid even after KernelSU is unloaded. The one-time, bounded
-	// allocation is deliberately leaked.
+    const char *existing;
+
+    if (module_blacklist == NULL) {
+        // that's mean no modules got block
+        return;
+    }
+
+#ifdef CONFIG_KSU_TRACEPOINT_HOOK
+    ksu_syscall_table_unhook(__NR_init_module);
+    ksu_syscall_table_unhook(__NR_finit_module);
+
+    pr_info("module_blacklist: syscall unhooked!\n");
+#endif
+
+    if (blacklist == NULL) {
+        pr_warn("module_blacklist: blacklist ptr not init, skip kfree and revert changes!\n");
+        return;
+    }
+
+    existing = *module_blacklist;
+
+    if (existing != blacklist) {
+        pr_warn("module_blacklist: looks module_blacklist changed by other, skip kfree and revert changes!\n");
+        return;
+    }
+
+    *module_blacklist = orig_blacklist;
+    kfree(blacklist); // kasprintf alloc
+
+    pr_info("module_blacklist: blacklist reverted and memory freed!\n");
 }
+#else
+void __init ksu_module_blacklist_init(const char *modules)
+{
+    // nothing to do
+}
+
+void __exit ksu_module_blacklist_exit()
+{
+    // nothing to do
+}
+#endif
