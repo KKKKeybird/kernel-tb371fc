@@ -6,13 +6,7 @@ on:
       variants:
         description: "Which variants to build: a, b, or ab"
         required: false
-        default: "a"
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/build-kernel.yml"
-      - "drivers/kernelsu/**"
-      - "tb371fc/ci/**"
+        default: "b"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -25,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [a, b]
+        variant: [b]
     steps:
       - name: Check selection
         id: gate
