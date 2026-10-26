@@ -79,15 +79,21 @@ jobs:
 
       - name: Build kernel (variant ${{ matrix.variant }})
         if: steps.gate.outputs.run == 'true'
+        shell: bash
         run: |
+          set -euo pipefail
           chmod +x tb371fc/ci/build-kernel.sh
           ./tb371fc/ci/build-kernel.sh ${{ matrix.variant }} 2>&1 | tee build-${{ matrix.variant }}.log
+          test -f arch/arm64/boot/Image
 
       - name: Repack boot image
         if: steps.gate.outputs.run == 'true'
+        shell: bash
         run: |
+          set -euo pipefail
           chmod +x tb371fc/ci/repack.sh
           ./tb371fc/ci/repack.sh ${{ matrix.variant }} 2>&1 | tee repack-${{ matrix.variant }}.log
+          test -f out/boot-tb371fc-ReSukiSU-${{ matrix.variant }}-permissive.img
 
       - name: Upload artifacts
         if: steps.gate.outputs.run == 'true'
