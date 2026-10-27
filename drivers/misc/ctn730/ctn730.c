@@ -1176,7 +1176,16 @@ t80_dispatch:
 				ctn730_status_text[7]);
 			goto tail;
 		}
-		if ((payload[0] & 0xfe) != 4)
+		if (payload[0] == 4) {
+			/* DEVICE_DOCKED precedes DEVICE_DETECTED. Do not clear
+			 * charging/identity while detection is still in progress:
+			 * the 125 ms undock timer can beat the detection event and
+			 * repeatedly restart the MAC-read/charge-enable sequence.
+			 */
+			cancel_delayed_work_sync(&data->check_static_charge_work);
+			goto tail;
+		}
+		if (payload[0] != 5)
 			goto tail;
 		if (payload[0] == 5) {
 			data->last_irq_ktime = 0;
@@ -1986,7 +1995,11 @@ static int ctn730_probe(struct i2c_client *client,
 	data->report_info = 1;
 	pr_err("ctn730: %s: success\n", "ctn730_probe");
 	{
-		u8 init_buf[3] = { 0x01, 0x00, 0x00 };
+		/* HOST_CTRL_RESET: instruction 0, payload length 1, NORMAL 0.
+		 * The reversed header is rejected and leaves the chip in its
+		 * intentional download mode despite valid application firmware.
+		 */
+		u8 init_buf[3] = { 0x00, 0x01, 0x00 };
 
 		if (ctn730_i2c_send(data, init_buf, 3) >= 0)
 			data->detected = 1;
