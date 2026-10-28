@@ -3057,7 +3057,8 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa, int next_profile, int vstep
 
 			if ((sel != -1) && ((tfa->rev & 0xff) == 0x94) &&
 			    (profile_name != NULL) &&
-			    (strstr(profile_name, "nonRotation") == NULL)) {
+			    ((strstr(profile_name, "nonRotation") == NULL) ||
+			     tfa9894_get_stereo_slots())) {
 				if (tfa9894_get_target_chan_sel(sel, tfa->dev_idx,
 								&spks, &dcs) == 0)
 					tfa9894_change_chan_sel(tfa, spks, dcs);
@@ -3139,7 +3140,8 @@ error_exit:
 		char *name = tfaContProfileName(tfa->cnt, tfa->dev_idx,
 						 next_profile);
 
-		if (sel >= 0 && name && !strstr(name, "nonRotation") &&
+		if (sel >= 0 && name &&
+		    (!strstr(name, "nonRotation") || tfa9894_get_stereo_slots()) &&
 		    !tfa9894_get_target_chan_sel(sel, tfa->dev_idx,
 						 &spks, &dcs) &&
 		    (tfa_get_bf(tfa, TFA9894_BF_TDMSPKS) != spks ||
