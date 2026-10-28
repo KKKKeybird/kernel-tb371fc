@@ -44,6 +44,19 @@ static const int tfa9894_vol_table[] = {
 };
 
 static int g_tfa9894_chan_sel = TFA9894_CHAN_SEL_UNSET;
+/* Off by default: retain the stock four-slot route unless userspace has
+ * explicitly selected the two-slot stereo transport adaptation. */
+static int g_tfa9894_stereo_slots;
+
+int tfa9894_get_stereo_slots(void)
+{
+	return READ_ONCE(g_tfa9894_stereo_slots);
+}
+
+void tfa9894_set_stereo_slots(int enabled)
+{
+	WRITE_ONCE(g_tfa9894_stereo_slots, !!enabled);
+}
 
 int tfa9894_get_store_chan_sel(void)
 {
@@ -63,6 +76,13 @@ int tfa9894_get_target_chan_sel(int sel, int dev_idx, int *spks, int *dcs)
 
 	*spks = tfa9894_chan_sel_map[sel][dev_idx][0];
 	*dcs = tfa9894_chan_sel_map[sel][dev_idx][1];
+	/* The HyperOS stereo transport supplies slots 0/1.  Fold the stock
+	 * second pair onto the same stereo samples while retaining each
+	 * amplifier's L/R ordering.  Do not alter gain or protection settings. */
+	if (tfa9894_get_stereo_slots()) {
+		*spks &= 1;
+		*dcs &= 1;
+	}
 	return 0;
 }
 

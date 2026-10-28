@@ -314,7 +314,33 @@ static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 	return change;
 }
 
+/* This is an explicit transport choice, not a call-profile override.  The
+ * existing nonRotation guard remains authoritative for selector writes. */
+static int tfa9894_get_stereo_slots_ctl(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = tfa9894_get_stereo_slots();
+	return 0;
+}
+
+static int tfa9894_set_stereo_slots_ctl(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	long enabled = ucontrol->value.integer.value[0];
+	int changed;
+
+	if (enabled < 0 || enabled > 1)
+		return -EINVAL;
+	mutex_lock(&tfa98xx_mutex);
+	changed = tfa9894_get_stereo_slots() != enabled;
+	tfa9894_set_stereo_slots(enabled);
+	mutex_unlock(&tfa98xx_mutex);
+	return changed;
+}
+
 static const struct snd_kcontrol_new tfa9894_chan_sel_controls[] = {
+	SOC_SINGLE_EXT("TFA9894_STEREO_SLOTS", 0, 0, 1, 0,
+		       tfa9894_get_stereo_slots_ctl, tfa9894_set_stereo_slots_ctl),
 	SOC_SINGLE_EXT("TFA9894_CHAN_SELECTOR", 0, 0, 3, 0,
 		tfa9894_get_chan_sel_ctl, tfa9894_set_chan_sel_ctl),
 };
