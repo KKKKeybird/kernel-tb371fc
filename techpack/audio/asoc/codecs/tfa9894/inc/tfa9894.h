@@ -32,6 +32,11 @@
 int tfa9894_get_store_chan_sel(void);
 void tfa9894_set_store_chan_sel(int sel);
 
+/* Optional two-slot stereo transport.  Default zero retains the stock table.
+ * Configure before choosing a selector / starting media playback. */
+int tfa9894_get_stereo_slots(void);
+void tfa9894_set_stereo_slots(int enabled);
+
 /*
  * Look up the (TDMSPKS, TDMDCS) slot pair for one device under selector
  * @sel.  @dev_idx is the container device index.  Returns 0 on success and
