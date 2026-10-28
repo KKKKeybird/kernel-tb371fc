@@ -1170,6 +1170,14 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct audio_buffer *buf;
 	int dir, ret;
 
+	/* p229: the TFA9894 amplifiers pick their rotation map from the real
+	 * channel count of the stream (two = L/R on slots 0/1, four = the
+	 * stock four-slot table).  Harmless for every other PCM device. */
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		extern void tfa9894_set_stream_channels(int channels);
+		tfa9894_set_stream_channels((int)params_channels(params));
+	}
+
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		dir = IN;
 	else

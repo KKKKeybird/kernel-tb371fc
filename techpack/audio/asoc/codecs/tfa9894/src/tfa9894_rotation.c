@@ -38,15 +38,50 @@ static const int tfa9894_chan_sel_map[4][4][2] = {
 	},
 };
 
+/* Two-slot channel map: every amplifier picks the L (slot 0) or the R
+ * (slot 1) sample, two amplifiers per channel.  This mirrors what the
+ * container profiles already do by default, so it never asks for slots that
+ * the two-channel transport does not provide.  Indexed [angle][dev_idx].
+ * dev 0..3 are the physical corners: 0 left-up, 1 right-up, 2 left-down,
+ * 3 right-down. */
+static const int tfa9894_stereo_map[4][4][2] = {
+	{   /* selector 0: 0 deg */
+		{ 0, 1 }, { 1, 0 }, { 0, 1 }, { 1, 0 },
+	},
+	{   /* selector 1: 90 deg */
+		{ 1, 0 }, { 1, 0 }, { 0, 1 }, { 0, 1 },
+	},
+	{   /* selector 2: 180 deg */
+		{ 1, 0 }, { 0, 1 }, { 1, 0 }, { 0, 1 },
+	},
+	{   /* selector 3: 270 deg */
+		{ 0, 1 }, { 0, 1 }, { 1, 0 }, { 1, 0 },
+	},
+};
+
 /* Volume step table used to ramp the CF firmware volume in and out. */
 static const int tfa9894_vol_table[] = {
 	0x00, 0x24, 0x48, 0x6c, 0x90, 0xb4, 0xd8, 0xff,
 };
 
 static int g_tfa9894_chan_sel = TFA9894_CHAN_SEL_UNSET;
+/* Channel count of the stream currently feeding the TDM port.  Two means the
+ * transport only carries L/R (slots 0/1); four means the stock four-slot
+ * table is valid. */
+static int g_tfa9894_stream_channels = 2;
 /* Off by default: retain the stock four-slot route unless userspace has
  * explicitly selected the two-slot stereo transport adaptation. */
 static int g_tfa9894_stereo_slots;
+
+int tfa9894_get_stream_channels(void)
+{
+	return READ_ONCE(g_tfa9894_stream_channels);
+}
+
+void tfa9894_set_stream_channels(int channels)
+{
+	WRITE_ONCE(g_tfa9894_stream_channels, channels >= 4 ? 4 : 2);
+}
 
 int tfa9894_get_stereo_slots(void)
 {
@@ -74,20 +109,14 @@ int tfa9894_get_target_chan_sel(int sel, int dev_idx, int *spks, int *dcs)
 	    (dev_idx < 0) || (dev_idx > 3))
 		return 2;
 
+	if (tfa9894_get_stream_channels() <= 2) {
+		*spks = tfa9894_stereo_map[sel][dev_idx][0];
+		*dcs = tfa9894_stereo_map[sel][dev_idx][1];
+		return 0;
+	}
+
 	*spks = tfa9894_chan_sel_map[sel][dev_idx][0];
 	*dcs = tfa9894_chan_sel_map[sel][dev_idx][1];
-	/* The HyperOS stereo transport supplies slots 0/1.  Fold the stock
-	 * second pair onto the same stereo samples while retaining each
-	 * amplifier's L/R ordering.  Do not alter gain or protection settings. */
-	if (tfa9894_get_stereo_slots()) {
-		/* Two-slot transport carries L in slot 0 and R in slot 1.
-		 * The stock four-slot layout is [L, L, R, R] (slots 0/1 feed the
-		 * left pair, slots 2/3 the right pair), so folding is a shift.
-		 * Masking with &1 made every amplifier read slot 0 (left), which
-		 * is exactly the "both sides play left" regression. */
-		*spks >>= 1;
-		*dcs >>= 1;
-	}
 	return 0;
 }
 

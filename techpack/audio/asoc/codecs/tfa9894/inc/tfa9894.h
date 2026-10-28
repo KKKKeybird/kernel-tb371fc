@@ -37,6 +37,12 @@ void tfa9894_set_store_chan_sel(int sel);
 int tfa9894_get_stereo_slots(void);
 void tfa9894_set_stereo_slots(int enabled);
 
+/* Number of channels the AFE is currently carrying on the TDM port.  Two
+ * selects the L/R pair map, four keeps the stock four-slot table.  Set from
+ * the PCM hw_params path. */
+int tfa9894_get_stream_channels(void);
+void tfa9894_set_stream_channels(int channels);
+
 /*
  * Look up the (TDMSPKS, TDMDCS) slot pair for one device under selector
  * @sel.  @dev_idx is the container device index.  Returns 0 on success and
