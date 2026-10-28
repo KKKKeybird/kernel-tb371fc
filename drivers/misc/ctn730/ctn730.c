@@ -919,12 +919,12 @@ static irqreturn_t ctn730_dev_irq_handler(int irq, void *dev_id)
 		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_dev_irq_handler");
 		return IRQ_HANDLED;
 	}
-	if (data->suspended) {
+	if (READ_ONCE(data->suspended)) {
 		pr_err("ctn730: %s: suspended, wakeup event!\n",
 			"ctn730_dev_irq_handler");
 		/* stock passes data+0x40 = misc.this_device */
 		pm_wakeup_dev_event(data->misc.this_device, 10000, 0);
-		data->suspended = 0;
+		WRITE_ONCE(data->suspended, 0);
 		msleep(50);
 	}
 	memset(head, 0, sizeof(head));
@@ -1703,25 +1703,18 @@ static struct device_attribute *ctn730_attrs[] = {
 static int ctn730_suspend(struct device *dev)
 {
 	struct ctn730_data *data = dev_get_drvdata(dev);
-	u8 buf[4];
 
 	if (!data) {
 		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_suspend");
 		return 0;
 	}
-	data->suspended = 1;
-	if (data->report_info && data->fw_status == 4 && data->charging) {
-		memset(buf, 0, sizeof(buf));
-		buf[0] = 0x07;
-		buf[1] = 0x02;
-		buf[2] = 0x00;
-		buf[3] = 0x00;
-		if (ctn730_i2c_send(data, buf, 4) >= 0) {
-			mutex_lock(&data->report_info_mutex);
-			data->pen_mode_open = 0;
-			mutex_unlock(&data->report_info_mutex);
-		}
-	}
+	/* Do not send a reporting command from system suspend. Its 0x47 ACK
+	 * asserts our wake IRQ during the same transition and aborts suspend,
+	 * even if the software wakeup_source is disabled. Screen reporting is
+	 * handled by the DRM notifier while the host is awake. Charging remains
+	 * under controller control: no RF-off, disable or reset is sent here.
+	 */
+	WRITE_ONCE(data->suspended, 1);
 	pr_info("%s\n", "ctn730_suspend");
 	return 0;
 }
@@ -1734,6 +1727,10 @@ static int ctn730_resume(struct device *dev)
 		pr_err("ctn730: %s: no ctn730_dev\n", "ctn730_resume");
 		return 0;
 	}
+	/* Also clear after an aborted transition; the next ordinary response
+	 * must not inherit a stale suspended flag and a ten-second wake hold.
+	 */
+	WRITE_ONCE(data->suspended, 0);
 	pr_info("%s\n", "ctn730_resume");
 	return 0;
 }
