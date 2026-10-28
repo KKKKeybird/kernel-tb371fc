@@ -42,20 +42,20 @@ static const int tfa9894_chan_sel_map[4][4][2] = {
  * (slot 1) sample, two amplifiers per channel.  This mirrors what the
  * container profiles already do by default, so it never asks for slots that
  * the two-channel transport does not provide.  Indexed [angle][dev_idx].
- * dev 0..3 are the physical corners: 0 left-up, 1 right-up, 2 left-down,
- * 3 right-down. */
+ * Measured corner order on TB371FC: dev0 right-up, dev1 left-down,
+ * dev2 left-up, dev3 right-down. */
 static const int tfa9894_stereo_map[4][4][2] = {
-	{   /* selector 0: 0 deg */
-		{ 0, 1 }, { 1, 0 }, { 0, 1 }, { 1, 0 },
+	{   /* selector 0: 0 deg, user's left = left column */
+		{ 1, 0 }, { 0, 1 }, { 0, 1 }, { 1, 0 },
 	},
-	{   /* selector 1: 90 deg */
-		{ 1, 0 }, { 1, 0 }, { 0, 1 }, { 0, 1 },
-	},
-	{   /* selector 2: 180 deg */
+	{   /* selector 1: 90 deg, user's left = bottom row */
 		{ 1, 0 }, { 0, 1 }, { 1, 0 }, { 0, 1 },
 	},
-	{   /* selector 3: 270 deg */
-		{ 0, 1 }, { 0, 1 }, { 1, 0 }, { 1, 0 },
+	{   /* selector 2: 180 deg */
+		{ 0, 1 }, { 1, 0 }, { 1, 0 }, { 0, 1 },
+	},
+	{   /* selector 3: 270 deg, user's left = top row */
+		{ 0, 1 }, { 1, 0 }, { 0, 1 }, { 1, 0 },
 	},
 };
 
