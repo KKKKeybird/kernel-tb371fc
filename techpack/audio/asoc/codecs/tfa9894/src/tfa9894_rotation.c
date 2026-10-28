@@ -80,8 +80,13 @@ int tfa9894_get_target_chan_sel(int sel, int dev_idx, int *spks, int *dcs)
 	 * second pair onto the same stereo samples while retaining each
 	 * amplifier's L/R ordering.  Do not alter gain or protection settings. */
 	if (tfa9894_get_stereo_slots()) {
-		*spks &= 1;
-		*dcs &= 1;
+		/* Two-slot transport carries L in slot 0 and R in slot 1.
+		 * The stock four-slot layout is [L, L, R, R] (slots 0/1 feed the
+		 * left pair, slots 2/3 the right pair), so folding is a shift.
+		 * Masking with &1 made every amplifier read slot 0 (left), which
+		 * is exactly the "both sides play left" regression. */
+		*spks >>= 1;
+		*dcs >>= 1;
 	}
 	return 0;
 }
