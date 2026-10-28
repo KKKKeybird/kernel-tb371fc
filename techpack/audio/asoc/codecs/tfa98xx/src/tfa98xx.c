@@ -283,11 +283,10 @@ static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 		value = 0;
 	}
 
-	if (value == tfa9894_get_store_chan_sel()) {
-		pr_debug("p269: the angle is same\n");
-		mutex_unlock(&tfa98xx_mutex);
-		return 0;
-	}
+	/* A profile reload or a transport-mode change can replace the hardware
+	 * slots without changing this cached angle. Let send_chan_sel compare
+	 * the actual registers before deciding that no write is needed.
+	 */
 
 	/* Stock parity: record the new selector before touching the devices.
 	 * The DSP may not be running yet (rotation while silent); tfa_dev_start
