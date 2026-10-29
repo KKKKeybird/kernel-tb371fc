@@ -1073,7 +1073,7 @@ void msm_pcm_routing_config_speaker_quad(int fe_id, int channels)
 	mutex_lock(&routing_lock);
 	cfg = &channel_mixer_v2[fe_id][SESSION_TYPE_RX];
 	if (!tfa9894_dsp_quad_is_enabled() ||
-	    (channels != 1 && channels != 2 && channels != 4)) {
+	    (channels != 1 && channels != 2)) {
 		if (speaker_quad_owned[fe_id])
 			memset(cfg, 0, sizeof(*cfg));
 		speaker_quad_owned[fe_id] = false;
@@ -1095,8 +1095,7 @@ void msm_pcm_routing_config_speaker_quad(int fe_id, int channels)
 	for (i = 0; i < channels; i++)
 		cfg->in_ch_map[i] = in_map[i];
 	for (i = 0; i < 4; i++) {
-		int source = channels == 1 ? 0 :
-			(channels == 2 ? i % 2 : i);
+		int source = channels == 1 ? 0 : i % 2;
 		cfg->out_ch_map[i] = out_map[i];
 		cfg->channel_weight[i][source] = WEIGHT_0_DB;
 	}
@@ -1345,6 +1344,9 @@ static uint8_t is_be_dai_extproc(int be_dai)
 		return 0;
 }
 
+static int msm_pcm_routing_channel_mixer_v2(int fe_id, bool perf_mode,
+				int dspst_id, int stream_type);
+
 static void msm_pcm_routing_build_matrix(int fedai_id, int sess_type,
 					 int path_type, int perf_mode,
 					 uint32_t passthr_mode)
@@ -1391,6 +1393,18 @@ static void msm_pcm_routing_build_matrix(int fedai_id, int sess_type,
 		payload.session_id = fe_dai_map[fedai_id][sess_type].strm_id;
 		adm_matrix_map(path_type, payload, perf_mode, passthr_mode);
 		msm_pcm_routng_cfg_matrix_map_pp(payload, path_type, perf_mode);
+		/* A live FE can gain the speaker BE without another prepare,
+		 * e.g. when switching back from headphones or Bluetooth. */
+		if (sess_type == SESSION_TYPE_RX && fedai_id >= 0 &&
+		    fedai_id < MSM_FRONTEND_DAI_MM_SIZE &&
+		    speaker_quad_owned[fedai_id]) {
+			int rc = msm_pcm_routing_channel_mixer_v2(fedai_id,
+				perf_mode, payload.session_id,
+				SNDRV_PCM_STREAM_PLAYBACK);
+			if (rc)
+				pr_err_ratelimited("%s: speaker matrix failed: %d\n",
+					__func__, rc);
+		}
 	}
 }
 
