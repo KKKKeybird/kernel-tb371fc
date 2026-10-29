@@ -494,10 +494,10 @@ static int adm_populate_channel_weight(u16 *ptr,
  * ch_mixer - Passed value, ch_mixer for which channel mixer config is needed
  * channel_index - Passed value, channel_index for which channel is needed
  */
-int adm_programable_channel_mixer(int port_id, int copp_idx, int session_id,
-				  int session_type,
-				  struct msm_pcm_channel_mixer *ch_mixer,
-				  int channel_index)
+static noinline int adm_programable_channel_mixer_impl(int port_id,
+ int copp_idx, int session_id, int session_type,
+ struct msm_pcm_channel_mixer *ch_mixer, int channel_index,
+ bool session_update)
 {
 	struct adm_cmd_set_pspd_mtmx_strtr_params_v5 *adm_params = NULL;
 	struct param_hdr_v1 data_v5;
@@ -519,7 +519,8 @@ int adm_programable_channel_mixer(int port_id, int copp_idx, int session_id,
 	 * check if PSPD is already configured
 	 * if it is configured already, return 0 without applying PSPD.
 	 */
-	if (atomic_read(&this_adm.copp.cnt[port_idx][copp_idx]) > 1) {
+	if (!session_update &&
+	    atomic_read(&this_adm.copp.cnt[port_idx][copp_idx]) > 1) {
 		pr_debug("%s: copp.cnt:%#x\n", __func__,
 			atomic_read(&this_adm.copp.cnt[port_idx][copp_idx]));
 		return 0;
@@ -644,6 +645,14 @@ int adm_programable_channel_mixer(int port_id, int copp_idx, int session_id,
 		pr_debug("%s: adm_params[%d] = 0x%x\n",
 			__func__, index, (unsigned int)ptr[index]);
 
+	/* Per-session PSPD updates must not be skipped when a COPP is shared.
+	 * Use the existing serialized APR helper: it waits for the DSP ACK,
+	 * checks DSP errors and reports timeouts instead of returning early. */
+	if (session_update) {
+		ret = adm_apr_send_pkt(adm_params, NULL, port_idx, copp_idx,
+			ADM_CMD_SET_PSPD_MTMX_STRTR_PARAMS_V5);
+		goto fail_cmd;
+	}
 	atomic_set(&this_adm.copp.stat[port_idx][copp_idx], 0);
 	ret = apr_send_pkt(this_adm.apr, (uint32_t *)adm_params);
 	if (ret < 0) {
@@ -669,7 +678,22 @@ fail_cmd:
 
 	return ret;
 }
+int adm_programable_channel_mixer(int port_id, int copp_idx, int session_id,
+ int session_type, struct msm_pcm_channel_mixer *ch_mixer, int channel_index)
+{
+ return adm_programable_channel_mixer_impl(port_id, copp_idx, session_id,
+  session_type, ch_mixer, channel_index, false);
+}
 EXPORT_SYMBOL(adm_programable_channel_mixer);
+
+int adm_programable_channel_mixer_session(int port_id, int copp_idx,
+ int session_id, int session_type, struct msm_pcm_channel_mixer *ch_mixer,
+ int channel_index)
+{
+ return adm_programable_channel_mixer_impl(port_id, copp_idx, session_id,
+  session_type, ch_mixer, channel_index, true);
+}
+EXPORT_SYMBOL(adm_programable_channel_mixer_session);
 
 /**
  * adm_set_stereo_to_custom_stereo -

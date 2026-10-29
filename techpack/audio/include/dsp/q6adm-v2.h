@@ -225,6 +225,10 @@ int adm_programable_channel_mixer(int port_id, int copp_idx, int session_id,
 			int session_type,
 			struct msm_pcm_channel_mixer *ch_mixer,
 			int channel_index);
+/* Per-session live PSPD update, including shared COPPs, with DSP ACK. */
+int adm_programable_channel_mixer_session(int port_id, int copp_idx,
+ int session_id, int session_type, struct msm_pcm_channel_mixer *ch_mixer,
+ int channel_index);
 void msm_dts_srs_acquire_lock(void);
 void msm_dts_srs_release_lock(void);
 void adm_set_native_mode(int mode);

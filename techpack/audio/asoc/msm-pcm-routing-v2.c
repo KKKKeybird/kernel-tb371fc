@@ -1112,7 +1112,7 @@ static int speaker_quad_send_locked(int fe_id,
  for (copp = 0; copp < MAX_COPPS_PER_PORT; copp++) {
   if (!test_bit(copp, &copps))
    continue;
-  ret = adm_programable_channel_mixer(msm_bedais[be].port_id,
+  ret = adm_programable_channel_mixer_session(msm_bedais[be].port_id,
    copp, session, SESSION_TYPE_RX, cfg, 0);
   if (ret) {
    pr_err_ratelimited("speaker matrix FE=%d session=%d copp=%d failed=%d\n",

@@ -309,6 +309,19 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 		perf_mode = pdata->perf_mode;
 
 
+	/* The ULL direct path has no programmable ADM matrix (DSP returns
+	 * ADSP_EUNSUPPORTED). Keep shared-buffer/NOIRQ PCM, but use LL for
+	 * opted-in 1/2/4ch playback so speaker routing supports PSPD, including
+	 * a stream that starts on headphones and later gains the speaker BE.
+	 * Other backends still keep their original channel maps and routes.
+	 * With the opt-in off, preserve the original performance mode. */
+	if (dir == IN && (params_channels(params) == 1 ||
+	    params_channels(params) == 2 || params_channels(params) == 4)) {
+		extern int tfa9894_dsp_quad_is_enabled(void);
+		if (tfa9894_dsp_quad_is_enabled())
+			perf_mode = LOW_LATENCY_PCM_MODE;
+	}
+
 	/* need to set LOW_LATENCY_PCM_MODE for capture since
 	 * push mode does not support ULL
 	 */
