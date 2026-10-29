@@ -382,6 +382,10 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 
 	pr_debug("msm_pcm_routing_reg_phy_stream w/ id %d\n",
 		 soc_prtd->dai_link->id);
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		msm_pcm_routing_config_speaker_quad(soc_prtd->dai_link->id,
+						prtd->channel_mode);
+
 	ret = msm_pcm_routing_reg_phy_stream(soc_prtd->dai_link->id,
 				       prtd->audio_client->perf_mode,
 				       prtd->session_id, substream->stream);

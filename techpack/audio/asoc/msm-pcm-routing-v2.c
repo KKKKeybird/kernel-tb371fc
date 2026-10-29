@@ -1058,6 +1058,55 @@ int msm_pcm_routing_set_channel_mixer_cfg(
 }
 EXPORT_SYMBOL(msm_pcm_routing_set_channel_mixer_cfg);
 
+static bool speaker_quad_owned[MSM_FRONTEND_DAI_MM_SIZE];
+
+void msm_pcm_routing_config_speaker_quad(int fe_id, int channels)
+{
+	extern int tfa9894_dsp_quad_is_enabled(void);
+	struct msm_pcm_channel_mixer *cfg;
+	u8 in_map[PCM_FORMAT_MAX_NUM_CHANNEL_V8] = {0};
+	u8 out_map[PCM_FORMAT_MAX_NUM_CHANNEL_V8] = {0};
+	int i;
+
+	if (fe_id < 0 || fe_id >= MSM_FRONTEND_DAI_MM_SIZE)
+		return;
+	mutex_lock(&routing_lock);
+	cfg = &channel_mixer_v2[fe_id][SESSION_TYPE_RX];
+	if (!tfa9894_dsp_quad_is_enabled() ||
+	    (channels != 1 && channels != 2 && channels != 4)) {
+		if (speaker_quad_owned[fe_id])
+			memset(cfg, 0, sizeof(*cfg));
+		speaker_quad_owned[fe_id] = false;
+		goto out;
+	}
+	/* Do not overwrite an independently configured non-speaker matrix. */
+	if (cfg->enable && !speaker_quad_owned[fe_id])
+		goto out;
+
+	q6asm_map_channels(in_map, channels, false);
+	q6asm_map_channels(out_map, 4, false);
+	memset(cfg, 0, sizeof(*cfg));
+	cfg->enable = 1;
+	cfg->input_channel = channels;
+	cfg->output_channel = 4;
+	cfg->port_idx = MSM_BACKEND_DAI_PRI_TDM_RX_0 + 1;
+	cfg->override_in_ch_map = true;
+	cfg->override_out_ch_map = true;
+	for (i = 0; i < channels; i++)
+		cfg->in_ch_map[i] = in_map[i];
+	for (i = 0; i < 4; i++) {
+		int source = channels == 1 ? 0 :
+			(channels == 2 ? i % 2 : i);
+		cfg->out_ch_map[i] = out_map[i];
+		cfg->channel_weight[i][source] = WEIGHT_0_DB;
+	}
+	speaker_quad_owned[fe_id] = true;
+out:
+	mutex_unlock(&routing_lock);
+}
+EXPORT_SYMBOL(msm_pcm_routing_config_speaker_quad);
+
+
 int msm_pcm_routing_reg_stream_app_type_cfg(
 	int fedai_id, int session_type, int be_id,
 	struct msm_pcm_stream_app_type_cfg *cfg_data)

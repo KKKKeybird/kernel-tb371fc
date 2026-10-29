@@ -645,6 +645,9 @@ int msm_pcm_routing_send_chmix_cfg(int fe_id, int ip_channel_cnt,
 	int session_type, int stream_type);
 int msm_pcm_routing_get_pp_ch_cnt(int fe_id, int session_type);
 
+/* Fixed speaker TDM4; all non-speaker backends retain their own maps. */
+void msm_pcm_routing_config_speaker_quad(int fe_id, int channels);
+
 int msm_pcm_routing_set_channel_mixer_cfg(
 	int fe_id, int session_type,
 	struct msm_pcm_channel_mixer *params);

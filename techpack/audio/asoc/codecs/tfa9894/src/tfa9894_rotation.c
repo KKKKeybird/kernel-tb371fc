@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/delay.h>
+#include <linux/moduleparam.h>
 
 #include "tfa_device.h"
 #include "tfa_service.h"
@@ -69,13 +70,26 @@ static int g_tfa9894_chan_sel = TFA9894_CHAN_SEL_UNSET;
  * transport only carries L/R (slots 0/1); four means the stock four-slot
  * table is valid. */
 static int g_tfa9894_stream_channels = 2;
+/* Opt-in while validating the DSP matrix.  Default off preserves the
+ * previously verified transport and permits rollback without another flash. */
+static bool tb371fc_dsp_quad;
+module_param_named(tb371fc_dsp_quad, tb371fc_dsp_quad, bool, 0644);
+MODULE_PARM_DESC(tb371fc_dsp_quad,
+                "TB371FC fixed TDM4 transport with per-stream ADM expansion");
+
+int tfa9894_dsp_quad_is_enabled(void)
+{
+	return READ_ONCE(tb371fc_dsp_quad);
+}
+
 /* Off by default: retain the stock four-slot route unless userspace has
  * explicitly selected the two-slot stereo transport adaptation. */
 static int g_tfa9894_stereo_slots;
 
 int tfa9894_get_stream_channels(void)
 {
-	return READ_ONCE(g_tfa9894_stream_channels);
+	return tfa9894_dsp_quad_is_enabled() ? 4 :
+		READ_ONCE(g_tfa9894_stream_channels);
 }
 
 void tfa9894_set_stream_channels(int channels)
