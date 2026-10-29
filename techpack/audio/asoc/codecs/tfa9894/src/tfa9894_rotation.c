@@ -172,13 +172,18 @@ int tfa9894_send_chan_sel(struct tfa_device *tfa, const char *name, int sel)
 	pr_info("tfa9894: chan_sel=%d to %s, spks %d->%d dcs %d->%d\n",
 		sel, name ? name : "tfa9894", cur_spks, spks, cur_dcs, dcs);
 
-	/* Fade the firmware volume down before disturbing the routing. */
+	/* Fade the firmware volume down before disturbing the routing.
+	 * msleep(1) rounds to about two ticks (8 ms at HZ=250). Sixteen
+	 * ramp steps per amp then cost ~128 ms before I2C, and the four
+	 * amps switch serially. Preserve the intended millisecond ramp
+	 * with high-resolution sleeping rather than removing protection.
+	 */
 	for (i = 0; i < ARRAY_SIZE(tfa9894_vol_table); i++) {
 		err = tfa_set_bf(tfa, TFA9894_BF_VOL,
 				 (uint16_t)tfa9894_vol_table[i]);
 		if (err < 0)
 			return err;
-		msleep(1);
+		usleep_range(1000, 1500);
 	}
 
 	err = tfa98xx_set_mute(tfa, Tfa98xx_Mute_Amplifier);
@@ -205,7 +210,7 @@ int tfa9894_send_chan_sel(struct tfa_device *tfa, const char *name, int sel)
 				 (uint16_t)tfa9894_vol_table[i]);
 		if (err < 0)
 			return err;
-		msleep(1);
+		usleep_range(1000, 1500);
 	}
 
 	cur_spks = tfa_get_bf(tfa, TFA9894_BF_TDMSPKS);
