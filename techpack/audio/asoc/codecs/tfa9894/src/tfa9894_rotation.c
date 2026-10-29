@@ -178,12 +178,12 @@ int tfa9894_send_chan_sel(struct tfa_device *tfa, const char *name, int sel)
 	 * amps switch serially. Preserve the intended millisecond ramp
 	 * with high-resolution sleeping rather than removing protection.
 	 */
-	for (i = 0; i < ARRAY_SIZE(tfa9894_vol_table); i++) {
+	for (i = 0; i < ARRAY_SIZE(tfa9894_vol_table); i += 2) {
 		err = tfa_set_bf(tfa, TFA9894_BF_VOL,
 				 (uint16_t)tfa9894_vol_table[i]);
 		if (err < 0)
 			return err;
-		usleep_range(1000, 1500);
+		usleep_range(500, 800);
 	}
 
 	err = tfa98xx_set_mute(tfa, Tfa98xx_Mute_Amplifier);
@@ -205,12 +205,12 @@ int tfa9894_send_chan_sel(struct tfa_device *tfa, const char *name, int sel)
 		return err;
 
 	/* Fade the firmware volume back up. */
-	for (i = ARRAY_SIZE(tfa9894_vol_table) - 1; i >= 0; i--) {
+	for (i = ARRAY_SIZE(tfa9894_vol_table) - 1; i >= 0; i -= 2) {
 		err = tfa_set_bf(tfa, TFA9894_BF_VOL,
 				 (uint16_t)tfa9894_vol_table[i]);
 		if (err < 0)
 			return err;
-		usleep_range(1000, 1500);
+		usleep_range(500, 800);
 	}
 
 	cur_spks = tfa_get_bf(tfa, TFA9894_BF_TDMSPKS);

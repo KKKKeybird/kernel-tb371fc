@@ -2612,6 +2612,94 @@ static int msm_pcm_channel_mixer_cfg_info(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+
+/* TB371FC: per-speaker mix control used by the rotation service.
+ * Four 0..0x4000 weights give each TDM slot its R share, so a rotation is a
+ * pure gain crossfade inside the ADM matrix: no amplifier mute, no stream
+ * teardown, no audible gap.  L share is the complement. */
+static u16 tb371fc_spkrot_last[4];
+
+static int tb371fc_spkrot_info(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 4;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 0x4000;
+	return 0;
+}
+
+static int tb371fc_spkrot_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	int i;
+
+	for (i = 0; i < 4; i++)
+		ucontrol->value.integer.value[i] = tb371fc_spkrot_last[i];
+	return 0;
+}
+
+static int tb371fc_spkrot_put(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	u64 fe_id = kcontrol->private_value & 0xFF;
+	int session_type = (kcontrol->private_value >> 8) & 0xFF;
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct msm_plat_data *pdata = dev_get_drvdata(component->dev);
+	struct msm_pcm_channel_mixer *chmixer_pspd = NULL;
+	struct snd_pcm *pcm = NULL;
+	struct snd_pcm_substream *substream = NULL;
+	struct msm_audio *prtd = NULL;
+	u8 asm_ch_map[PCM_FORMAT_MAX_NUM_CHANNEL_V8] = {0};
+	int stream_id = 0, be_id = 0, i;
+
+	pcm = pdata->pcm_device[fe_id];
+	if (!pcm)
+		return -EINVAL;
+	substream = pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream;
+	if (!substream)
+		return -EINVAL;
+	chmixer_pspd = msm_pcm_get_chmixer(pdata, fe_id, session_type);
+	if (!chmixer_pspd)
+		return -EINVAL;
+
+	memset(chmixer_pspd, 0, sizeof(*chmixer_pspd));
+	chmixer_pspd->enable = 1;
+	chmixer_pspd->input_channel = 2;
+	chmixer_pspd->output_channel = 4;
+	chmixer_pspd->port_idx = MSM_BACKEND_DAI_PRI_TDM_RX_0 + 1;
+	q6asm_map_channels(asm_ch_map, 2, false);
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V8; i++)
+		chmixer_pspd->in_ch_map[i] = asm_ch_map[i];
+	q6asm_map_channels(asm_ch_map, 4, false);
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V8; i++)
+		chmixer_pspd->out_ch_map[i] = asm_ch_map[i];
+	chmixer_pspd->override_in_ch_map = true;
+	chmixer_pspd->override_out_ch_map = true;
+
+	mutex_lock(&pdata->lock);
+	for (i = 0; i < 4; i++) {
+		long right = ucontrol->value.integer.value[i];
+		if (right < 0)
+			right = 0;
+		if (right > 0x4000)
+			right = 0x4000;
+		chmixer_pspd->channel_weight[i][0] = 0x4000 - (uint16_t)right;
+		chmixer_pspd->channel_weight[i][1] = (uint16_t)right;
+		tb371fc_spkrot_last[i] = (u16)right;
+	}
+	msm_pcm_routing_set_channel_mixer_cfg(fe_id, session_type, chmixer_pspd);
+	prtd = substream->runtime ? substream->runtime->private_data : NULL;
+	if (prtd && prtd->audio_client) {
+		stream_id = prtd->audio_client->session;
+		be_id = chmixer_pspd->port_idx;
+		msm_pcm_routing_set_channel_mixer_runtime(be_id, stream_id,
+				session_type, chmixer_pspd);
+	}
+	mutex_unlock(&pdata->lock);
+	return 0;
+}
+
 static int msm_pcm_add_channel_mixer_cfg_controls(
 		struct snd_soc_pcm_runtime *rtd)
 {
@@ -2649,6 +2737,21 @@ static int msm_pcm_add_channel_mixer_cfg_controls(
 				rtd, playback_mixer_ctl_name, suffix, session_type, channel);
 		if (ret < 0)
 			goto fail;
+		{
+			struct snd_kcontrol_new spkrot_control = {
+				.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+				.name = "?",
+				.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+				.info = tb371fc_spkrot_info,
+				.put = tb371fc_spkrot_put,
+				.get = tb371fc_spkrot_get,
+				.private_value = 0,
+			};
+			ret = msm_pcm_add_platform_controls(&spkrot_control,
+					rtd, "SpkRot", "Mix", session_type, channel);
+			if (ret < 0)
+				goto fail;
+		}
 	}
 
 	if (pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream != NULL) {
