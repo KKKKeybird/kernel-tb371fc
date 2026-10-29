@@ -2700,6 +2700,41 @@ static int tb371fc_spkrot_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/* Global logical-position matrix; unlike the legacy per-FE L/R control,
+ * this updates all ordinary and NOIRQ speaker sessions through routing. */
+static int tb371fc_matrix_info(struct snd_kcontrol *kcontrol,
+ struct snd_ctl_elem_info *uinfo)
+{
+ uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+ uinfo->count = 16;
+ uinfo->value.integer.min = 0;
+ uinfo->value.integer.max = 0x4000;
+ return 0;
+}
+static int tb371fc_matrix_get(struct snd_kcontrol *kcontrol,
+ struct snd_ctl_elem_value *ucontrol)
+{
+ u16 matrix[16];
+ int i;
+ msm_pcm_routing_get_speaker_matrix(matrix);
+ for (i = 0; i < 16; i++)
+  ucontrol->value.integer.value[i] = matrix[i];
+ return 0;
+}
+static int tb371fc_matrix_put(struct snd_kcontrol *kcontrol,
+ struct snd_ctl_elem_value *ucontrol)
+{
+ u16 matrix[16];
+ int i;
+ for (i = 0; i < 16; i++) {
+  long weight = ucontrol->value.integer.value[i];
+  if (weight < 0 || weight > 0x4000)
+   return -EINVAL;
+  matrix[i] = weight;
+ }
+ return msm_pcm_routing_set_speaker_matrix(matrix);
+}
+
 static int msm_pcm_add_channel_mixer_cfg_controls(
 		struct snd_soc_pcm_runtime *rtd)
 {
@@ -2751,6 +2786,15 @@ static int msm_pcm_add_channel_mixer_cfg_controls(
 					rtd, "SpkRot", "Mix", session_type, channel);
 			if (ret < 0)
 				goto fail;
+			if (rtd->pcm->device == 0) {
+				spkrot_control.info = tb371fc_matrix_info;
+				spkrot_control.get = tb371fc_matrix_get;
+				spkrot_control.put = tb371fc_matrix_put;
+				ret = msm_pcm_add_platform_controls(&spkrot_control,
+					rtd, "SpkRot", "Matrix", session_type, channel);
+				if (ret < 0)
+					goto fail;
+			}
 		}
 	}
 

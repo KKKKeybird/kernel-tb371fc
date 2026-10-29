@@ -647,6 +647,8 @@ int msm_pcm_routing_get_pp_ch_cnt(int fe_id, int session_type);
 
 /* Fixed speaker TDM4; all non-speaker backends retain their own maps. */
 void msm_pcm_routing_config_speaker_quad(int fe_id, int channels);
+void msm_pcm_routing_get_speaker_matrix(u16 *matrix);
+int msm_pcm_routing_set_speaker_matrix(const u16 *matrix);
 
 int msm_pcm_routing_set_channel_mixer_cfg(
 	int fe_id, int session_type,
