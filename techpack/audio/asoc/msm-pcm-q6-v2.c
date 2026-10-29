@@ -416,9 +416,8 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 			prtd->audio_client->session);
 	prtd->session_id = prtd->audio_client->session;
 
-	if (!prtd->compress_enable)
-		msm_pcm_routing_config_speaker_quad(soc_prtd->dai_link->id,
-						runtime->channels);
+	msm_pcm_routing_config_speaker_quad(soc_prtd->dai_link->id,
+			prtd->compress_enable ? 0 : runtime->channels);
 
 	if (prtd->compress_enable) {
 		ret = msm_pcm_routing_reg_phy_compr_stream(
