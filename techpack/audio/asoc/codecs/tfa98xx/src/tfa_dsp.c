@@ -3057,8 +3057,7 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa, int next_profile, int vstep
 
 			if ((sel != -1) && ((tfa->rev & 0xff) == 0x94) &&
 			    (profile_name != NULL) &&
-			    ((strstr(profile_name, "nonRotation") == NULL) ||
-			     tfa9894_get_stereo_slots())) {
+			    (strstr(profile_name, "nonRotation") == NULL)) {
 				if (tfa9894_get_target_chan_sel(sel, tfa->dev_idx,
 								&spks, &dcs) == 0)
 					tfa9894_change_chan_sel(tfa, spks, dcs);
@@ -3131,17 +3130,17 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa, int next_profile, int vstep
 
 error_exit:
 	/* Container profile/default writes above may restore the stock slots.
-	 * In explicit stereo-transport mode, finish startup with the selected
-	 * stereo pair. Keep call/nonRotation profiles and the stock mode intact.
+	 * Finish every successful startup with the selected route after profile
+	 * writes, including warm starts. Keep call/nonRotation profiles intact.
 	 */
-	if (err == Tfa98xx_Error_Ok && tfa9894_get_stereo_slots() && ((tfa->rev & 0xff) == 0x94)) {
+	if (err == Tfa98xx_Error_Ok && ((tfa->rev & 0xff) == 0x94)) {
 		int sel = tfa9894_get_store_chan_sel();
 		int spks, dcs;
 		char *name = tfaContProfileName(tfa->cnt, tfa->dev_idx,
 						 next_profile);
 
 		if (sel >= 0 && name &&
-		    (!strstr(name, "nonRotation") || tfa9894_get_stereo_slots()) &&
+		    !strstr(name, "nonRotation") &&
 		    !tfa9894_get_target_chan_sel(sel, tfa->dev_idx,
 						 &spks, &dcs) &&
 		    (tfa_get_bf(tfa, TFA9894_BF_TDMSPKS) != spks ||

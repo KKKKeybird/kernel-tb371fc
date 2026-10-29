@@ -271,8 +271,7 @@ static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 			tfaContProfileName(first->tfa->cnt, first->tfa->dev_idx,
 					   first->profile) : NULL;
 
-		if (pname != NULL && strstr(pname, "nonRotation") != NULL &&
-		    !tfa9894_get_stereo_slots()) {
+		if (pname != NULL && strstr(pname, "nonRotation") != NULL) {
 			pr_debug("p269: control disabled during a call (%s)\n", pname);
 			mutex_unlock(&tfa98xx_mutex);
 			return 0;

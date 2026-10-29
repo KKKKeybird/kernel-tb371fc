@@ -38,24 +38,24 @@ static const int tfa9894_chan_sel_map[4][4][2] = {
 	},
 };
 
-/* Two-slot channel map: every amplifier picks the L (slot 0) or the R
- * (slot 1) sample, two amplifiers per channel.  This mirrors what the
- * container profiles already do by default, so it never asks for slots that
- * the two-channel transport does not provide.  Indexed [angle][dev_idx].
- * Measured corner order on TB371FC: dev0 right-up, dev1 left-down,
- * dev2 left-up, dev3 right-down. */
+/* Stereo map calibrated by active-register and acoustic tests.
+ * Container order is I2C 0x34,0x37,0x36,0x35 (not address order).
+ * The container selects sink0 on devices 0/2 and sink1 on devices 1/3.
+ * Thus (TDMSPKS,TDMDCS) is NOT simply (speaker,companion) on every amp.
+ * Camera-up landscape baseline: left devices 0/2, right devices 1/3.
+ */
 static const int tfa9894_stereo_map[4][4][2] = {
-	{   /* selector 0: 0 deg, user's left = left column */
+	{ /* camera-up: L = left column; all register 0x23 = 0x0410 */
+		{ 0, 1 }, { 0, 1 }, { 0, 1 }, { 0, 1 },
+	},
+	{ /* clockwise 90: L = original bottom row */
 		{ 1, 0 }, { 0, 1 }, { 0, 1 }, { 1, 0 },
 	},
-	{   /* selector 1: 90 deg, user's left = bottom row */
-		{ 1, 0 }, { 0, 1 }, { 1, 0 }, { 0, 1 },
+	{ /* 180: L = original right column */
+		{ 1, 0 }, { 1, 0 }, { 1, 0 }, { 1, 0 },
 	},
-	{   /* selector 2: 180 deg */
+	{ /* clockwise 270: L = original top row */
 		{ 0, 1 }, { 1, 0 }, { 1, 0 }, { 0, 1 },
-	},
-	{   /* selector 3: 270 deg, user's left = top row */
-		{ 0, 1 }, { 1, 0 }, { 0, 1 }, { 1, 0 },
 	},
 };
 
