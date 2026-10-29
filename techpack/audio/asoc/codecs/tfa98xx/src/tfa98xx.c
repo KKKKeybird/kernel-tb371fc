@@ -26,6 +26,8 @@
 #include <sound/soc.h>
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
+#include <linux/workqueue.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
 #include <linux/debugfs.h>
@@ -233,12 +235,44 @@ static int tfa9894_get_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+
+/* The four amplifiers are independent parts on the same I2C bus; running
+ * their mute/powerdown/retune/fade sequences one after another multiplied the
+ * audible gap by four.  Dispatch them to the workqueue and wait, so the whole
+ * selector switch costs one device sequence instead of four. */
+#define TFA9894_MAX_DEVS 4
+
+struct tfa9894_sel_job {
+	struct tfa98xx *tfa98xx;
+	int sel;
+	int changed;
+	struct work_struct work;
+	struct completion done;
+};
+
+static struct tfa9894_sel_job tfa9894_sel_jobs[TFA9894_MAX_DEVS];
+static DEFINE_MUTEX(tfa9894_sel_lock);
+
+static void tfa9894_sel_job_fn(struct work_struct *work)
+{
+	struct tfa9894_sel_job *job =
+		container_of(work, struct tfa9894_sel_job, work);
+	int ready = 0;
+
+	mutex_lock(&job->tfa98xx->dsp_lock);
+	tfa98xx_dsp_system_stable(job->tfa98xx->tfa, &ready);
+	if (ready && tfa9894_send_chan_sel(job->tfa98xx->tfa,
+			job->tfa98xx->i2c->name, job->sel) == 0)
+		job->changed = 1;
+	mutex_unlock(&job->tfa98xx->dsp_lock);
+	complete(&job->done);
+}
+
 static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
 	struct tfa98xx *tfa98xx;
 	long value = ucontrol->value.integer.value[0];
-	int ready = 0;
 	int change = 0;
 	int count = 0;
 	int rev_ok = 0;
@@ -295,21 +329,32 @@ static int tfa9894_set_chan_sel_ctl(struct snd_kcontrol *kcontrol,
 	 * after a successful send would lose the angle in that case. */
 	tfa9894_set_store_chan_sel((int)value);
 
-	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
-		ready = 0;
-		mutex_lock(&tfa98xx->dsp_lock);
-		tfa98xx_dsp_system_stable(tfa98xx->tfa, &ready);
-		if (!ready) {
-			mutex_unlock(&tfa98xx->dsp_lock);
-			continue;
-		}
-		if (tfa9894_send_chan_sel(tfa98xx->tfa,
-					  tfa98xx->i2c->name, (int)value) == 0)
-			change = 1;
-		mutex_unlock(&tfa98xx->dsp_lock);
-	}
+	mutex_lock(&tfa9894_sel_lock);
+	{
+		int i, n = 0;
 
-	mutex_unlock(&tfa98xx_mutex);
+		list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+			if (n >= TFA9894_MAX_DEVS)
+				break;
+			memset(&tfa9894_sel_jobs[n], 0,
+			       sizeof(tfa9894_sel_jobs[n]));
+			tfa9894_sel_jobs[n].tfa98xx = tfa98xx;
+			tfa9894_sel_jobs[n].sel = (int)value;
+			init_completion(&tfa9894_sel_jobs[n].done);
+			INIT_WORK(&tfa9894_sel_jobs[n].work, tfa9894_sel_job_fn);
+			schedule_work(&tfa9894_sel_jobs[n].work);
+			n++;
+		}
+
+		mutex_unlock(&tfa98xx_mutex);
+
+		for (i = 0; i < n; i++) {
+			wait_for_completion(&tfa9894_sel_jobs[i].done);
+			if (tfa9894_sel_jobs[i].changed)
+				change = 1;
+		}
+	}
+	mutex_unlock(&tfa9894_sel_lock);
 
 	return change;
 }
