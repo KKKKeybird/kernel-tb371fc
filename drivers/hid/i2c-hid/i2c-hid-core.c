@@ -91,11 +91,9 @@ do {									  \
 } while (0)
 
 static int kb_connect = 0;
-/* TASK-081 D86 (Round3 audit M3): stock keyboard soft power key.
- * Stock keeps a dedicated input_dev at 0xa4f8118 and injects KEY_POWER from
- * i2c_hid_irq when a 0x06 status frame reports online==1 outside of the
- * resume path (stock 0xffffff8008cb3c58-d8: ctx+4 = inbuf[3] bit0,
- * resume flag 0xa4f8168 gate, then bl kb_report_power_key). */
+/* Dedicated keyboard input for actual special-key frames. Status frames
+ * are state/command acknowledgements and must never synthesize a power key.
+ */
 static struct input_dev *kb_input_dev;
 /* TASK-081 D91: stock keyboard sysfs layout (Round3 audit M3 closure).
  * Stock creat_kb_status_node (0x8cb1aa8) does kobject_create_and_add
@@ -106,7 +104,6 @@ static struct input_dev *kb_input_dev;
  * The inbuf[3] hall bit1 feeds ctx+8 in stock i2c_hid_irq
  * (0x8cb3c58-90). */
 static struct kobject *kb_status_kobj;
-static int kb_report_power_key(void);
 static int report_special_key(int key, int value);
 struct i2c_hid;
 static bool handle_special_key_frame(struct i2c_hid *ihid);
@@ -737,12 +734,13 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 			device_keyboard->online = ihid->inbuf[3] & 0x01;
 			device_keyboard->hall = (ihid->inbuf[3] >> 1) & 0x01;
 		}
-		/* stock i2c_hid_irq 0xffffff8008cb3cdc-d8: inject the soft power
-		 * key when the frame reports online==1 and g_screen_on==0. */
-		if (kb_connect == 1 && !g_screen_on) {
-			printk("hid-keyboard,%s,kb_report_power_key\n", __func__);
-			kb_report_power_key();
-		}
+		/* 0x06 reports keyboard presence/hall state, including replies to
+		 * resume commands. Repeated online replies are not user input:
+		 * a non-display wake (network/thermal/RTC) must not turn into
+		 * KEY_POWER and light the panel while the cover remains closed.
+		 * Lid wake/sleep is handled by the hall path; explicit key
+		 * reports continue through the unchanged 0x07/HID paths below.
+		 */
 		/* stock 0x8cb3d6c..0x8cb3da8: manage hidinput registration
 		 * only for 0x06 status frames, from device_keyboard->status
 		 * and online, not from a PID-specific global. */
@@ -1462,26 +1460,6 @@ static int register_kb_wakeup_devices(void)
 		return -1;
 	}
 	return 0;
-}
-
-/* stock kb_report_power_key @0xffffff8008cb1828: log; if the input device
- * is not registered log and return -1; otherwise report KEY_POWER press +
- * sync + release + sync and return 0. */
-static int kb_report_power_key(void)
-{
-	int ret;
-
-	printk(KERN_ERR "===%s===\n", __func__);
-	if (!kb_input_dev) {
-		printk(KERN_ERR "kb_input_dev is NULL");
-		return -1;
-	}
-	input_report_key(kb_input_dev, KEY_POWER, 1);
-	input_sync(kb_input_dev);
-	input_report_key(kb_input_dev, KEY_POWER, 0);
-	input_sync(kb_input_dev);
-	ret = 0;
-	return ret;
 }
 
 /* stock report_special_key @0xffffff8008cb1a18: log, require the wakeup
