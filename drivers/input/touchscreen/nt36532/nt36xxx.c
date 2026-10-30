@@ -4991,6 +4991,8 @@ void nvt_mp_proc_deinit(void)
 /* ---- nvt_ts_probe ---- */
 
 
+#include "nvt_xiaomi_touch.h"
+
 static int nvt_ts_probe(struct spi_device *client)
 {
 	struct nvt_ts_data *ts;
@@ -5429,6 +5431,7 @@ static int nvt_ts_probe(struct spi_device *client)
 		struct irq_desc *d = irq_to_desc(ts->irq);
 		pr_err("[%s] %s %d: enable=%d, desc->depth=%d\n", "NVT-ts", "nvt_irq_enable", 230, 1, d ? d->depth : -1);
 	}
+	nvt_xiaomi_register();
 	return 0;
 
 err_mp_proc:
@@ -5479,6 +5482,7 @@ err_extra_proc:
  */
 static int nvt_ts_remove(struct spi_device *client)
 {
+	nvt_xiaomi_unregister();
 	pr_err("[%s] %s %d: ++\n", "NVT-ts", "nvt_ts_remove", 2907);
 	if (active_panel && nvt_panel_notifier_registered) {
 		if (drm_panel_notifier_unregister(active_panel, &nvt_ts->drm_nb))
@@ -5527,6 +5531,7 @@ static int nvt_ts_remove(struct spi_device *client)
 /* ---- nvt_ts_shutdown (stock @0xffffff8008adb5a0, TASK-081) ---- */
 static void nvt_ts_shutdown(struct spi_device *client)
 {
+	nvt_xiaomi_unregister();
 	pr_err("[%s] %s %d: Shutdown driver...\n",
 		"NVT-ts", "nvt_ts_shutdown", 2994);
 	if (nvt_ts->irq_enabled)
