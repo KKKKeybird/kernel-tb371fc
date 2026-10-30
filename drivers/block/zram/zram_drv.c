@@ -16,6 +16,7 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
+#include <linux/sched/signal.h>
 #include <linux/kernel.h>
 #include <linux/bio.h>
 #include <linux/bitops.h>
@@ -109,7 +110,30 @@ static void zram_clear_flag(struct zram *zram, u32 index,
 			enum zram_pageflags flag)
 {
 	zram->table[index].flags &= ~BIT(flag);
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+	if (flag == ZRAM_IDLE)
+		zram->table[index].flags &= ~ZRAM_IDLE_AGE_MASK;
+#endif
 }
+
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+/* The caller holds the entry bit lock, as for all other flag operations. */
+static unsigned int zram_idle_age(struct zram *zram, u32 index)
+{
+	return (zram->table[index].flags & ZRAM_IDLE_AGE_MASK) >>
+		ZRAM_IDLE_AGE_SHIFT;
+}
+
+static void zram_age_idle(struct zram *zram, u32 index)
+{
+	unsigned int age = min(zram_idle_age(zram, index) + 1,
+			       (unsigned int)ZRAM_IDLE_MAX_AGE);
+
+	BUILD_BUG_ON(ZRAM_IDLE_AGE_SHIFT + 4 > BITS_PER_LONG);
+	zram->table[index].flags &= ~ZRAM_IDLE_AGE_MASK;
+	zram->table[index].flags |= (unsigned long)age << ZRAM_IDLE_AGE_SHIFT;
+}
+#endif
 
 static inline void zram_set_element(struct zram *zram, u32 index,
 			unsigned long element)
@@ -289,8 +313,7 @@ static ssize_t idle_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
-	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
-	int index;
+	unsigned long nr_pages, index;
 	char mode_buf[8];
 	ssize_t sz;
 
@@ -311,6 +334,7 @@ static ssize_t idle_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	nr_pages = zram->disksize >> PAGE_SHIFT;
 	for (index = 0; index < nr_pages; index++) {
 		/*
 		 * Do not mark ZRAM_UNDER_WB slot as ZRAM_IDLE to close race.
@@ -318,15 +342,59 @@ static ssize_t idle_store(struct device *dev,
 		 */
 		zram_slot_lock(zram, index);
 		if (zram_allocated(zram, index) &&
-				!zram_test_flag(zram, index, ZRAM_UNDER_WB))
+				!zram_test_flag(zram, index, ZRAM_UNDER_WB)) {
 			zram_set_flag(zram, index, ZRAM_IDLE);
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+			if (!zram_test_flag(zram, index, ZRAM_WB) &&
+			    !zram_test_flag(zram, index, ZRAM_SAME))
+				zram_age_idle(zram, index);
+#endif
+		}
 		zram_slot_unlock(zram, index);
+		if (!(index & 1023))
+			cond_resched();
 	}
 
 	up_read(&zram->init_lock);
 
 	return len;
 }
+
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+static ssize_t idle_stat_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct zram *zram = dev_to_zram(dev);
+	unsigned long counts[ZRAM_IDLE_MAX_AGE] = { 0 };
+	unsigned long index, nr_pages;
+	unsigned int age, i;
+	ssize_t len = 0;
+
+	down_read(&zram->init_lock);
+	if (!init_done(zram)) {
+		up_read(&zram->init_lock);
+		return -EINVAL;
+	}
+	nr_pages = zram->disksize >> PAGE_SHIFT;
+	for (index = 0; index < nr_pages; index++) {
+		zram_slot_lock(zram, index);
+		age = zram_idle_age(zram, index);
+		if (age && age <= ZRAM_IDLE_MAX_AGE && zram_allocated(zram, index) &&
+		    !zram_test_flag(zram, index, ZRAM_WB) &&
+		    !zram_test_flag(zram, index, ZRAM_SAME) &&
+		    !zram_test_flag(zram, index, ZRAM_UNDER_WB))
+			counts[age - 1]++;
+		zram_slot_unlock(zram, index);
+		if (!(index & 1023))
+			cond_resched();
+	}
+	up_read(&zram->init_lock);
+	for (i = 0; i < ZRAM_IDLE_MAX_AGE; i++)
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%lu%c", counts[i],
+				i == ZRAM_IDLE_MAX_AGE - 1 ? '\n' : ' ');
+	return len;
+}
+#endif
 
 #ifdef CONFIG_ZRAM_WRITEBACK
 static ssize_t writeback_limit_enable_store(struct device *dev,
@@ -627,36 +695,46 @@ static int read_from_bdev_async(struct zram *zram, struct bio_vec *bvec,
 
 #define HUGE_WRITEBACK 1
 #define IDLE_WRITEBACK 2
+#define IDLE_LIMITED_WRITEBACK 3
+
+static int zram_parse_writeback(const char *buf, unsigned long *max_pages,
+			      unsigned int *min_age)
+{
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+	char extra;
+#endif
+	*max_pages = ~0UL;
+	*min_age = 1;
+	if (sysfs_streq(buf, "idle"))
+		return IDLE_WRITEBACK;
+	if (sysfs_streq(buf, "huge"))
+		return HUGE_WRITEBACK;
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+	if (!strchr(buf, '-') &&
+	    sscanf(buf, "idle %lu %u %c", max_pages, min_age, &extra) == 2 &&
+	    *max_pages && *min_age >= 1 && *min_age <= ZRAM_IDLE_MAX_AGE)
+		return IDLE_LIMITED_WRITEBACK;
+#endif
+	return -EINVAL;
+}
 
 static ssize_t writeback_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
-	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
+	unsigned long nr_pages, max_pages, written = 0;
+	unsigned int min_age;
 	unsigned long index;
 	struct bio bio;
 	struct bio_vec bio_vec;
 	struct page *page;
-	ssize_t ret, sz;
-	char mode_buf[8];
-	int mode = -1;
+	ssize_t ret;
+	int mode;
 	unsigned long blk_idx = 0;
 
-	sz = strscpy(mode_buf, buf, sizeof(mode_buf));
-	if (sz <= 0)
-		return -EINVAL;
-
-	/* ignore trailing newline */
-	if (mode_buf[sz - 1] == '\n')
-		mode_buf[sz - 1] = 0x00;
-
-	if (!strcmp(mode_buf, "idle"))
-		mode = IDLE_WRITEBACK;
-	else if (!strcmp(mode_buf, "huge"))
-		mode = HUGE_WRITEBACK;
-
-	if (mode == -1)
-		return -EINVAL;
+	mode = zram_parse_writeback(buf, &max_pages, &min_age);
+	if (mode < 0)
+		return mode;
 
 	down_read(&zram->init_lock);
 	if (!init_done(zram)) {
@@ -668,6 +746,11 @@ static ssize_t writeback_store(struct device *dev,
 		ret = -ENODEV;
 		goto release_init_lock;
 	}
+	nr_pages = zram->disksize >> PAGE_SHIFT;
+	if (mode == IDLE_LIMITED_WRITEBACK && max_pages > nr_pages) {
+		ret = -EINVAL;
+		goto release_init_lock;
+	}
 
 	page = alloc_page(GFP_KERNEL);
 	if (!page) {
@@ -675,8 +758,19 @@ static ssize_t writeback_store(struct device *dev,
 		goto release_init_lock;
 	}
 
+	ret = len;
 	for (index = 0; index < nr_pages; index++) {
 		struct bio_vec bvec;
+
+		if (written >= max_pages)
+			break;
+		/* Native vold cancels its flush child with SIGUSR1. */
+		if (signal_pending(current)) {
+			ret = -EINTR;
+			break;
+		}
+		if (!(index & 1023))
+			cond_resched();
 
 		bvec.bv_page = page;
 		bvec.bv_len = PAGE_SIZE;
@@ -685,7 +779,7 @@ static ssize_t writeback_store(struct device *dev,
 		spin_lock(&zram->wb_limit_lock);
 		if (zram->wb_limit_enable && !zram->bd_wb_limit) {
 			spin_unlock(&zram->wb_limit_lock);
-			ret = -EIO;
+			ret = -EDQUOT;
 			break;
 		}
 		spin_unlock(&zram->wb_limit_lock);
@@ -707,9 +801,14 @@ static ssize_t writeback_store(struct device *dev,
 				zram_test_flag(zram, index, ZRAM_UNDER_WB))
 			goto next;
 
-		if (mode == IDLE_WRITEBACK &&
+		if ((mode == IDLE_WRITEBACK || mode == IDLE_LIMITED_WRITEBACK) &&
 			  !zram_test_flag(zram, index, ZRAM_IDLE))
 			goto next;
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+		if (mode == IDLE_LIMITED_WRITEBACK &&
+		    zram_idle_age(zram, index) < min_age)
+			goto next;
+#endif
 		if (mode == HUGE_WRITEBACK &&
 			  !zram_test_flag(zram, index, ZRAM_HUGE))
 			goto next;
@@ -721,12 +820,13 @@ static ssize_t writeback_store(struct device *dev,
 		/* Need for hugepage writeback racing */
 		zram_set_flag(zram, index, ZRAM_IDLE);
 		zram_slot_unlock(zram, index);
-		if (zram_bvec_read(zram, &bvec, index, 0, NULL)) {
+		ret = zram_bvec_read(zram, &bvec, index, 0, NULL);
+		if (ret) {
 			zram_slot_lock(zram, index);
 			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
 			zram_clear_flag(zram, index, ZRAM_IDLE);
 			zram_slot_unlock(zram, index);
-			continue;
+			break;
 		}
 
 		bio_init(&bio, &bio_vec, 1);
@@ -746,10 +846,16 @@ static ssize_t writeback_store(struct device *dev,
 			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
 			zram_clear_flag(zram, index, ZRAM_IDLE);
 			zram_slot_unlock(zram, index);
-			continue;
+			break;
 		}
 
 		atomic64_inc(&zram->stats.bd_writes);
+		written++;
+		/* Charge physical writes, including pages invalidated during I/O. */
+		spin_lock(&zram->wb_limit_lock);
+		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
+			zram->bd_wb_limit -= 1UL << (PAGE_SHIFT - 12);
+		spin_unlock(&zram->wb_limit_lock);
 		/*
 		 * We released zram_slot_lock so need to check if the slot was
 		 * changed. If there is freeing for the slot, we can catch it
@@ -773,17 +879,14 @@ static ssize_t writeback_store(struct device *dev,
 		zram_set_element(zram, index, blk_idx);
 		blk_idx = 0;
 		atomic64_inc(&zram->stats.pages_stored);
-		spin_lock(&zram->wb_limit_lock);
-		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
-			zram->bd_wb_limit -=  1UL << (PAGE_SHIFT - 12);
-		spin_unlock(&zram->wb_limit_lock);
 next:
 		zram_slot_unlock(zram, index);
 	}
 
 	if (blk_idx)
 		free_block_bdev(zram, blk_idx);
-	ret = len;
+	if (!ret)
+		ret = len;
 	__free_page(page);
 release_init_lock:
 	up_read(&zram->init_lock);
@@ -1954,6 +2057,9 @@ static DEVICE_ATTR_WO(reset);
 static DEVICE_ATTR_WO(mem_limit);
 static DEVICE_ATTR_WO(mem_used_max);
 static DEVICE_ATTR_WO(idle);
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+static DEVICE_ATTR_RO(idle_stat);
+#endif
 static DEVICE_ATTR_RW(max_comp_streams);
 static DEVICE_ATTR_RW(comp_algorithm);
 #ifdef CONFIG_ZRAM_WRITEBACK
@@ -1976,6 +2082,9 @@ static struct attribute *zram_disk_attrs[] = {
 	&dev_attr_mem_limit.attr,
 	&dev_attr_mem_used_max.attr,
 	&dev_attr_idle.attr,
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+	&dev_attr_idle_stat.attr,
+#endif
 	&dev_attr_max_comp_streams.attr,
 	&dev_attr_comp_algorithm.attr,
 #ifdef CONFIG_ZRAM_WRITEBACK

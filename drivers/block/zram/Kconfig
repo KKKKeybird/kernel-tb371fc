@@ -44,6 +44,17 @@ config ZRAM_WRITEBACK
 
 	 See Documentation/blockdev/zram.txt for more information.
 
+config ZRAM_XIAOMI_EXTM
+	bool "Xiaomi ExtendM graded idle and bounded writeback ABI"
+	depends on ZRAM_WRITEBACK && 64BIT
+	default n
+	help
+	  Provide idle_stat with ten cold-page age buckets and accept
+	  "idle <pages> <minimum age>" from Xiaomi's native vold service.
+	  Each idle=all pass ages untouched RAM pages; accessing or freeing
+	  a page resets its age. Existing idle/huge writeback remains valid.
+	  The age uses spare flag bits without increasing per-slot memory.
+
 config ZRAM_MEMORY_TRACKING
 	bool "Track zRam block status"
 	depends on ZRAM && DEBUG_FS

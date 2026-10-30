@@ -56,6 +56,13 @@ enum zram_pageflags {
 	__NR_ZRAM_PAGEFLAGS,
 };
 
+#ifdef CONFIG_ZRAM_XIAOMI_EXTM
+/* Entry flags are unsigned long; Kconfig restricts this ABI to 64-bit. */
+#define ZRAM_IDLE_AGE_SHIFT __NR_ZRAM_PAGEFLAGS
+#define ZRAM_IDLE_AGE_MASK (0xfUL << ZRAM_IDLE_AGE_SHIFT)
+#define ZRAM_IDLE_MAX_AGE 10
+#endif
+
 /*-- Data structures */
 
 struct zram_entry {
