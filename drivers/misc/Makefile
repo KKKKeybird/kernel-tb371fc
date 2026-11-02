@@ -83,3 +83,4 @@ obj-$(CONFIG_KINECTICS_XR_NORDIC) += kxrctrl/
 obj-$(CONFIG_HQHARDWARE_INFO) += huaqinhardware_info/
 obj-$(CONFIG_HQ_SYSFS_SUPPORT) += hqsysfs/
 obj-$(CONFIG_NTSYNC)		+= ntsync.o
+obj-$(CONFIG_MI_ASAP)		+= mi_asap.o

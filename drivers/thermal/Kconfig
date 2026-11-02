@@ -520,4 +520,14 @@ config UNIPHIER_THERMAL
 	  Enable this to plug in UniPhier on-chip PVT thermal driver into the
 	  thermal framework. The driver supports CPU thermal zone temperature
 	  reporting and a couple of trip points.
+config THERMAL_MESSAGE
+	bool "Xiaomi thermal_message sysfs shim"
+	depends on THERMAL
+	default n
+	help
+	  Create /sys/class/thermal/thermal_message with board_sensor_temp,
+	  board_temp and sconfig attributes.  Xiaomi userspace expects this
+	  interface on MIUI/HyperOS kernels; provide it on ported ROMs.
+
+
 endif
