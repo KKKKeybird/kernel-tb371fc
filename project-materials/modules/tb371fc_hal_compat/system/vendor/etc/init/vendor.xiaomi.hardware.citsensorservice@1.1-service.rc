@@ -1,0 +1,8 @@
+# Disabled by xiaoxin_padpro127_870_combo_fix.
+# The current hardware lacks the related Hall/CIT sensor path, so the stock
+# service loops on get_ssc_sensor_list failures.
+service citsensor-hal-1-1 /vendor/bin/hw/vendor.xiaomi.hardware.citsensorservice@1.1-service
+    class late_start
+    user system
+    group system input
+    disabled

@@ -1,0 +1,6 @@
+id=tb371fc_vintf_sysvipc
+name=TB371FC SYSVIPC VINTF Compatibility
+version=1.1
+versionCode=11
+author=TB371FC maintainers
+description=Remove only SYSVIPC=n from current ROM framework matrices for the container-enabled kernel.

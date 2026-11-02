@@ -1,0 +1,7 @@
+# Disabled by xiaoxin_padpro127_870_combo_fix.
+# The stock service repeatedly crashes when mfido.mdt is absent.
+service vendor.mfidoca /vendor/bin/fidoca
+    class hal
+    user system
+    group system
+    disabled

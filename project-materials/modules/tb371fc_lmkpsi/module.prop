@@ -1,0 +1,6 @@
+id=tb371fc_lmkpsi
+name=TB371FC LMKD PSI Mode
+version=0.1-psi
+versionCode=1
+author=TB371FC maintainers
+description=Enable PSI-based lmkd instead of legacy minfree levels, so memory reclaim reacts to real stalls (works with zram writeback) instead of only at the cliff.

@@ -1,0 +1,6 @@
+id=tb371fc_host_permissive_guard
+name=TB371FC Host Permissive Guard
+version=1.0
+versionCode=1
+author=TB371FC maintainers
+description=Keeps this HyperOS port Permissive across Droidspaces backend updates by protecting the host enforce path. No container-specific changes.

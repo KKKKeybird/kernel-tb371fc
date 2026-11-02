@@ -1,0 +1,6 @@
+id=tb371fc_pen_init
+name=TB371FC HyperOS 3 Pen Init Fix
+version=0.1
+versionCode=1
+author=TB371FC maintainers
+description=Initialize the stock Novatek pen interface with explicit enable=1, version=0. Tested pen-tip, pressure and tilt input. Bluetooth pairing is separate.

@@ -1,0 +1,2 @@
+# Native SmartPower default-mode ceiling; no minimum refresh cap.
+persist.sys.smartpower.limit.max.refresh.rate=120

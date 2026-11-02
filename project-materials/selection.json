@@ -1,0 +1,704 @@
+{
+  "module_ids": [
+    "tb371fc_audio_compat",
+    "tb371fc_bluetooth_compat",
+    "tb371fc_bluetooth_native_hid",
+    "tb371fc_extm_compat",
+    "tb371fc_finddevice_off",
+    "tb371fc_hal_compat",
+    "tb371fc_hall_cover",
+    "tb371fc_host_permissive_guard",
+    "tb371fc_keyboard_hotplug",
+    "tb371fc_lmkpsi",
+    "tb371fc_media_compat",
+    "tb371fc_mtd_off",
+    "tb371fc_pc_wps",
+    "tb371fc_pen_bridge",
+    "tb371fc_pen_init",
+    "tb371fc_perfconfig",
+    "tb371fc_perfprops",
+    "tb371fc_refresh_compat",
+    "tb371fc_scene",
+    "tb371fc_service_compat",
+    "tb371fc_speaker_rotation",
+    "tb371fc_touchfeature_compat",
+    "tb371fc_uclamp",
+    "tb371fc_vintf_sysvipc",
+    "tb371fc_vmtune",
+    "tb371fc_zui_color"
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "7c038a59a382163dc4cc23f12544043dd809dfa458b8c8d79d7bff3c3334bae5"
+    },
+    {
+      "path": "docs/FEATURES.md",
+      "sha256": "a203b2bffcb673d792cd2bf931c02cb354a626b97dd27a3c4f5c51e11e87d564"
+    },
+    {
+      "path": "docs/ROM-INTEGRATION.md",
+      "sha256": "7682e27bc583de9b24ec18dd0a6647df4a94f614e0e4d3c17c0c6ad5b3556135"
+    },
+    {
+      "path": "docs/SANITIZATION.md",
+      "sha256": "b8e5396e046a59df0dd9262d757a3e022c85698a2a3e2a7e23e63f7bae7c2c01"
+    },
+    {
+      "path": "kernel/README.md",
+      "sha256": "b75ea7a55cac4e87162ecaba93f57f5fa046eb55a4ca691a639d6e43be731bfc"
+    },
+    {
+      "path": "modules/tb371fc_audio_compat/customize.sh",
+      "sha256": "a76d21e76f0492b52d3d04d265276f78971a0c5c47e40a514f43f258900d41c9"
+    },
+    {
+      "path": "modules/tb371fc_audio_compat/module.prop",
+      "sha256": "81e7eea8d5a0700626ae663c2a7d274c87c55cf82818ff63fd789e49683b8985"
+    },
+    {
+      "path": "modules/tb371fc_audio_compat/post-fs-data.sh",
+      "sha256": "8f67fe05eef32bf4c25686e1aed6f89dd6f5385d0da8a4b7c455ad983e0f9ef6"
+    },
+    {
+      "path": "modules/tb371fc_audio_compat/system/vendor/etc/audio_policy_configuration.xml",
+      "sha256": "d9ed37373aff29a8e329ff59b76c75ba205f4f41f11f0d978c7160960144b25a"
+    },
+    {
+      "path": "modules/tb371fc_audio_compat/system/vendor/etc/mixer_paths_qrd.xml",
+      "sha256": "cb9fb7d96f3cde96e0a6517c5c2d83b9450cd706754b09f969d146a7383605e9"
+    },
+    {
+      "path": "modules/tb371fc_bluetooth_compat/module.prop",
+      "sha256": "40b256f78c86d97f034e7fad4617a4a560bb559095a24324bf6abdfb32a9834d"
+    },
+    {
+      "path": "modules/tb371fc_bluetooth_native_hid/apply-live.sh",
+      "sha256": "e8ff6a6d11122beeb6faf314f943bd7c6f708d12cddd25e3a7780ce50b76c67b"
+    },
+    {
+      "path": "modules/tb371fc_bluetooth_native_hid/apply.sh",
+      "sha256": "8abed3e14662d5ddfb67554ba7d6478a98ddfbde228c90a7c89f575df2fabb7f"
+    },
+    {
+      "path": "modules/tb371fc_bluetooth_native_hid/customize.sh",
+      "sha256": "b19ef21dd4a2e8d436bd7e3dd89d3f43b7b3feadb8995e6ba1109f4c214a8677"
+    },
+    {
+      "path": "modules/tb371fc_bluetooth_native_hid/module.prop",
+      "sha256": "a52b48e1384cd490b660db091b003203aadbf9af893f112f00c397d265324328"
+    },
+    {
+      "path": "modules/tb371fc_bluetooth_native_hid/post-fs-data.sh",
+      "sha256": "961875180637c4ba0a64932f27681d40b36d3f84f6917ca4c29c55f72eff2a37"
+    },
+    {
+      "path": "modules/tb371fc_bluetooth_native_hid/service.sh",
+      "sha256": "144b33310a2a8233743d97c48e3749932259d9520b7ce12ad8f6c0a4c825d43f"
+    },
+    {
+      "path": "modules/tb371fc_bluetooth_native_hid/uninstall.sh",
+      "sha256": "a956fcdbad03c935a12ff0cacf200d19ba3f159380dbe7b600d4d1833464d44d"
+    },
+    {
+      "path": "modules/tb371fc_extm_compat/customize.sh",
+      "sha256": "6be68f9a288e75fad1d2df156dcc0e35a754e5b3090a7c5e82aaa2f247034cf1"
+    },
+    {
+      "path": "modules/tb371fc_extm_compat/module.prop",
+      "sha256": "1e7cab1caa9e62dba388e84c4e7830dd7b60a2856519b7cce14cee439de36929"
+    },
+    {
+      "path": "modules/tb371fc_extm_compat/post-fs-data.sh",
+      "sha256": "036b4cdece3cd7d7fb5fa59492b126ada8c8c8e8589ddee3b8f1620a65c04155"
+    },
+    {
+      "path": "modules/tb371fc_finddevice_off/customize.sh",
+      "sha256": "d93bbfbebbe590f532be43536e559e6c5bd67cdb49177793cfbcd1b451242dd8"
+    },
+    {
+      "path": "modules/tb371fc_finddevice_off/module.prop",
+      "sha256": "5eda5263bd7ee7f04242b29d7083a17114f8aa378e7f8508de789cc38eb98921"
+    },
+    {
+      "path": "modules/tb371fc_finddevice_off/service.sh",
+      "sha256": "7f934443e4fc4ad0917fb51c07bee756a958d689851e25c02a0f001b60968334"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/customize.sh",
+      "sha256": "2d7a7d96ab0714aeac97a5d518c3ed46628b588f25b801acbc9f42e083c6c0e2"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/module.prop",
+      "sha256": "f443dd878830faef67cb9d5590f7da522e42f6e00280d18bc2709a7285a13e6d"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/post-fs-data.sh",
+      "sha256": "83146cc986e91fc4122423be91669e7aa3f35a66c674ccf048f5c6ba04ce7b3f"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/post-mount.sh",
+      "sha256": "f51c30350db4a35b5d2fef4d008be0f48262113339e342ad03dd4ad063f4ee79"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/service.sh",
+      "sha256": "a47e5bb748c4fdb287f469888b8c2025507f921a69daecfca7172a9d6761ab4b"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/bin/tb371fc_hal_stub.sh",
+      "sha256": "355f6f2fbd84c7f17b32110528574cda4a45522186f7d9687d65a7ebc97ed50d"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/init/vendor.xiaomi.hardware.citsensorservice@1.1-service.rc",
+      "sha256": "4851627a21427e5f9331a1577a20d17d93f6e77f8a414aa9826ac0efb6f4b85b"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/init/vendor.xiaomi.hardware.citvendorservice@1.0-service.rc",
+      "sha256": "250466c8d909834d9fe8b4fff57c2bca7a138052bfdeb340239c6fcef12d148b"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/init/vendor.xiaomi.hardware.mfidoca@1.0-service.rc",
+      "sha256": "a43cfc94f05e5bb28313b6e85acddd9b56c4bb43d284bc77e89bcda25de64d82"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/vintf/manifest/manifest_vendor.qti.hardware.power.powermodule.xml",
+      "sha256": "5e48c482ac4589feba6ab115da579e54e4263f335c779b05d19464d146ed7b4e"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/vintf/manifest/manifest_vendor.stc.hardware.hqkitservice.xml",
+      "sha256": "8e8515f38a97808243b80d40566ac830359810d2423257c738ea481037172557"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/vintf/manifest/manifest_vendor.xiaomi.hardware.citsensorservice.xml",
+      "sha256": "8b6087c72d1685cc994bd553d2833314aa4261c7458fff536890326a8c9e9f82"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/vintf/manifest/manifest_vendor.xiaomi.hardware.displayfeature.xml",
+      "sha256": "a9d3a53bdb98c2caccce144288de61722a12ce4a96cb5211cf337ffcf50ee720"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/vintf/manifest/manifest_vendor.xiaomi.hardware.mfidoca.xml",
+      "sha256": "35a68dbf7f8d08195eb3afc5cd10814de4ad81604e18aae60e14ebc87a268442"
+    },
+    {
+      "path": "modules/tb371fc_hal_compat/system/vendor/etc/vintf/manifest/manifest_vendor.xiaomi.hardware.touchfeature.xml",
+      "sha256": "573aca2693eaec6c2a0c8e9626d79a97c361ff487642bd9169c711942ddcef9e"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/CoverPlan.java",
+      "sha256": "12bda990b945d66dc6fce29c7f22667f64aa99bd62bfeab3b7bec24650772741"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/HallCover.java",
+      "sha256": "3c1645db78a0c2dbbcc856ef47f5be0c2827f181e09e143f6359be1b0cd64bef"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/HallDebouncer.java",
+      "sha256": "f13ea758a0700b4986e284e5b022fc75bbe40ed64314acdae4cf47f02fc332e6"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/customize.sh",
+      "sha256": "87b9e5b316111167ab18e381a435615a761c78b21da2396f44e8ee9beb1b7d92"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/module.prop",
+      "sha256": "20dfd356a2472a324a8c2e9e96ad0f09710107a0447e9700226aed27ebc4aeed"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/post-fs-data.sh",
+      "sha256": "a91c41122002067aa93e8f0917f2f3b41756ea424fe5e503d287bc260e3dc957"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/service.sh",
+      "sha256": "5c9fa3d4bc14d29ff74eccb15d582b239a610744adf995ed60b3bd8b439ef440"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/stop.sh",
+      "sha256": "c573ae415af76d21d9ca74cf4bbdeb01a7ce6e7879c614bec52a942da79dab2c"
+    },
+    {
+      "path": "modules/tb371fc_hall_cover/uninstall.sh",
+      "sha256": "eb9a049d7f1043ea251a641cef12ea59667068d17ce1d9dab0498d46e64f536a"
+    },
+    {
+      "path": "modules/tb371fc_host_permissive_guard/apply.sh",
+      "sha256": "aa9d7b0bea140738b53b33acd0b513f280d8ab589f814a48c04bb57eea3f4049"
+    },
+    {
+      "path": "modules/tb371fc_host_permissive_guard/customize.sh",
+      "sha256": "6ed2e89565fd945e4c97bb72ad5d5a72aefcabb824a6759f9950727f929e4686"
+    },
+    {
+      "path": "modules/tb371fc_host_permissive_guard/module.prop",
+      "sha256": "41b447f7a3f5c43f00415441b7fe0216ea0347a52a48edacb516e4572a663496"
+    },
+    {
+      "path": "modules/tb371fc_host_permissive_guard/post-fs-data.sh",
+      "sha256": "6c6c9be5954db4cfbe4876b9dce5c9ba2d6a6d0179bcd614dabd080ebb752c92"
+    },
+    {
+      "path": "modules/tb371fc_host_permissive_guard/protect-live.sh",
+      "sha256": "2c9278fc5c000a2c460fbf3c217e7d45b3e0750d3c767abd62912d4ec722b391"
+    },
+    {
+      "path": "modules/tb371fc_host_permissive_guard/service.sh",
+      "sha256": "f26c46dae47f4c886a4b80f2c43284cc8064ded692de6a2450d308fdc62f519d"
+    },
+    {
+      "path": "modules/tb371fc_host_permissive_guard/uninstall.sh",
+      "sha256": "a46e1fa8ec3b55643b851a936b67381ee1f4a8dfaa8ea7482e736e569a92b013"
+    },
+    {
+      "path": "modules/tb371fc_host_permissive_guard/verify.sh",
+      "sha256": "ff75b9edbae1267ed74dcc7189cb8dbb9f8abc8ac3a2e0811a6848d44f87121f"
+    },
+    {
+      "path": "modules/tb371fc_keyboard_hotplug/customize.sh",
+      "sha256": "f97a8b3aa6ad06e07fe20f87cec129b9025dafbd1522e2fa272e605632ea7c50"
+    },
+    {
+      "path": "modules/tb371fc_keyboard_hotplug/module.prop",
+      "sha256": "ac3511d27997c37f3c8591e72441a63b5e7b7776981876226d3f58170ff8d93d"
+    },
+    {
+      "path": "modules/tb371fc_keyboard_hotplug/service.sh",
+      "sha256": "550ddd32be454d8a10c0060d63a11f6facf0b3e7deef9ec99da0eaf645d5ea8d"
+    },
+    {
+      "path": "modules/tb371fc_keyboard_hotplug/uninstall.sh",
+      "sha256": "e55f48beef68b539e923972debab7c44aa30f7e60e1dda40cd31915cb5eb109f"
+    },
+    {
+      "path": "modules/tb371fc_keyboard_hotplug/worker.sh",
+      "sha256": "e6a11d7f7bd341b701579f8e1a10fd65b90c36a10ab493350133eb798df038fd"
+    },
+    {
+      "path": "modules/tb371fc_lmkpsi/customize.sh",
+      "sha256": "ce77e29d1db7a5cefd5d158b7dfdfeabebed0f5cfce01e7cc133cb546555c299"
+    },
+    {
+      "path": "modules/tb371fc_lmkpsi/module.prop",
+      "sha256": "ad580e8f4bce05e77d49ad71a27d3679dbb7caee5c19b7f485870d755129878d"
+    },
+    {
+      "path": "modules/tb371fc_lmkpsi/post-fs-data.sh",
+      "sha256": "d7fdc3e5f42ee9096dc50cfb891be4732f6b3aa74d4a4b96a10c7671b38465e0"
+    },
+    {
+      "path": "modules/tb371fc_lmkpsi/service.sh",
+      "sha256": "879bf69d6595d002f1afe4bf0a003d0d8f6efcae485e3056a5077bf9c37e2868"
+    },
+    {
+      "path": "modules/tb371fc_media_compat/customize.sh",
+      "sha256": "a76d21e76f0492b52d3d04d265276f78971a0c5c47e40a514f43f258900d41c9"
+    },
+    {
+      "path": "modules/tb371fc_media_compat/module.prop",
+      "sha256": "38cc368fbaee226f0d8e7c27b6617445aaf8cde08cf29dd99fcb71d1cce8c3df"
+    },
+    {
+      "path": "modules/tb371fc_media_compat/payload/media_codecs_vendor_audio.xml",
+      "sha256": "075121122457d17602fca21a302666c0341622f59ba81e376cab9ca88886a6a9"
+    },
+    {
+      "path": "modules/tb371fc_media_compat/post-fs-data.sh",
+      "sha256": "9e108acaa7bb03c39c9caa7a9d53314dbc07a6e5e2f4a230ea4cdb64e63cfb2c"
+    },
+    {
+      "path": "modules/tb371fc_mtd_off/customize.sh",
+      "sha256": "cf22b2f806fb520efc089a9000ba05d34a7dcccf6eb754ad7552e4c76b60ad75"
+    },
+    {
+      "path": "modules/tb371fc_mtd_off/module.prop",
+      "sha256": "67ce6b993b431d5809663b3abe2977f8fd75d820471d57fe48f7b92bd68cc881"
+    },
+    {
+      "path": "modules/tb371fc_mtd_off/post-fs-data.sh",
+      "sha256": "59f81705252cfa45e2be40259e7f0cf3ff4c73c7d3fde5cd5fb37c9b3c97d1b9"
+    },
+    {
+      "path": "modules/tb371fc_mtd_off/service.sh",
+      "sha256": "ea3f761ae76861b4cce7ac1f2d9eb4a4a56d8984571f4c61a0ae1194c82f1ac3"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/config/99-tb371fc-common-fonts.conf",
+      "sha256": "4a28ab4a128cf2f6c838b1ecf9c818651d41b699c5703cb83d91a6261fddd194"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/customize.sh",
+      "sha256": "c537a849813ba6c85abc8d5709690d69d84edecfe0c1b4129343328f2c484f50"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/frontend-lifecycle.sh",
+      "sha256": "2f1f1b5cf231a6f7bdf6f112134b391ee6ab4cd7256c9a2edd7d4af7a1b38029"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/module.prop",
+      "sha256": "13ae33a5cbbb6ac04e4c2aadc956809a373c8aa0e87992f3780a58ae53c37ec5"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/repair-client.sh",
+      "sha256": "9d15f36652dc93624f6b15bd5bb20ecf0eef70feacfedf2ec81597c45703ee4f"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/root-runtime.sh",
+      "sha256": "bb12dad84b97610905d39304e5bb562c005b213c70a028164a9f0e5b1e6a70e9"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/run-runtime.sh",
+      "sha256": "1b35486ef3a2a3275233ce32972b13caa8325c73d05b33b40104441dafc71501"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/service.sh",
+      "sha256": "b0fc239d9dad0f8ff3ffac7f51bf54e600f8fa721061417ef62f725bdffd8aa5"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/stop-runtime.sh",
+      "sha256": "9018690af61389c666d1abd748cabea93cc32b6ca3599ab7e6adc43488d2feed"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/supervisor.sh",
+      "sha256": "a9b17f2282f26b45b9ba66e9435bee5b643b75dd1e0ac7fc8623a65a93fce25a"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/system.prop",
+      "sha256": "75770f7a7ef4683e8070ca947ba8154162c6f17ca87995094b61f4e0fd64f1bc"
+    },
+    {
+      "path": "modules/tb371fc_pc_wps/uninstall.sh",
+      "sha256": "68c505f869dbfe229b541561cbf11c7b323e4999976e57f7f981feaea8bc13c6"
+    },
+    {
+      "path": "modules/tb371fc_pen_bridge/customize.sh",
+      "sha256": "e069a9eb9d8167e8ae6b0f1f14ce39b17800a5a4d6b2184db7fd1cfd76b7f2b7"
+    },
+    {
+      "path": "modules/tb371fc_pen_bridge/module.prop",
+      "sha256": "dcc6377366e94a5f0cacad46e3243240dbde12dab50afe22deaa50279aad3f8b"
+    },
+    {
+      "path": "modules/tb371fc_pen_bridge/service.sh",
+      "sha256": "9e65d24e673dbdc2b60108f599d56d45e7f84dd0fab4018a45382e13ba78c74a"
+    },
+    {
+      "path": "modules/tb371fc_pen_bridge/supervisor.sh",
+      "sha256": "02c6b2cc14164f386ae94029d1fac4de706462e1322a98c55e2913ae5d210500"
+    },
+    {
+      "path": "modules/tb371fc_pen_bridge/uninstall.sh",
+      "sha256": "415040d1a75faeb63830161d536bdbeb16b4abf185cc88c72bc65c3e2dbb871e"
+    },
+    {
+      "path": "modules/tb371fc_pen_init/customize.sh",
+      "sha256": "d93bbfbebbe590f532be43536e559e6c5bd67cdb49177793cfbcd1b451242dd8"
+    },
+    {
+      "path": "modules/tb371fc_pen_init/module.prop",
+      "sha256": "2c708dbd5fcdcc131e2e181452df7747325f26bdef78bd441321c322550d9688"
+    },
+    {
+      "path": "modules/tb371fc_pen_init/service.sh",
+      "sha256": "70ff8227bfbd96de7dc16009e1bf8f76484db1efa2bc77dba45cb8adf3e800b3"
+    },
+    {
+      "path": "modules/tb371fc_perfconfig/customize.sh",
+      "sha256": "ce77e29d1db7a5cefd5d158b7dfdfeabebed0f5cfce01e7cc133cb546555c299"
+    },
+    {
+      "path": "modules/tb371fc_perfconfig/files/perfboostsconfig.xml",
+      "sha256": "8210877379e8133dd22737c9cf959993224a6bf6bbbae47cc2f4ea9eb795c891"
+    },
+    {
+      "path": "modules/tb371fc_perfconfig/files/perfconfigstore.xml",
+      "sha256": "0d31a85905d60024650f6e3c11e883e83fc73c134b6bf0918e394c04063ad0bd"
+    },
+    {
+      "path": "modules/tb371fc_perfconfig/module.prop",
+      "sha256": "8af69c984e9f1e974b26f505d068388195f908439e8da3a0e4abe5738c92217c"
+    },
+    {
+      "path": "modules/tb371fc_perfconfig/post-fs-data.sh",
+      "sha256": "10fa781ca08e01981c68830516425e78c621608054a228a8b0585628e92a84e8"
+    },
+    {
+      "path": "modules/tb371fc_perfconfig/service.sh",
+      "sha256": "6ff0e7690557d5a24ec20e5bad2ad59ead4dd1b942020095de19e5f6fad2a8f5"
+    },
+    {
+      "path": "modules/tb371fc_perfprops/customize.sh",
+      "sha256": "a76d21e76f0492b52d3d04d265276f78971a0c5c47e40a514f43f258900d41c9"
+    },
+    {
+      "path": "modules/tb371fc_perfprops/module.prop",
+      "sha256": "ebfdde9349e41e182b17d73622572dbfbd4b1a19834ba054baf55f89db699f15"
+    },
+    {
+      "path": "modules/tb371fc_perfprops/post-fs-data.sh",
+      "sha256": "b82f15f3251d0ef9e0a4efebece22b5ac696d4e230a6b6aebb580bca018253af"
+    },
+    {
+      "path": "modules/tb371fc_refresh_compat/customize.sh",
+      "sha256": "ce77e29d1db7a5cefd5d158b7dfdfeabebed0f5cfce01e7cc133cb546555c299"
+    },
+    {
+      "path": "modules/tb371fc_refresh_compat/module.prop",
+      "sha256": "0c1f6bd873217e20b40282e8f204bfe80dd37810ad26dbed29df43a6edbe0783"
+    },
+    {
+      "path": "modules/tb371fc_refresh_compat/post-fs-data.sh",
+      "sha256": "34f2f0278ebf6a57c099f7d07bbcc8b6e4d1e31843175b053b49abe77b05e0e1"
+    },
+    {
+      "path": "modules/tb371fc_refresh_compat/service.sh",
+      "sha256": "7cb176f4b19c6c14104653cf468e0848b77a709fda0a820e5d67dc4312add2b0"
+    },
+    {
+      "path": "modules/tb371fc_refresh_compat/system/product/etc/device_features/sheng.xml",
+      "sha256": "39fa5d2b4674ed4408ce1bab70283441d14b319189227b54f88024555e13823b"
+    },
+    {
+      "path": "modules/tb371fc_refresh_compat/system.prop",
+      "sha256": "698023d03e24b0464715d52d79e2fd8d58a4d16d404680741c2485b8fd7a1f7f"
+    },
+    {
+      "path": "modules/tb371fc_scene/customize.sh",
+      "sha256": "5a3f36fecb4e33b75ece48fa95c497b28d82f69e040f6ceadf54fb1af67e2c57"
+    },
+    {
+      "path": "modules/tb371fc_scene/module.prop",
+      "sha256": "68d86f097294ab6896b6af6a68a18418450f01d5077bdc74836ae8a447024b2f"
+    },
+    {
+      "path": "modules/tb371fc_scene/scene-lib.sh",
+      "sha256": "91f15d57b25193f36f9222e80fa9b968b3bbf8af69a5491fd873d34c7678be9d"
+    },
+    {
+      "path": "modules/tb371fc_scene/scene.sh",
+      "sha256": "e0098eb829b153360ce553a5bc0d5c78ed973e3569c3dd9a54ef1b4923024bec"
+    },
+    {
+      "path": "modules/tb371fc_scene/service.sh",
+      "sha256": "a070c69dc6f86671f2488ac3a2b2093c08423fac899b4289873eac33f0f6096c"
+    },
+    {
+      "path": "modules/tb371fc_service_compat/customize.sh",
+      "sha256": "d93bbfbebbe590f532be43536e559e6c5bd67cdb49177793cfbcd1b451242dd8"
+    },
+    {
+      "path": "modules/tb371fc_service_compat/module.prop",
+      "sha256": "7d1f17ce0f08815f4dfb55d82af8ca9fc51a5c5b50cf60a4fad6bb56a54b4aaf"
+    },
+    {
+      "path": "modules/tb371fc_service_compat/service.sh",
+      "sha256": "b48dc4a53b9adb0b0cc226ec61482ad4dabfd87bf9ed4aac8ee480d5a016f468"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/RotationMatrix.java",
+      "sha256": "b6d2121c8f32336587e4ff58bc7c59bdbf5aadfe744e0175e41a3686af256149"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/RotationPolicy.java",
+      "sha256": "c6bc1ecb924ab501a0ef13d7d11776bf76e829c04f29a76e97e4981542434b9e"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/SpeakerRotation.java",
+      "sha256": "772dd4b1e6eb57ce6c7de661475f61976fb50264eea961bcf339671299f50b94"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/audio_policy_configuration.xml",
+      "sha256": "ca446102158d71253440c67ec046f8ca7d01f508919e47232b685a6eac4320e3"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/customize.sh",
+      "sha256": "eb0f93e02b527764b045a228d5b781f1ee52165a58dc25edab750377032ebbfb"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/matrix-write.c",
+      "sha256": "c45cff59578b45562382f67096a519ed748470c4a06644f246362e721d675386"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/module.prop",
+      "sha256": "45e5d4b073c04dbfd629d018c6eda5fd52a562d987461ee8d906ab11aece49af"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/post-mount.sh",
+      "sha256": "7f22b424a6b03a5300aae6f625623247210db11969020a69e88408636d6cc48d"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/quad-policy.sh",
+      "sha256": "f1f74df7ede4b85eeed505d8088f2c5022963ce5bbb85ea2b65fc7921066f032"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/restart.sh",
+      "sha256": "b9a5faea66d734892cbbe0c168ef0069d79f74c813bd728e261340ec48d119c1"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/rollback.sh",
+      "sha256": "5d2e6eff7a7c2981986c3495b6ea73beddaf5b585cc36c529e9ba2dd6eb32eb3"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/service.sh",
+      "sha256": "e380cb7b6393a62262961373eb762e76e44a6f63928bf1c359e66bfb175278af"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/supervisor.sh",
+      "sha256": "e97d83c8b868ec6e501a2111988373f002f22ebcddb85fefbb8e5a530032897a"
+    },
+    {
+      "path": "modules/tb371fc_speaker_rotation/uninstall.sh",
+      "sha256": "0dfe0c1d7cd7b7f7bea563b0b86e028026a19ee1763c53c7c033fed7ab48b1f1"
+    },
+    {
+      "path": "modules/tb371fc_touchfeature_compat/customize.sh",
+      "sha256": "a76d21e76f0492b52d3d04d265276f78971a0c5c47e40a514f43f258900d41c9"
+    },
+    {
+      "path": "modules/tb371fc_touchfeature_compat/module.prop",
+      "sha256": "2a714ebe018c62a41d3a420c8f5011ac7ce2c5914fb40168967d3415f306f938"
+    },
+    {
+      "path": "modules/tb371fc_touchfeature_compat/post-fs-data.sh",
+      "sha256": "c8009357e937653b7666b3297ebb24c6be75e6a1c86cd6ada081e4901907e53b"
+    },
+    {
+      "path": "modules/tb371fc_uclamp/customize.sh",
+      "sha256": "d93bbfbebbe590f532be43536e559e6c5bd67cdb49177793cfbcd1b451242dd8"
+    },
+    {
+      "path": "modules/tb371fc_uclamp/module.prop",
+      "sha256": "7c523823fca90450c2ae39d444310a4be87ee4c6a294b55eaa2aeba1bad9c20b"
+    },
+    {
+      "path": "modules/tb371fc_uclamp/service.sh",
+      "sha256": "29fb93ec44fd02e7bab41630446c3f79413471c98383222ab31cff937f537114"
+    },
+    {
+      "path": "modules/tb371fc_vintf_sysvipc/customize.sh",
+      "sha256": "b49abc2263d1e28da3504d83ef8f54c786e264eef0d97cd75a26a43a2ec6e2df"
+    },
+    {
+      "path": "modules/tb371fc_vintf_sysvipc/module.prop",
+      "sha256": "2299645f8252d11cdbcc66a1c0b50a45d4519b8dfea7b9af5a0baba84fbe1436"
+    },
+    {
+      "path": "modules/tb371fc_vintf_sysvipc/post-mount.sh",
+      "sha256": "6321dbd580b51db95e260b3dc8d66fdeb6d6d4d7c907ccd6152013f0b0b47877"
+    },
+    {
+      "path": "modules/tb371fc_vintf_sysvipc/vintf/compatibility_matrix.202404.xml",
+      "sha256": "fd3f47108680f6ba14524b529c77673ecab2fd2f740e5e65edf31c83b4f6e8a8"
+    },
+    {
+      "path": "modules/tb371fc_vintf_sysvipc/vintf/compatibility_matrix.5.xml",
+      "sha256": "56e6a56a72937d2479cabc1e155d3c06cedb6359ad5359e174ac0031c1852df7"
+    },
+    {
+      "path": "modules/tb371fc_vintf_sysvipc/vintf/compatibility_matrix.6.xml",
+      "sha256": "bd2dda9c956a119408dba54882bc109c2ee387bc8b207dc9467ff3466d3e3ae5"
+    },
+    {
+      "path": "modules/tb371fc_vintf_sysvipc/vintf/compatibility_matrix.7.xml",
+      "sha256": "ea9130c23058ffa959cb7072a4bec604fb2b546b8e81aa39cbefa8cf6439cf34"
+    },
+    {
+      "path": "modules/tb371fc_vintf_sysvipc/vintf/compatibility_matrix.8.xml",
+      "sha256": "5296f9023a57252bb93837ae5a7f9cd6630c93f85dc238f5513d6cc60b9b489f"
+    },
+    {
+      "path": "modules/tb371fc_vmtune/customize.sh",
+      "sha256": "d344c2e62ee3fbc146f68314d02563de8852a6a7e899cfdd3a2212ab5a393417"
+    },
+    {
+      "path": "modules/tb371fc_vmtune/module.prop",
+      "sha256": "aa82c1a3bc4a57433f710378c997d818426a37fbfffc132062c0293202d11746"
+    },
+    {
+      "path": "modules/tb371fc_vmtune/service.sh",
+      "sha256": "9898a789217fa105cc0daab41a796f03eae7a9012a82ad09038f93ab00188bd2"
+    },
+    {
+      "path": "modules/tb371fc_vmtune/vmtune.sh",
+      "sha256": "5278da08d480b775f5716c7543dff5a902ef7d9a8e6d12d200fb04610f9b75f2"
+    },
+    {
+      "path": "modules/tb371fc_zui_color/customize.sh",
+      "sha256": "d93bbfbebbe590f532be43536e559e6c5bd67cdb49177793cfbcd1b451242dd8"
+    },
+    {
+      "path": "modules/tb371fc_zui_color/module.prop",
+      "sha256": "708f189d2ad397cfade4ca6617bdb02aa576647568d848f1d36fa7fad619b368"
+    },
+    {
+      "path": "modules/tb371fc_zui_color/service.sh",
+      "sha256": "f7b716ab33201b465544722f4158235a67ae5c3cc6fb33cbeeabfedad43a1e8e"
+    },
+    {
+      "path": "rom/bootstrap/README.md",
+      "sha256": "52ed8b09713d19b3f8688f3f8e4c61832b06d2cfc6551d90abc776d90c3e6215"
+    },
+    {
+      "path": "rom/bootstrap/safe-mode.c",
+      "sha256": "8532c73ba52a7cbfd5408afa6e6ae5c80f1e879fd05229089ecf174cf72edefa"
+    },
+    {
+      "path": "rom/bootstrap/seed.sh",
+      "sha256": "defe9e7f67eaa3050cb2d2e2c1c238e3c7f0955efa807a12caeb1ed33056461f"
+    },
+    {
+      "path": "rom/bootstrap/setup.sh",
+      "sha256": "f63b3cb736e4ffd65b80d08c94c33a0e44c5ee7e4bca85d8cbee76548b585aab"
+    },
+    {
+      "path": "rom/bootstrap/test-bootstrap.py",
+      "sha256": "25b5baf941df9386dab6ce1562003fafe113e5e1d10a8f4bca9f0d2eca4a46e9"
+    },
+    {
+      "path": "rom/flash.ps1",
+      "sha256": "5f29430096172df3b7b0f1c422b265b2bd88f146d6beb047c9c88060b12299b9"
+    },
+    {
+      "path": "rom/flash.py",
+      "sha256": "f377fbadf5783ea0d0769fbdb1fc9ac0b89b1052afa9edebdd2a5ad07dafcd2b"
+    },
+    {
+      "path": "rom/reference-r1/README.md",
+      "sha256": "3cac70ff2a3a23370486698a7ecf5b67fa087fee53bc54c23bbd20e1c6f951e3"
+    },
+    {
+      "path": "rom/reference-r1/build-oneclick.py",
+      "sha256": "f4a998385e8c4697bba059cc2eea336c9230577de554ff8ea3c6f18888531c0c"
+    },
+    {
+      "path": "rom/reference-r1/integrate-super.py",
+      "sha256": "66777ebcc088e142ad29ad0d481bf7a284b082449ed1a04f2cc35d74b8b2ca72"
+    },
+    {
+      "path": "rom/runtime/service.d/zz_disk_guard.sh",
+      "sha256": "7a0d35bacebcc15717f2b4d63ca52bc1dc73e8e70883bd3ed0d4cc500bcb7615"
+    },
+    {
+      "path": "rom/runtime/service.d/zz_powermodule_stub.sh",
+      "sha256": "9a58d3e50b0c7481dbaa7ef66e64030276c857efbbc462d16017558e0dc4b57f"
+    },
+    {
+      "path": "rom/runtime/service.d/zz_user_tweaks.sh",
+      "sha256": "129eb0a4cbb78084fd74ecc1603ae912062a75269926bdf178dc4655432e7c9e"
+    },
+    {
+      "path": "rom/test-flash.py",
+      "sha256": "a3994c1aa31fca9c2cb871f2fda8481c3c5f728affd189c265e4d5ad8cbd3742"
+    },
+    {
+      "path": "rom/wps/provision-wps.sh",
+      "sha256": "4bff7ea3d712a7008e903e05d570716634ecf33ab9dab7514cdc6babb808e4e9"
+    },
+    {
+      "path": "rom/\u53ea\u8bfb\u673a\u578b\u81ea\u68c0.bat",
+      "sha256": "08ea112a2032c7c4306795236d9806e76a9d64aae3f5fa266757b80f3b166a2f"
+    },
+    {
+      "path": "tools/check_export.py",
+      "sha256": "f2cc56ca466a7d671b8499ca3ce717a2b7b6edd9c33ff2453fae5458f589f8d2"
+    }
+  ]
+}

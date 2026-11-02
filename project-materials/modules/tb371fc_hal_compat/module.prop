@@ -1,0 +1,6 @@
+id=tb371fc_hal_compat
+name=TB371FC Vendor HAL Compatibility
+version=1.0
+versionCode=1
+author=TB371FC maintainers
+description=Stops incompatible vendor HAL crash loops, preserves VINTF overlays and the sensor calibration compatibility library in active use.

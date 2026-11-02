@@ -1,0 +1,6 @@
+id=tb371fc_audio_compat
+name=TB371FC Audio Routing
+version=1.0
+versionCode=1
+author=TB371FC maintainers
+description=Combo Fix audio routing only; four physical speakers still require verification.

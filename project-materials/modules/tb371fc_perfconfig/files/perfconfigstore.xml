@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ * TB371FC HyperOS3 port: merged perf config store
+ * base: Lenovo ZUI vendor /vendor/etc/perf/perfconfigstore.xml (20 props)
+ * added: Xiaomi official (yudi Pad 6 Max) non-target-gated perf/UX props
+ * target: kona (SM8250-AC), kernel 4.19, 8GB RAM
+-->
+<PerfConfigsStore>
+    <PerfConfigs>
+
+                <!-- ===== base: Lenovo ZUI vendor ===== -->
+                <Prop Name="vendor.iop.enable_uxe" Value="1" />
+                <Prop Name="vendor.debug.enable.lm" Value="true" />
+                <Prop Name="vendor.perf.iop_v3.enable" Value="false" />
+                <Prop Name="vendor.perf.iop_v3.enable.debug" Value="false" />
+                <Prop Name="vendor.enable.prefetch" Value="false" />
+                <Prop Name="vendor.iop.enable_prefetch_ofr" Value="false" />
+                <Prop Name="ro.vendor.perf.gfl.tap_ignore_enable" Value="true"/>
+
+                <Prop Name="ro.lmk.kill_heaviest_task_dup" Value="true" />
+                <Prop Name="ro.lmk.enhance_batch_kill" Value="false" />
+                <Prop Name="ro.lmk.enable_watermark_check" Value="true" />
+                <Prop Name="ro.lmk.enable_preferred_apps" Value="true" />
+                <Prop Name="ro.lmk.use_new_strategy_dup" Value="false" />
+                <Prop Name="ro.lmk.super_critical" Value="606" />
+                <Prop Name="ro.lmk.direct_reclaim_pressure" Value="45" />
+                <Prop Name="ro.lmk.reclaim_scan_threshold" Value="0" />
+                <Prop Name="vendor.perf.gestureflingboost.enable" Value="true" />
+                <Prop Name="vendor.perf.performancemode.support" Value="true" />
+                <Prop Name="ro.vendor.qti.sys.fw.bg_apps_limit" Value="60" />
+                <Prop Name="ro.vendor.at_library" Value="libqti-at.so" />
+                <Prop Name="vendor.perf.topAppRenderThreadBoost.enable" Value="false" />
+
+                <!-- ===== added from Xiaomi yudi (port gap fill) ===== -->
+                <!-- IO / UX prefetch -->
+                <Prop Name="vendor.iop.enable_speed" Value="true" />
+                <Prop Name="vendor.perf.test_avc" Value="false" />
+                <Prop Name="vendor.perf.fps_switch_hyst_time_secs" Value="10" />
+                <!-- scroll / fling boost family (touch UX) -->
+                <Prop Name="vendor.perf.horizontalflingboost.enable" Value="true" />
+                <Prop Name="vendor.perf.phr.enable" Value="1" />
+                <Prop Name="vendor.perf.phr.hr_min_rate" Value="0.5" />
+                <!-- app compaction (MIUI default: off, avoids heavy CPU compaction) -->
+                <Prop Name="vendor.appcompact.enable_app_compact" Value="false" />
+                <Prop Name="vendor.appcompact.full_compact_type" Value="2" />
+                <Prop Name="vendor.appcompact.some_compact_type" Value="4" />
+                <Prop Name="vendor.appcompact.compact_throttle_somesome" Value="5000" />
+                <Prop Name="vendor.appcompact.compact_throttle_somefull" Value="10000" />
+                <Prop Name="vendor.appcompact.compact_throttle_fullsome" Value="500" />
+                <Prop Name="vendor.appcompact.compact_throttle_fullfull" Value="10000" />
+                <Prop Name="vendor.appcompact.compact_throttle_bfgs" Value="600000" />
+                <Prop Name="vendor.appcompact.compact_throttle_persistent" Value="600000" />
+                <Prop Name="vendor.appcompact.rss_throttle_kb" Value="12000" />
+                <Prop Name="vendor.appcompact.delta_rss_throttle_kb" Value="8000" />
+                <!-- QTI hint framework flags present on Xiaomi builds -->
+                <Prop Name="ro.vendor.perf.qhf" Value="true" />
+                <Prop Name="ro.vendor.perf.qape" Value="true" />
+                <Prop Name="vendor.enable.vending_perfcore" Value="true" />
+                <Prop Name="vendor.perf.pfar2.enable" Value="1" />
+                <Prop Name="ro.lmk.kill_timeout_ms_dup" Value="100" />
+
+    </PerfConfigs>
+</PerfConfigsStore>

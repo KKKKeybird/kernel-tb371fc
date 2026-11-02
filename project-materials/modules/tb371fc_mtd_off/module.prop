@@ -1,0 +1,6 @@
+id=tb371fc_mtd_off
+name=TB371FC mtd HAL off
+version=0.1-disable-mtd
+versionCode=1
+author=TB371FC maintainers
+description=Neutralises vendor.xiaomi.hardware.mtdservice@1.3 (it retries loading the missing cardapp TA every 2s). Binds a no-op binary over /vendor/bin/mtd@1.3 and stops the running service. Remove this module to restore the original HAL.

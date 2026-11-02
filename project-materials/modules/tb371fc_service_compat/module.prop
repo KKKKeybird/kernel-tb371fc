@@ -1,0 +1,6 @@
+id=tb371fc_service_compat
+name=TB371FC System Service Compatibility
+version=1.0
+versionCode=1
+author=TB371FC maintainers
+description=Keeps incompatible PowerKeeper and specific cloud components disabled without forcing display settings or Doze whitelist changes.

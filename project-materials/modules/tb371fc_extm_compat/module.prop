@@ -1,0 +1,6 @@
+id=tb371fc_extm_compat
+name=TB371FC Native ExtendM Compatibility
+version=0.1-native-abi
+versionCode=1
+author=TB371FC maintainers
+description=Grant the existing HyperOS ExtendM service access to the matching zram writeback ABI. Native initialization, UI settings and daily quota remain in charge. Requires the matched kernel.

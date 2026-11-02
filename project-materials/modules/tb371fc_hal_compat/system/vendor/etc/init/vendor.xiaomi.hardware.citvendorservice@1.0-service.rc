@@ -1,0 +1,7 @@
+# Disabled by xiaoxin_padpro127_870_combo_fix.
+# The stock service depends on a missing vendor library and repeatedly exits.
+service cit_vendorhal_service /vendor/bin/hw/vendor.xiaomi.hardware.citvendorservice@1.0-service
+    class hal
+    user system
+    group system
+    disabled

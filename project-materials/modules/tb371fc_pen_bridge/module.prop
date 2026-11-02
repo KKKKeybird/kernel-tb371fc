@@ -1,0 +1,8 @@
+id=tb371fc_pen_bridge
+name=TB371FC Lenovo Pen HyperOS Integration
+version=1.4-event-time
+versionCode=5
+author=TB371FC maintainers
+description=Bridge real Lenovo pen input and CTN730 battery to HyperOS continuously, including screen off and keyguard. Short press: stylus screenshot annotation. Hold: quick note.
+
+# Pressure byte-order correction validated on this TB371FC 4.19.325-perf++ build.

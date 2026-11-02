@@ -1,0 +1,6 @@
+id=tb371fc_perfprops
+name=TB371FC MIUI perf props compat
+version=0.1-scrollopt
+versionCode=1
+author=TB371FC maintainers
+description=Restore MIUI vendor perf props that Lenovo vendor build.prop omits (ro.vendor.perf.scroll_opt=1, heavy_app=2) so BoostFramework ScrollOptimizer / TurboSched PRendering work as on Xiaomi.
