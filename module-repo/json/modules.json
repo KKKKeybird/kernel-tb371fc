@@ -1,0 +1,33 @@
+{
+  "name": "TB371FC R8 模块（实验版）",
+  "id": "kkkkeybird-tb371fc-r8",
+  "description": "仅适用于本项目 TB371FC HyperOS 3 R8；请先阅读每个模块的已知限制。",
+  "metadata": {
+    "version": 1
+  },
+  "modules": [
+    {
+      "id": "tb371fc_account_compat",
+      "name": "R8 小米账号兼容修复（实验版）",
+      "version": "1.1",
+      "versionCode": 11,
+      "author": "KKKKeybird",
+      "description": "仅修复账号页因隐藏 FindDevice 引发的闪退与资料加载问题。仅 R8 + micloud-sdk 20；云空间容量仍未恢复，当前启动故障根因未明。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_account_compat/README.md",
+      "track": {
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_account_compat"
+      },
+      "size": 105833,
+      "versions": [
+        {
+          "version": "1.1",
+          "versionCode": 11,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-account-compat-v1.1/TB371FC-XiaomiAccount-Compat-v1.1.zip",
+          "timestamp": 1793713313,
+          "size": 105833,
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_account_compat/CHANGELOG.md"
+        }
+      ]
+    }
+  ]
+}
