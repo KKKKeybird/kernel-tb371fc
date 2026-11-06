@@ -1,4 +1,4 @@
-# TB371FC R8 竖屏上下分屏兼容 v1.0（实验版）
+# TB371FC R8 竖屏上下分屏兼容 v1.1（实验版）
 
 恢复 TB371FC HyperOS 3 R8 的竖屏上下分屏。模块仅改变 SystemUI 上下分屏
 设备白名单的结果，不修改设备代号、旋转、分辨率或 ROM 镜像。
@@ -19,7 +19,7 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 ```
 
 也可以直接下载本次 Release 的
-`TB371FC-SplitCompat-v1.0.zip` 并在 BakaSU / KernelSU 中安装。安装后重启。
+`TB371FC-SplitCompat-v1.1.zip` 并在 BakaSU / KernelSU 中安装。安装后重启。
 
 ## 已知限制
 

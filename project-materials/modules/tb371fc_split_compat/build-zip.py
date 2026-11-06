@@ -6,7 +6,7 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT.parent.parent.parent.parent / "outputs" / "TB371FC-SplitCompat-v1.0.zip"
+OUT = ROOT.parent.parent.parent.parent / "outputs" / "TB371FC-SplitCompat-v1.1.zip"
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 FILES = [

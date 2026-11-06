@@ -32,22 +32,22 @@
     {
       "id": "tb371fc_split_compat",
       "name": "R8 竖屏上下分屏兼容（实验版）",
-      "version": "1.0",
-      "versionCode": 10,
+      "version": "1.1",
+      "versionCode": 11,
       "author": "KKKKeybird",
       "description": "恢复 TB371FC R8 原生竖屏上下分屏。仅适配精确系统构建与原版 MiuiSystemUI APK；含自动回退和模块内更新地址。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_split_compat/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_split_compat"
       },
-      "size": 25645027,
+      "size": 25645293,
       "versions": [
         {
-          "version": "1.0",
-          "versionCode": 10,
-          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-split-compat-v1.0/TB371FC-SplitCompat-v1.0.zip",
-          "timestamp": 1793984189,
-          "size": 25645027,
+          "version": "1.1",
+          "versionCode": 11,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-split-compat-v1.1/TB371FC-SplitCompat-v1.1.zip",
+          "timestamp": 1793984561,
+          "size": 25645293,
           "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_split_compat/CHANGELOG.md"
         }
       ]

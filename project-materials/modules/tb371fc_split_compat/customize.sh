@@ -14,8 +14,13 @@ PATCH_SHA=0b243aebb7efe8f5655dbe467d61e0def5fc502005be508028857fa3d57089da
 BB=/data/adb/ksu/bin/busybox
 
 [ -f "$TARGET" ] || abort "! SystemUI target is missing"
-[ "$("$BB" sha256sum "$TARGET" | "$BB" awk '{print $1}')" = "$BASE_SHA" ] ||
-  abort "! Original SystemUI APK fingerprint does not match this module"
+TARGET_SHA=$("$BB" sha256sum "$TARGET" | "$BB" awk '{print $1}')
+if [ "$TARGET_SHA" != "$BASE_SHA" ]; then
+  PREVIOUS=/data/adb/modules/tb371fc_split_compat/module.prop
+  PREVIOUS_ID=$(sed -n 's/^id=//p' "$PREVIOUS" 2>/dev/null)
+  [ "$TARGET_SHA" = "$PATCH_SHA" ] && [ "$PREVIOUS_ID" = "tb371fc_split_compat" ] ||
+    abort "! SystemUI fingerprint does not match the original or a known active module"
+fi
 [ "$("$BB" sha256sum "$MODPATH/payload/MiuiSystemUI.apk" | "$BB" awk '{print $1}')" = "$PATCH_SHA" ] ||
   abort "! Module payload is damaged"
 

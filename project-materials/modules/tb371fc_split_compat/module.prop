@@ -1,7 +1,7 @@
 id=tb371fc_split_compat
 name=TB371FC R8 Top-Bottom Split Compatibility
-version=1.0
-versionCode=10
+version=1.1
+versionCode=11
 author=KKKKeybird
 description=Restore the native top-bottom split-screen capability on TB371FC HyperOS 3 R8. Exact ROM and original SystemUI APK match required.
 updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_split_compat/update.json
