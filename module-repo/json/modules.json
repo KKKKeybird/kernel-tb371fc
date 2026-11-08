@@ -51,6 +51,29 @@
           "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_split_compat/CHANGELOG.md"
         }
       ]
+    },
+    {
+      "id": "tb371fc_pen_lockfix",
+      "name": "R8 手写笔电量桥锁修复（实验版）",
+      "version": "1.0",
+      "versionCode": 10,
+      "author": "KKKKeybird",
+      "description": "修复陈旧 supervisor.lock 导致手写笔电量桥不启动的问题。只替换一个 ROM 集成脚本，不修改硬件、蓝牙、输入 relay 或充电策略。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_pen_lockfix/README.md",
+      "track": {
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_pen_lockfix"
+      },
+      "size": 5532,
+      "versions": [
+        {
+          "version": "1.0",
+          "versionCode": 10,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-pen-lockfix-v1.0/TB371FC-PenLockFix-v1.0.zip",
+          "timestamp": 1794130305,
+          "size": 5532,
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_pen_lockfix/CHANGELOG.md"
+        }
+      ]
     }
   ]
 }
