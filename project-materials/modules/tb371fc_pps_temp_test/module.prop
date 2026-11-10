@@ -1,0 +1,7 @@
+id=tb371fc_pps_temp_test
+name=TB371FC PPS充电泵温度实验（未实测可用性）
+version=0.3-test
+versionCode=3
+author=KKKKeybird
+description=未实测可用性！仅手动运行第三版120秒PPS温度消费链路实验，不能视为已修复或快充解锁。安装及重启均不自动启用，需合适PPS电源及15%-80%电量。
+updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_pps_temp_test/update.json

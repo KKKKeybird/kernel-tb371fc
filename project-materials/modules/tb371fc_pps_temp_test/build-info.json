@@ -1,0 +1,11 @@
+{
+  "source_sha256": "f3175c83a4f27f7f2e99ccc19a3ea893c1cc15dda20a8881073f5ed4a2c2db8a",
+  "output_sha256": "c4f7c8921cef1897fa3bcc5134251a4a35887262c31510da5ae093d35f700285",
+  "file": "hvdcp_opti.temp-chain-v3-test",
+  "gate_vaddr": "0x4ad20",
+  "delay_vaddr": "0x4ad38",
+  "rx_extension_bytes": 40,
+  "charging_check_preserved": true,
+  "isns_read_and_failure_path_preserved": true,
+  "sysfs_driver_fixed": false
+}
