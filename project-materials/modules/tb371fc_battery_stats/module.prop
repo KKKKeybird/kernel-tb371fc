@@ -1,0 +1,7 @@
+id=tb371fc_battery_stats
+name=TB371FC R8 电池容量统计修复
+version=1.0
+versionCode=10
+author=KKKKeybird
+description=修正电池容量统计：设计基准10200mAh，满充及剩余容量动态读取。仅适配本项目R8；不改电量百分比、充电策略或温控。
+updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_battery_stats/update.json
