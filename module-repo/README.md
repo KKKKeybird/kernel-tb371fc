@@ -1,7 +1,7 @@
 # TB371FC R8 模块订阅（实验）
 
 此目录提供 BakaSU 支持的 MMRL 自定义模块源。目前包含 R8 小米账号兼容修复、
-R8 竖屏上下分屏兼容、手写笔电量桥锁修复和电池容量统计修复四个独立模块，并非通用小米服务修复合集。
+R8 竖屏上下分屏兼容、手写笔电量桥锁修复、电池容量统计修复和PPS温度实验五个独立模块，并非通用小米服务修复合集。
 
 在 BakaSU 的模块仓库来源管理中添加：
 
@@ -37,3 +37,7 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 使用者确认。
 
 本源按 BakaSU 的 [MMRL 解析器](https://github.com/Baka-SU/BakaSU/blob/main/manager/app/src/main/java/org/bakasu/bakasu/data/module/MmrlRepositoryParser.kt) 及 [数据格式](https://github.com/Baka-SU/BakaSU/blob/main/manager/app/src/main/java/org/bakasu/bakasu/data/module/MmrlRepositoryDtos.kt) 编排。部分旧版管理器若没有自定义源入口，可直接下载模块 ZIP 安装。
+
+[PPS充电泵温度实验 v0.3-test](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-pps-temp-test-v0.3)：
+**未实测可用性**，尚未证明能启动充电泵或恢复正确温度；安装和开机不自动启用，
+仅模块“操作”按钮手动开始有条件的限时实验。不是已验证的快充修复。

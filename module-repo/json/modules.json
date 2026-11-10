@@ -97,6 +97,29 @@
           "size": 7433
         }
       ]
+    },
+    {
+      "id": "tb371fc_pps_temp_test",
+      "name": "PPS充电泵温度实验（未实测可用性）",
+      "version": "0.3-test",
+      "versionCode": 3,
+      "author": "KKKKeybird",
+      "description": "未实测可用性！第三版用户态温度消费链路原型。安装/开机不自动启用，仅手动120秒实验。未证明泵能启动或温度修复有效，不包含PD限流或旁路修改。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_pps_temp_test/README.md",
+      "track": {
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_pps_temp_test"
+      },
+      "size": 145136,
+      "versions": [
+        {
+          "version": "0.3-test",
+          "versionCode": 3,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-pps-temp-test-v0.3/TB371FC-PPS-Temp-Test-v0.3.zip",
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_pps_temp_test/CHANGELOG.md",
+          "timestamp": 1794314416,
+          "size": 145136
+        }
+      ]
     }
   ]
 }
