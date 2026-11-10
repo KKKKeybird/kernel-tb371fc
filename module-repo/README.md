@@ -1,7 +1,7 @@
 # TB371FC R8 模块订阅（实验）
 
 此目录提供 BakaSU 支持的 MMRL 自定义模块源。目前包含 R8 小米账号兼容修复、
-R8 竖屏上下分屏兼容和手写笔电量桥锁修复三个独立模块，并非通用小米服务修复合集。
+R8 竖屏上下分屏兼容、手写笔电量桥锁修复和电池容量统计修复四个独立模块，并非通用小米服务修复合集。
 
 在 BakaSU 的模块仓库来源管理中添加：
 
@@ -17,6 +17,8 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 - [v1.1 竖屏上下分屏](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-split-compat-v1.1)
 - [v1.0 手写笔电量桥锁修复](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-pen-lockfix-v1.0)
 
+- [v1.0 电池容量统计修复](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-battery-stats-v1.0)
+
 请下载发布附件 ZIP，不能把 GitHub 的整个仓库源码 ZIP 当成模块。
 
 [小米账号模块说明](../project-materials/modules/tb371fc_account_compat/README.md)：
@@ -27,6 +29,9 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 
 [手写笔电量桥锁修复](../project-materials/modules/tb371fc_pen_lockfix/README.md)：
 修复陈旧锁导致桥接退出，不修改硬件或笔输入链路。
+
+[电池容量统计修复](../project-materials/modules/tb371fc_battery_stats/README.md)：
+10200mAh设计基准与动态容量统计，不含PD、快充或旁路策略改动。
 
 已安装版本通过 `module.prop` 的 `updateJson` 获取更新；模块安装与更新需要
 使用者确认。

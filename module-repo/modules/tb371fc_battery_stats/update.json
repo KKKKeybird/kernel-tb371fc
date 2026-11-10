@@ -1,0 +1,6 @@
+{
+  "version": "1.0",
+  "versionCode": 10,
+  "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-battery-stats-v1.0/TB371FC-BatteryStats-v1.0.zip",
+  "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_battery_stats/CHANGELOG.md"
+}

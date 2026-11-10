@@ -74,6 +74,29 @@
           "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_pen_lockfix/CHANGELOG.md"
         }
       ]
+    },
+    {
+      "id": "tb371fc_battery_stats",
+      "name": "R8 电池容量统计修复",
+      "version": "1.0",
+      "versionCode": 10,
+      "author": "KKKKeybird",
+      "description": "设计基准10200mAh，满充及剩余容量动态读取，修正charge_counter上报口径。仅本项目R8；不含快充、PD限流或旁路改动。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_battery_stats/README.md",
+      "track": {
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_battery_stats"
+      },
+      "size": 7433,
+      "versions": [
+        {
+          "version": "1.0",
+          "versionCode": 10,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-battery-stats-v1.0/TB371FC-BatteryStats-v1.0.zip",
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_battery_stats/CHANGELOG.md",
+          "timestamp": 1794276502,
+          "size": 7433
+        }
+      ]
     }
   ]
 }
