@@ -32,7 +32,10 @@ public class SpeakerRotation {
   if(p.exitValue()!=0)throw new IOException("command failed: "+s);
   return s;
  }
- static String profile(String s){Matcher m=Pattern.compile(">([^ ]+)").matcher(s);return m.find()?m.group(1):"unknown";}
+ static String profile(String s){
+  Matcher m=Pattern.compile("(?m)^TFA Profile:.*>([^\\s]+)").matcher(s);
+  return m.find()?m.group(1):"unavailable";
+ }
  static int selector(String s){Matcher m=Pattern.compile("TFA9894_CHAN_SELECTOR: (-?\\d+)").matcher(s);return m.find()?Integer.parseInt(m.group(1)):-99;}
  static void trace(String s){
   try{
@@ -86,7 +89,10 @@ public class SpeakerRotation {
  static void writeMatrix(int[] matrix)throws Exception {
   RotationMatrix.validate(matrix);
   String[] args=new String[17];
-  args[0]=new File(dir,"matrix-write").getAbsolutePath();
+  File writer=new File(dir,"matrix-write");
+  if(!writer.canExecute())writer=new File("/system/etc/tb371fc/core/speaker_rotation/matrix-write");
+  if(!writer.canExecute())throw new IOException("atomic matrix writer missing");
+  args[0]=writer.getAbsolutePath();
   for(int i=0;i<16;i++)args[i+1]=Integer.toString(matrix[i]);
   command(args);
  }
@@ -97,8 +103,11 @@ public class SpeakerRotation {
   int r=(Integer)getRotation.invoke(d);
   if(probe){status("PROBE display_rotation="+r+" matrix=4x4 no_audio_writes");return;}
   if(!ready(r,ticket)){status("IDLE screen_or_mode_guard no_audio_writes");return;}
-  String snapshot=command("/system/bin/sh","-c",
-   "/system/bin/tinymix 'TFA Profile' && /system/bin/tinymix TFA9894_CHAN_SELECTOR && /system/bin/tinymix 'SpkRot 0 Matrix'");
+  String snapshot;
+  try{
+   snapshot=command("/system/bin/sh","-c",
+    "/system/bin/tinymix 'TFA Profile' 2>/dev/null || true; /system/bin/tinymix TFA9894_CHAN_SELECTOR; /system/bin/tinymix 'SpkRot 0 Matrix'");
+  }catch(Exception e){throw new IOException("required rotation controls unavailable: "+e);}
   String p=profile(snapshot);
   if(!RotationPolicy.allowed((Integer)phoneMode.invoke(audioService),p)){
    status("PAUSED profile="+p+" keep_call_protection");return;
@@ -173,11 +182,13 @@ public class SpeakerRotation {
   Class<?> handler=Class.forName("android.os.Handler");Object h=handler.getConstructor(looper).newInstance(looper.getMethod("myLooper").invoke(null));
   dm.getMethod("registerDisplayListener",displayListenerClass,handler).invoke(displayManager,displayListener,h);
   // Refuse to run on an old kernel instead of silently using a stereo-only path.
-  if(!new File(dir,"matrix-write").canExecute())throw new IOException("atomic matrix writer missing");
+  File ownWriter=new File(dir,"matrix-write");
+  File systemWriter=new File("/system/etc/tb371fc/core/speaker_rotation/matrix-write");
+  if(!ownWriter.canExecute()&&!systemWriter.canExecute())throw new IOException("atomic matrix writer missing");
   curMatrix=RotationMatrix.parse(command("/system/bin/tinymix","SpkRot 0 Matrix"));
   if(!probe&&(Integer)phoneMode.invoke(audioService)==0){
    String initial=command("/system/bin/sh","-c",
-    "/system/bin/tinymix 'TFA Profile' && /system/bin/tinymix TFA9894_CHAN_SELECTOR");
+    "/system/bin/tinymix 'TFA Profile' 2>/dev/null || true; /system/bin/tinymix TFA9894_CHAN_SELECTOR");
    if(RotationPolicy.allowed(0,profile(initial))&&selector(initial)!=1){
     command("/system/bin/tinymix","TFA9894_CHAN_SELECTOR","1");
     if(selector(command("/system/bin/tinymix","TFA9894_CHAN_SELECTOR"))!=1)

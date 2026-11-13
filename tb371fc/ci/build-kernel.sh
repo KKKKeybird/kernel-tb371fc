@@ -11,7 +11,7 @@ cd "$ROOT"
 
 echo "== variant: $VARIANT =="
 
-cp tb371fc/config-v2.1.txt .config
+cp arch/arm64/configs/tb371fc_hyperos_reviewed24.config .config
 
 CFG=(
   --file .config

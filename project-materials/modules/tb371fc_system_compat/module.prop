@@ -1,0 +1,7 @@
+id=tb371fc_system_compat
+name=TB371FC R8 系统服务兼容修复
+version=1.0
+versionCode=10
+author=KKKKeybird
+description=修复扬声器旋转在新内核下因旧TFA控件缺失而退出，并修复扬声器/霍尔服务的陈旧空锁恢复。仅适配TB371FC HyperOS3 R8。
+updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_system_compat/update.json

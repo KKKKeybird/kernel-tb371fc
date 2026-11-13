@@ -95,8 +95,10 @@ jobs:
           ./tb371fc/ci/build-kernel.sh ${{ matrix.variant }} 2>&1 | tee build-${{ matrix.variant }}.log
           test -f arch/arm64/boot/Image
 
+      # Integration candidates preserve the live R8 ramdisk separately.
+      # Never ship an upstream stock-ramdisk boot as a HyperOS candidate.
       - name: Repack boot image
-        if: steps.gate.outputs.run == 'true'
+        if: steps.gate.outputs.run == 'true' && !startsWith(github.ref_name, 'integrate/')
         shell: bash
         run: |
           set -euo pipefail
