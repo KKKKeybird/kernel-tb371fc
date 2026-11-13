@@ -113,4 +113,17 @@ Root及钩子、CTN730、键盘状态帧过滤、zram/ExtendM、NVT接口、ther
 
 ## 当前验证
 
-源码冲突已处理；未向平板刷入候选内核。编译与候选内核上的功能回归尚未完成，不等同于已验收可用。
+源码冲突已处理；未向平板刷入候选内核。本地完整Image构建、MODPOST和最终链接已通过；候选内核上的功能回归尚未完成，不等同于已验收可用。
+
+## 本地构建结果
+
+- 成功构建的代码提交：00285dcc9dad912d291e9f0d3cc2173dff4fb9eb；后续仅记录文档。
+- 产物：ARM64 Linux Image，4.19.325-perf++，build #25。
+- 复用旧#24构建目录与独立缓存副本，旧卷以只读方式挂载；未再次做源文件哈希校验。
+- 工具链：Ubuntu clang21.1.8、GNU binutils2.46；二核并行。
+- 新TFA对象编译、MODPOST、vmlinux链接和Image输出均成功，容器exit0。
+- 本轮ccache计数增加122次命中、12次未命中；未变旧对象亦由Kbuild直接复用。
+- Image SHA256（构建输出）：6108caa07279cdd1f60898829a580029150c2395e315a265cfccec2c03ba6478。
+- 本地产物：/private/tmp/tb371fc-upstream-local-20261113/reuse/Image。
+- 未生成带上游原厂ramdisk的R8测试boot，未刷平板，未更新主分支。
+- 两次GitHub任务被本地主动替代/取消，不是CI编译通过。
