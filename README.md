@@ -1,3 +1,8 @@
+> **本分支为HyperOS #24兼容整合候选，不是上游原版v2.2发布镜像。**
+> 已选择性整合上游音频与键盘修复，并保留本分支内建Root、HyperOS接口及声道旋转扩展。
+> 构建使用`tb371fc_hyperos_reviewed24.config`并内建QS/YC固件；不要直接用下文的上游boot替换R8。
+> 编译与实机验收状态见[逐提交整合记录](tb371fc/upstream-integration/REVIEW.md)。
+
 # TB371FC Custom Kernel — 4.19.325-perf++
 
 联想小新 Pad Pro 12.7 2021（TB371FC，高通 SM8250/kona）的自定义内核。
