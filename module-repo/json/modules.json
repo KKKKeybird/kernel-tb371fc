@@ -120,6 +120,52 @@
           "size": 145136
         }
       ]
+    },
+    {
+      "id": "tb371fc_system_compat",
+      "name": "R8 系统服务兼容修复",
+      "version": "1.0",
+      "versionCode": 10,
+      "author": "KKKKeybird",
+      "description": "修复新内核下扬声器旋转服务、陈旧空锁与霍尔服务恢复；不覆盖账号、电池、手写笔或分屏模块的文件。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_system_compat/README.md",
+      "track": {
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_system_compat"
+      },
+      "size": 15212,
+      "versions": [
+        {
+          "version": "1.0",
+          "versionCode": 10,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-system-compat-v1.0/TB371FC-SystemCompat-v1.0.zip",
+          "timestamp": 1794558550,
+          "size": 15212,
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_system_compat/CHANGELOG.md"
+        }
+      ]
+    },
+    {
+      "id": "tb371fc_kernel_updater",
+      "name": "R8 内核更新器",
+      "version": "2.2-hyperos25",
+      "versionCode": 25,
+      "author": "KKKKeybird",
+      "description": "主动双击确认后备份并更新当前活动槽 boot；安装、订阅更新与开机均不会自动刷写。只支持精确 R8 基础镜像。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater/README.md",
+      "track": {
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_kernel_updater"
+      },
+      "size": 100667442,
+      "versions": [
+        {
+          "version": "2.2-hyperos25",
+          "versionCode": 25,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-kernel-updater-v2.2-hyperos25/TB371FC-KernelUpdater-v2.2-hyperos25.zip",
+          "timestamp": 1794558550,
+          "size": 100667442,
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater/CHANGELOG.md"
+        }
+      ]
     }
   ]
 }

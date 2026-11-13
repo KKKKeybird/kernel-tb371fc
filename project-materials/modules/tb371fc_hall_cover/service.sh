@@ -3,8 +3,12 @@ MODDIR=${0%/*}
 LOCK="$MODDIR/policy.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
  old=$(cat "$LOCK/pid" 2>/dev/null)
- case "$old" in ''|*[!0-9]*) exit 0;; esac
- if [ -r "/proc/$old/cmdline" ] && tr '\000' ' ' < "/proc/$old/cmdline" | grep -Fq "$MODDIR/service.sh"; then exit 0; fi
+ case "$old" in
+  ''|*[!0-9]*) ;;
+  *)
+   if [ -r "/proc/$old/cmdline" ] && tr '\000' ' ' < "/proc/$old/cmdline" | grep -Fq "$MODDIR/service.sh"; then exit 0; fi
+   ;;
+ esac
  rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null || exit 0
  mkdir "$LOCK" 2>/dev/null || exit 0
 fi

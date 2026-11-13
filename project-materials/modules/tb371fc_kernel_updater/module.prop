@@ -1,0 +1,7 @@
+id=tb371fc_kernel_updater
+name=TB371FC R8 内核更新器
+version=2.2-hyperos25
+versionCode=25
+author=KKKKeybird
+description=用户主动双击确认后备份并更新当前活动槽boot；不会后台刷写。仅适配TB371FC HyperOS3 R8精确基础镜像。
+updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_kernel_updater/update.json
