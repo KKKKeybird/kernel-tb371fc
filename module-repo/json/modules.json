@@ -166,29 +166,6 @@
           "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater/CHANGELOG.md"
         }
       ]
-    },
-    {
-      "id": "tb371fc_stock_charge",
-      "name": "R8 原厂停充与小米充电保护桥接（测试版）",
-      "version": "1.0-test1",
-      "versionCode": 1,
-      "author": "KKKKeybird",
-      "description": "仅R8+#25内核；修正立即旁路与80%保护，保留USB输入和温控。USB/普通PD已实测，PPS泵开启待测。",
-      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_stock_charge/README.md",
-      "track": {
-        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_stock_charge"
-      },
-      "size": 13347,
-      "versions": [
-        {
-          "version": "1.0-test1",
-          "versionCode": 1,
-          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-stock-charge-v1.0-test1/TB371FC-StockCharge-v1.0-test1.zip",
-          "timestamp": 1794651203,
-          "size": 13347,
-          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_stock_charge/CHANGELOG.md"
-        }
-      ]
     }
   ]
 }
