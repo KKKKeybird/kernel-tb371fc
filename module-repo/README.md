@@ -1,7 +1,7 @@
 # TB371FC R8 模块订阅（实验）
 
-此目录提供 BakaSU 支持的 MMRL 自定义模块源。除已有账号、分屏、手写笔、
-电池和 PPS 实验模块外，现增加系统服务兼容修复、内核更新器与原厂充电控制。
+此目录提供 BakaSU 支持的 MMRL 自定义模块源。首选安装“R8 整合维护与
+兼容修复”；此前的单功能模块作为旧版回退保留，不再继续维护。
 
 在 BakaSU 的模块仓库来源管理中添加：
 
@@ -13,6 +13,10 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 
 模块下载：
 
+- [v1.0-test1 R8 整合维护与兼容修复](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-integrated-v1.0-test1)
+
+以下为旧版回退，不再推荐新安装：
+
 - [v1.1 小米账号兼容](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-account-compat-v1.1)
 - [v1.1 竖屏上下分屏](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-split-compat-v1.1)
 - [v1.0 手写笔电量桥锁修复](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-pen-lockfix-v1.0)
@@ -23,6 +27,10 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 - [v1.1-test3 原厂充电控制与四档电池保护](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-stock-charge-v1.1-test3)
 
 请下载发布附件 ZIP，不能把 GitHub 的整个仓库源码 ZIP 当成模块。
+
+[整合维护与兼容修复](../project-materials/modules/tb371fc_integrated/README.md)：
+统一接管账号、上下分屏、手写笔锁、容量统计、系统服务、四档充电和手动内核/PPS
+工具。安装时会保留并禁用旧单模块目录，回退脚本可恢复旧模块。
 
 [小米账号模块说明](../project-materials/modules/tb371fc_account_compat/README.md)：
 仅用于隐藏 FindDevice 后的账号页兼容，不恢复查找设备。

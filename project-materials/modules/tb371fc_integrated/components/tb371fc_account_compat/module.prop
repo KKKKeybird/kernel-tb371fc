@@ -1,0 +1,7 @@
+id=tb371fc_account_compat
+name=TB371FC R8 Xiaomi Account Safe Compatibility
+version=1.1
+versionCode=11
+author=TB371FC local integration
+description=Safely return FindDevice closed when its optional status service is unavailable. Late-load one SDK method fix after boot; keep FindDevice hidden.
+updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_account_compat/update.json

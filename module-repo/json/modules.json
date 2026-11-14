@@ -7,12 +7,35 @@
   },
   "modules": [
     {
+      "id": "tb371fc_integrated",
+      "name": "R8 整合维护与兼容修复",
+      "version": "1.0-test1",
+      "versionCode": 100,
+      "author": "KKKKeybird",
+      "description": "统一维护账号、上下分屏、手写笔锁、容量统计、系统服务、四档充电及手动内核/PPS工具。旧单模块改为回退保留，不再继续维护。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_integrated/README.md",
+      "track": {
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_integrated"
+      },
+      "size": 29836671,
+      "versions": [
+        {
+          "version": "1.0-test1",
+          "versionCode": 100,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-integrated-v1.0-test1/TB371FC-Integrated-v1.0-test1.zip",
+          "timestamp": 1794665919,
+          "size": 29836671,
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_integrated/CHANGELOG.md"
+        }
+      ]
+    },
+    {
       "id": "tb371fc_account_compat",
       "name": "R8 小米账号兼容修复（实验版）",
       "version": "1.1",
       "versionCode": 11,
       "author": "KKKKeybird",
-      "description": "仅修复账号页因隐藏 FindDevice 引发的闪退与资料加载问题。仅 R8 + micloud-sdk 20；云空间容量仍未恢复，当前启动故障根因未明。",
+      "description": "【旧版回退，停止维护；推荐整合模块】仅修复账号页因隐藏 FindDevice 引发的闪退与资料加载问题。仅 R8 + micloud-sdk 20。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_account_compat/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_account_compat"
@@ -35,7 +58,7 @@
       "version": "1.1",
       "versionCode": 11,
       "author": "KKKKeybird",
-      "description": "恢复 TB371FC R8 原生竖屏上下分屏。仅适配精确系统构建与原版 MiuiSystemUI APK；含自动回退和模块内更新地址。",
+      "description": "【旧版回退，停止维护；推荐整合模块】恢复 TB371FC R8 原生竖屏上下分屏。仅适配精确系统构建与原版 MiuiSystemUI APK。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_split_compat/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_split_compat"
@@ -58,7 +81,7 @@
       "version": "1.0",
       "versionCode": 10,
       "author": "KKKKeybird",
-      "description": "修复陈旧 supervisor.lock 导致手写笔电量桥不启动的问题。只替换一个 ROM 集成脚本，不修改硬件、蓝牙、输入 relay 或充电策略。",
+      "description": "【旧版回退，停止维护；推荐整合模块】修复陈旧 supervisor.lock 导致手写笔电量桥不启动的问题。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_pen_lockfix/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_pen_lockfix"
@@ -81,7 +104,7 @@
       "version": "1.0",
       "versionCode": 10,
       "author": "KKKKeybird",
-      "description": "设计基准10200mAh，满充及剩余容量动态读取，修正charge_counter上报口径。仅本项目R8；不含快充、PD限流或旁路改动。",
+      "description": "【旧版回退，停止维护；推荐整合模块】设计基准10200mAh，满充及剩余容量动态读取，修正charge_counter上报口径。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_battery_stats/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_battery_stats"
@@ -104,7 +127,7 @@
       "version": "0.3-test",
       "versionCode": 3,
       "author": "KKKKeybird",
-      "description": "未实测可用性！第三版用户态温度消费链路原型。安装/开机不自动启用，仅手动120秒实验。未证明泵能启动或温度修复有效，不包含PD限流或旁路修改。",
+      "description": "【旧版回退，停止维护；已并入整合模块】未实测可用性！第三版用户态温度消费链路原型，仅手动120秒实验。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_pps_temp_test/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_pps_temp_test"
@@ -127,7 +150,7 @@
       "version": "1.0",
       "versionCode": 10,
       "author": "KKKKeybird",
-      "description": "修复新内核下扬声器旋转服务、陈旧空锁与霍尔服务恢复；不覆盖账号、电池、手写笔或分屏模块的文件。",
+      "description": "【旧版回退，停止维护；推荐整合模块】修复新内核下扬声器旋转服务、陈旧空锁与霍尔服务恢复。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_system_compat/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_system_compat"
@@ -150,7 +173,7 @@
       "version": "2.2-hyperos25",
       "versionCode": 25,
       "author": "KKKKeybird",
-      "description": "主动双击确认后备份并更新当前活动槽 boot；安装、订阅更新与开机均不会自动刷写。只支持精确 R8 基础镜像。",
+      "description": "【旧版回退，停止维护；内核能力已并入整合模块的手动入口】主动双击确认后更新活动槽 boot，永不自动刷写。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_kernel_updater"
@@ -173,7 +196,7 @@
       "version": "1.1-test3",
       "versionCode": 13,
       "author": "KKKKeybird",
-      "description": "保留正常充满、小米智能充电和80%健康保护，并在原页面新增旁路供电。旁路接通联想原厂停充接口；PPS泵开启及长期预测仍待自然使用验收。",
+      "description": "【旧版回退，停止维护；推荐整合模块】保留正常充满、小米智能充电和80%健康保护，并在原页面新增旁路供电。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_stock_charge/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_stock_charge"

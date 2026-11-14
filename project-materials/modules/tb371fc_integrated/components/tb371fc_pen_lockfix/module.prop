@@ -1,0 +1,7 @@
+id=tb371fc_pen_lockfix
+name=TB371FC R8 Pen Battery Bridge Lock Fix
+version=1.0
+versionCode=10
+author=KKKKeybird
+description=Fix stale pen-bridge supervisor locks so stylus battery events resume without reflashing the ROM. Exact TB371FC R8 ROM match required.
+updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_pen_lockfix/update.json

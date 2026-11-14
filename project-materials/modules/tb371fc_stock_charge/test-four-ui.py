@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive actual preferences; never forge battery readings or prediction history."""
 from pathlib import Path
-import subprocess as sp,time,json,re,xml.etree.ElementTree as E
+import os,subprocess as sp,time,json,re,xml.etree.ElementTree as E
 ROOT=Path(__file__).resolve().parent
 OUT=ROOT/'four-mode-acceptance';OUT.mkdir(exist_ok=True)
 A=['adb','-s','HA1T90V1']
@@ -20,6 +20,13 @@ def ensure_interactive():
   adb('shell','wm','dismiss-keyguard')
   time.sleep(2)
   if 'interactive=true' in state()[0]:return
+  pin=os.environ.get('TB371FC_TEST_PIN','')
+  if pin:
+   adb('shell','input','swipe','900','2500','900','700','300')
+   adb('shell','input','text',pin)
+   adb('shell','input','keyevent','KEYCODE_ENTER')
+   time.sleep(3)
+   if 'interactive=true' in state()[0]:return
  raise RuntimeError('Could not restore an interactive display')
 def start_charger_page():
  for attempt in range(10):

@@ -1,0 +1,7 @@
+id=tb371fc_integrated
+name=TB371FC R8 整合维护与兼容修复
+version=1.0-test1
+versionCode=100
+author=KKKKeybird
+description=统一维护R8账号、上下分屏、手写笔锁、容量统计、系统服务、四档充电及手动内核/PPS工具。保留旧模块作为回退；不会自动刷内核，也不写Google Play数据。
+updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_integrated/update.json
