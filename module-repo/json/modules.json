@@ -166,6 +166,29 @@
           "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater/CHANGELOG.md"
         }
       ]
+    },
+    {
+      "id": "tb371fc_stock_charge",
+      "name": "R8 原厂充电控制与四档电池保护",
+      "version": "1.1-test3",
+      "versionCode": 13,
+      "author": "KKKKeybird",
+      "description": "保留正常充满、小米智能充电和80%健康保护，并在原页面新增旁路供电。旁路接通联想原厂停充接口；PPS泵开启及长期预测仍待自然使用验收。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_stock_charge/README.md",
+      "track": {
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_stock_charge"
+      },
+      "size": 3874783,
+      "versions": [
+        {
+          "version": "1.1-test3",
+          "versionCode": 13,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-stock-charge-v1.1-test3/TB371FC-StockCharge-v1.1-test3.zip",
+          "timestamp": 1794664288,
+          "size": 3874783,
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_stock_charge/CHANGELOG.md"
+        }
+      ]
     }
   ]
 }

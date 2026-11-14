@@ -12,9 +12,11 @@ if not (java/'bin/javac').is_file() or not args.r8_jar.is_file():ap.error('Provi
 def run(*cmd):sp.run([str(x) for x in cmd],check=True)
 with tempfile.TemporaryDirectory(prefix='tb371fc-charge-build-') as tmp:
     tmp=Path(tmp);classes=tmp/'classes';dex=tmp/'dex';classes.mkdir();dex.mkdir()
-    run(java/'bin/javac','--release','8','-Xlint:-options','-d',classes,*sorted((ROOT/'src').glob('*.java')))
+    stub=tmp/'stub';stub.mkdir()
+    run(java/'bin/javac','--release','8','-Xlint:-options','-d',stub,*sorted((ROOT/'compile-stubs').rglob('*.java')))
+    run(java/'bin/javac','--release','8','-Xlint:-options','-cp',stub,'-d',classes,*sorted((ROOT/'src').glob('*.java')))
     run(java/'bin/java','-cp',classes,'ChargePolicyTest')
-    run(java/'bin/java','-cp',args.r8_jar,'com.android.tools.r8.D8','--release','--min-api','35','--lib',java,'--output',dex,classes/'ChargeBridge.class',classes/'ChargePolicy.class')
+    run(java/'bin/java','-cp',args.r8_jar,'com.android.tools.r8.D8','--release','--min-api','35','--lib',java,'--lib',stub,'--output',dex,*sorted(classes.glob('ChargeBridge*.class')),classes/'ChargePolicy.class')
     with zipfile.ZipFile(MODULE/'charge-bridge.jar','w',zipfile.ZIP_DEFLATED) as z:
         i=zipfile.ZipInfo('classes.dex',(2026,11,14,0,0,0));i.compress_type=zipfile.ZIP_DEFLATED
         z.writestr(i,(dex/'classes.dex').read_bytes())
