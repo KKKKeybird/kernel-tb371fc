@@ -1,0 +1,7 @@
+id=tb371fc_stock_charge
+name=TB371FC R8 原厂停充与小米充电保护桥接
+version=1.0-test1
+versionCode=1
+author=KKKKeybird
+description=将小米正常充满/80%保护/立即旁路接入联想原厂charge_disable接口，替换lwky旁路程序。保留USB供电与原有温控。仅适配本项目R8及已验证内核。
+updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_stock_charge/update.json

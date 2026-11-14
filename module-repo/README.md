@@ -49,3 +49,6 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 [PPS充电泵温度实验 v0.3-test](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-pps-temp-test-v0.3)：
 **未实测可用性**，尚未证明能启动充电泵或恢复正确温度；安装和开机不自动启用，
 仅模块“操作”按钮手动开始有条件的限时实验。不是已验证的快充修复。
+
+[原厂停充与小米充电保护桥接 v1.0-test1](../project-materials/modules/tb371fc_stock_charge/README.md)：
+仅R8+#25内核。普通USB/PD路径已实测；替换旧旁路程序，按小米选择实现正常、80%保护与立即旁路。PPS泵开启仍待验证。
