@@ -84,7 +84,15 @@ publish() {
         "$(date +%s)" "$remaining" "$full" "$DESIGN_BASELINE_MAH" "$design" "$soc" > "$R/status.tmp"
     mv "$R/status.tmp" "$R/status"
 }
-read_sample || { echo 'Initial sample rejected' > "$LOG"; exit 1; }
+sample_attempt=0
+until read_sample; do
+    sample_attempt=$((sample_attempt + 1))
+    if [ "$sample_attempt" -ge 8 ]; then
+        echo 'Initial sample rejected after retries' > "$LOG"
+        exit 1
+    fi
+    sleep 2
+done
 publish
 chmod 444 "$R"/charge_*
 chcon u:object_r:vendor_sysfs_battery_supply:s0 "$R"/charge_*

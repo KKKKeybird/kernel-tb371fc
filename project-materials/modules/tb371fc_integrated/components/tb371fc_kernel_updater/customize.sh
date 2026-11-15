@@ -11,5 +11,5 @@ ACTUAL=${ACTUAL%% *}
 set_perm "$MODPATH/action.sh" 0 0 0755
 set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/uninstall.sh" 0 0 0755
-ui_print "- 安装模块不会写入 boot"
-ui_print "- 请在模块操作页连续确认两次才执行内核更新"
+ui_print "- 首次安装时，整合模块会校验载荷、备份活动槽 boot 并自动更新"
+ui_print "- 写入和回读校验成功后才会自动重启；任一步失败均不改写 boot"

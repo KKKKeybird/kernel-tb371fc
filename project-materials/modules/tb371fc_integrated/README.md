@@ -9,11 +9,13 @@
 - 小米账号页的 FindDevice 不可用兜底；不恢复或启用 FindDevice。
 - SystemUI 竖屏上下分屏能力。
 - 手写笔电量桥的陈旧锁恢复。
+- 恢复 MiSound 页面缺失的 Dolby DAP 兼容属性；Dolby 原生效果链不变。
 - MM8013 动态容量统计与 10200mAh 设计基准。
 - 扬声器旋转/霍尔服务的旧锁兼容。
 - 原“电池保护”页面的正常、智能、健康保护和旁路供电四档。
 - PPS 温度实验的载荷与手动命令，默认永不运行。
-- 内核更新器代码与双击确认逻辑；小核心发布包不带 100MB boot 载荷。
+- 首次安装时自动校验、备份并更新 `#25` boot，成功回读后自动重启；小核心
+  发布包不带 100MB boot 载荷。
 
 旧独立模块作为回退保留下载。安装本模块会把当前启用且受管的七个旧模块
 写成 `disable`，不创建 `remove`，也不调用旧整包卸载。回退脚本只删除本次
@@ -25,12 +27,12 @@
 # 检查PPS实验条件；确定运行仍使用 action.sh，最长120秒并自动回退
 su -c "sh /data/adb/modules/tb371fc_integrated/components/tb371fc_pps_temp_test/run-test.sh --check"
 
-# 首次下载固定内核包并准备更新；五分钟内再次运行完成双确认
-su -c "sh /data/adb/modules/tb371fc_integrated/run-kernel.sh"
-su -c "sh /data/adb/modules/tb371fc_integrated/run-kernel.sh"
+# 自动更新失败后可在模块操作页重试
+su -c "sh /data/adb/modules/tb371fc_integrated/run-kernel.sh --auto"
 ```
 
-内核更新不会自动写 boot。没有模块回滚备份时，脚本不会猜测或覆盖。
+首次安装会在模块提交成功后自动下载固定载荷；只有哈希、备份、写入和回读
+全部通过才会自动重启。断网或任一步校验失败时保持旧 boot。
 
 ## 回退
 

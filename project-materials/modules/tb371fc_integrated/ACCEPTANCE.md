@@ -1,24 +1,23 @@
-# v1.0-test1 整合模块实机验收 — 2026-11-14
+# v1.3-test1 验收记录 — 2026-11-15
 
-环境：`TB371FC-HyperOS3-20261103-full`、Android 15、HyperOS #25。
+设备：`HA1T90V1`，`TB371FC-HyperOS3-20261103-full`，活动槽 `_a`。
 
-| 检查 | 结果 |
+| 项目 | 实测结果 |
 |---|---|
-| 从旧七个模块迁移 | 通过：先快照，再停旧充电/容量运行态，最后只写旧模块 `disable` |
-| 整合包安装与重启 | 通过：`tb371fc_integrated` versionCode 100 自动启动 |
-| 根运行态 | 通过：`sys.tb371fc.integrated=ready` |
-| 容量统计 | 通过：六个 sysfs 节点由整合 owner 接管，样本 `design_mah=10200` |
-| 账号兼容 | 通过：`sys.tb371fc.account_compat=safe_ready`，FindDevice 保持隐藏 |
-| 竖屏上下分屏 | 通过：能力值为 7，SystemUI 使用已验证替换包 |
-| 手写笔桥 | 通过：`sys.tb371fc.pen_lockfix=running`，ROM 桥服务运行 |
-| 扬声器与霍尔 | 通过：两个 ROM init 服务均为 running |
-| 四档充电页面 | 通过：正常、智能、健康保护和旁路供电均能实际点选并持久 |
-| 亮灭屏旁路 | 通过：亮屏停电池充电，息屏恢复充电，再次亮屏重新旁路 |
-| 重复启动 | 通过：同一 boot 内再次执行根 service 不会产生第二个充电桥 |
-| PPS 隔离 | 通过：PPS 不随开机启动；无合适 APPS/电量条件时预检拒绝 |
-| 内核安全边界 | 通过：小核心包不含 boot 载荷，开机前后 boot SHA 未变化 |
-| 迁移回退 | 通过：生成 `ROLLED_BACK`，整合模块禁用，旧七个模块重新启用 |
-| 回退后再次迁移 | 通过：重新安装并重启后恢复整合运行态 |
+| 发布 ZIP | `TB371FC-Integrated-v1.3-test1.zip`，34,274,654 字节，SHA-256 `8e6fb23b049cfb8b708b4f0f5f8c4199ba3a3915325c7cfd26ab04f7a650599c` |
+| 安装 | 同一发布 ZIP 通过 BakaSU/KernelSU 覆盖安装成功，versionCode 130 |
+| boot 安全 | 活动槽 boot SHA-256 为已验证 `#25`：`a9fb2b73e43e8e8bb1b7a8456bf772e6729b68c110ed57bf7f2c1d1cf417b981` |
+| 旧内核自动流程 | `kernel-auto.sh` 自测通过：等待模块安装提交、调用 `--auto`、写后校验、最后才调用重启；旧 boot 实刷未在本轮重复降级验证 |
+| 当前内核幂等 | `run-kernel.sh --auto` 检测到已是 `#25` 后跳过下载和重复写入 |
+| 满电容量 | 原始 `0x10=9011`、`0x12=8196`、SOC=100；新逻辑输出 `8196/8196`、`delta=0`，不再触发 ±3% 校验失败 |
+| 容量运行态 | `charge_full_design=10200000`，状态 `design_mah=10200`，守护进程持续运行 |
+| 整合运行态 | `sys.tb371fc.integrated=ready` |
+| 音质音效 | 页面正常打开，显示“杜比全景声”“杜比音效设置”，无 FATAL |
+| MiSound 空值 | 原版 APK 同样可复现三音效均不可用时的 `getValue()==null`；补丁将空值回落为 `none`，并保护初始化、偏好变化和销毁链路 |
+| Dirac | 系统无 `libdirac.so`；GEQ 入口继续隐藏，直接启动 `DolbyEqActivity` 不崩溃 |
+| Dolby | 恢复缺失的 `ro.vendor.audio.dolby.dax.support=true`；AudioFlinger 仍加载原生 `DAP`/`DAP_game` |
+| 电池保护页 | 页面正常打开；10200mAh 与正常/智能/健康/旁路四档均存在，无闪退 |
+| 旧模块迁移 | 八个旧模块目录未启用，整合模块单独运行 |
 
-未验收：PPS 充电泵开启、真实夜间预测的跨天行为、所有电源/高负载组合。
-旁路不等于物理断开电池。
+边界：本轮设备已处于 `#25`，没有把 boot 降回旧版本做实际自动刷写演练；
+自动安装器使用同一已实机验证过的 boot 写入路径，并增加了安装提交等待与失败不重启保护。

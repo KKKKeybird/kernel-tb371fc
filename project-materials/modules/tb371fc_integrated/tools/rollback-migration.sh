@@ -26,6 +26,13 @@ while IFS= read -r id; do
 done < "$STATE_DIR/newly-disabled.txt"
 
 touch "$ROOT/disable"
+
+for extra in tb371fc_touch_direction tb371fc_pen_icon tb371fc_geq_guard; do
+    if [ -f "$ROOT/components/$extra/service.sh" ]; then
+        sh "$ROOT/components/$extra/service.sh" --stop || true
+    fi
+done
+
 printf 'ROLLBACK_PENDING\n' > "$STATE_DIR/rollback-phase"
 if [ -x "$ROOT/components/tb371fc_stock_charge/service.sh" ]; then
     sh "$ROOT/components/tb371fc_stock_charge/service.sh" --stop || true

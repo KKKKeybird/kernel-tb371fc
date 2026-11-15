@@ -21,5 +21,10 @@ read_sample() {
     full=$(read_word 0x12) || return 1
     design=$(read_word 0x3c) || return 1
     soc=$(read_word 0x2c) || return 1
+    # MM8013 reports charge_counter above charge_full while the charger holds
+    # the pack at 100%. That is a plateau artifact, not extra usable capacity.
+    if [ "$soc" -ge 99 ] && [ "$remaining" -gt "$full" ]; then
+        remaining=$full
+    fi
     valid_sample
 }

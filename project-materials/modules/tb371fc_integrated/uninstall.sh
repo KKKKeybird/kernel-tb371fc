@@ -4,6 +4,18 @@ case "$0" in
     *) MODDIR=$(pwd -P);;
 esac
 COMP="$MODDIR/components"
+RESETPROP=/data/adb/ksu/bin/resetprop
+
+if [ -x "$RESETPROP" ]; then
+    "$RESETPROP" -d ro.vendor.audio.dolby.dax.support 2>/dev/null || true
+fi
+
+for extra in tb371fc_touch_direction tb371fc_pen_icon tb371fc_geq_guard; do
+    if [ -f "$MODDIR/components/$extra/service.sh" ]; then
+        sh "$MODDIR/components/$extra/service.sh" --stop || true
+    fi
+done
+
 BB=/data/adb/ksu/bin/busybox
 STATE=/data/adb/tb371fc-integrated/migration-v1
 if [ -f "$STATE/newly-disabled.txt" ] && [ -x "$MODDIR/tools/rollback-migration.sh" ]; then

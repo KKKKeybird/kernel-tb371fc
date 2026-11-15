@@ -10,6 +10,12 @@ if [ -f "$MODDIR/disable" ] || [ -f "$MODDIR/remove" ]; then exit 0; fi
 [ "$(cat /data/vendor/tb371fc/build-id 2>/dev/null)" = TB371FC-HyperOS3-20261103-full ] || exit 1
 case "$(uname -v)" in "#25 SMP PREEMPT "*) ;; *) exit 1;; esac
 mkdir -p "$STATE"
+RESETPROP=/data/adb/ksu/bin/resetprop
+if [ -x "$RESETPROP" ] && "$RESETPROP" -n ro.vendor.audio.dolby.dax.support true; then
+    setprop sys.tb371fc.dolby_dax ready
+else
+    setprop sys.tb371fc.dolby_dax failed
+fi
 BOOT_ID=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)
 if [ -n "$BOOT_ID" ] && [ "$(cat "$STATE/started-boot" 2>/dev/null)" = "$BOOT_ID" ]; then
     exit 0
@@ -72,6 +78,9 @@ start_component() {
 
 start_component battery "$COMP/tb371fc_battery_stats" "$COMP/tb371fc_battery_stats/service.sh"
 start_component system "$COMP/tb371fc_system_compat" "$COMP/tb371fc_system_compat/service.sh"
+start_component touch_direction "$COMP/tb371fc_touch_direction" "$COMP/tb371fc_touch_direction/service.sh"
+start_component pen_icon "$COMP/tb371fc_pen_icon" "$COMP/tb371fc_pen_icon/service.sh"
+start_component geq_guard "$COMP/tb371fc_geq_guard" "$COMP/tb371fc_geq_guard/service.sh"
 start_component pen "$COMP/tb371fc_pen_lockfix" "$COMP/tb371fc_pen_lockfix/service.sh"
 start_component account "$COMP/tb371fc_account_compat" "$COMP/tb371fc_account_compat/service.sh"
 start_component split "$COMP/tb371fc_split_compat" "$COMP/tb371fc_split_compat/service.sh"

@@ -13,7 +13,7 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 
 模块下载：
 
-- [v1.0-test1 R8 整合维护与兼容修复](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-integrated-v1.0-test1)
+- [v1.3-test1 R8 整合维护与兼容修复](https://github.com/KKKKeybird/kernel-tb371fc/releases/tag/module-integrated-v1.3-test1)
 
 以下为旧版回退，不再推荐新安装：
 
@@ -29,8 +29,10 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 请下载发布附件 ZIP，不能把 GitHub 的整个仓库源码 ZIP 当成模块。
 
 [整合维护与兼容修复](../project-materials/modules/tb371fc_integrated/README.md)：
-统一接管账号、上下分屏、手写笔锁、容量统计、系统服务、四档充电和手动内核/PPS
-工具。安装时会保留并禁用旧单模块目录，回退脚本可恢复旧模块。
+统一接管账号、上下分屏、手写笔锁、容量统计、系统服务、四档充电、音效兼容
+和自动内核/PPS 工具。受支持的旧 boot 可先安装模块，安装提交后自动校验、
+备份并更新 `#25` boot，回读成功才重启。安装时会保留并禁用旧单模块目录，
+回退脚本可恢复旧模块。
 
 [小米账号模块说明](../project-materials/modules/tb371fc_account_compat/README.md)：
 仅用于隐藏 FindDevice 后的账号页兼容，不恢复查找设备。
@@ -48,7 +50,7 @@ https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/jso
 恢复扬声器旋转及空锁服务，不与现有四个正式修复模块重复覆盖文件。
 
 [内核更新器](../project-materials/modules/tb371fc_kernel_updater/README.md)：
-只有用户在模块操作页连续确认两次才写入活动槽 boot；订阅更新不会自动刷写。
+旧版独立更新器继续作为回退保留；内核能力已并入整合模块首次安装自动流程。
 
 [原厂充电控制与四档电池保护](../project-materials/modules/tb371fc_stock_charge/README.md)：
 保留小米原有智能充电与80%健康保护，在原电池保护页面新增旁路供电。

@@ -9,16 +9,24 @@
     {
       "id": "tb371fc_integrated",
       "name": "R8 整合维护与兼容修复",
-      "version": "1.0-test1",
-      "versionCode": 100,
+      "version": "1.3-test1",
+      "versionCode": 130,
       "author": "KKKKeybird",
-      "description": "统一维护账号、上下分屏、手写笔锁、容量统计、系统服务、四档充电及手动内核/PPS工具。旧单模块改为回退保留，不再继续维护。",
+      "description": "首次安装自动更新已验证#25 boot并重启；同时维护账号、上下分屏、手写笔锁、容量统计、系统服务、四档充电、Dolby兼容与音效页面修复。旧单模块改为回退保留。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_integrated/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_integrated"
       },
-      "size": 29836671,
+      "size": 34274654,
       "versions": [
+        {
+          "version": "1.3-test1",
+          "versionCode": 130,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-integrated-v1.3-test1/TB371FC-Integrated-v1.3-test1.zip",
+          "timestamp": 1794720163,
+          "size": 34274654,
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_integrated/CHANGELOG.md"
+        },
         {
           "version": "1.0-test1",
           "versionCode": 100,

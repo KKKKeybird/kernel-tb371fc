@@ -5,7 +5,16 @@ ui_print '- TB371FC R8 integrated maintenance module'
 [ -x /data/adb/ksu/bin/ksud ] || abort '! BakaSU / KernelSU required'
 [ -x /data/adb/ksu/bin/busybox ] || abort '! BakaSU BusyBox required'
 [ "$(cat /data/vendor/tb371fc/build-id 2>/dev/null)" = TB371FC-HyperOS3-20261103-full ] || abort '! Exact R8 build required'
-case "$(uname -v)" in "#25 SMP PREEMPT "*) ;; *) abort '! HyperOS #25 kernel required';; esac
+BOOT_SLOT=$(getprop ro.boot.slot_suffix)
+case "$BOOT_SLOT" in _a|_b) ;; *) abort '! Invalid active boot slot';; esac
+BOOT_SHA=$(sha256sum "/dev/block/by-name/boot$BOOT_SLOT" | cut -d' ' -f1)
+case "$BOOT_SHA" in
+    a0d3a11eb761dbe63d0175dd4ea597a3d26881c8a3ef264ca2b3fe42d886a5a9)
+        KERNEL_PENDING=1;;
+    a9fb2b73e43e8e8bb1b7a8456bf772e6729b68c110ed57bf7f2c1d1cf417b981)
+        KERNEL_PENDING=0;;
+    *) abort "! Unsupported active boot SHA-256: $BOOT_SHA";;
+esac
 
 COMP="$MODPATH/components"
 STOCK="$COMP/tb371fc_stock_charge"
@@ -18,6 +27,7 @@ OLD_STOCK_OWNER=
 STOPPED_STOCK=0
 STOPPED_BAT=0
 PLANNED=
+CREATED_MIGRATION=0
 
 check_sha() {
     file=$1
@@ -29,6 +39,8 @@ check_sha() {
 
 check_sha "$COMP/tb371fc_account_compat/payload/RtMiCloudSDK.apk" 5cdedef6cf6982f8cf86a82b64e1a419eb956c84fb224a849b5f2adbe8c5ddbf
 check_sha "$COMP/tb371fc_split_compat/payload/MiuiSystemUI.apk" 0b243aebb7efe8f5655dbe467d61e0def5fc502005be508028857fa3d57089da
+check_sha "$COMP/tb371fc_geq_guard/payload/classes.dex" a4e5ca4f1b78712d90e8d1e61b8b91c06cdfe3c41eca84af9bb441d985927f1e
+check_sha "$COMP/tb371fc_geq_guard/apk-patcher.jar" b500ed72ed0f7fdc4e3024e981f038136a718de00536983e8b27631ac30d1018
 check_sha "$COMP/tb371fc_pps_temp_test/hvdcp_opti.temp-chain-v3-test" c4f7c8921cef1897fa3bcc5134251a4a35887262c31510da5ae093d35f700285
 check_sha "$MODPATH/system/etc/tb371fc/core/pen_bridge/supervisor.sh" fa8aa51bd5544f608c4f6b3b63f9e6abf7cca459dfdebe96c8ea5dd6e1b6cd42
 check_sha "$MODPATH/system/etc/tb371fc/core/speaker_rotation/rotation.jar" 9f81e6dfc84dd22704d5f8fbded0570a3def3ea16f366073f5f30969c97e8dea
@@ -40,13 +52,15 @@ check_sha "$STOCK/payload/classes3.dex" a8c9c7a81181ab1a0b7b1c68f3d4418c49a3f91a
 [ "$(cat /sys/class/power_supply/battery/bp_enable)" = 0 ] || abort '! Another Lenovo protection owner is active'
 
 mkdir -p "$STATE"
-printf 'id\texists\tenabled\tversionCode\n' > "$STATE/modules-before.tsv"
+if [ ! -f "$STATE/newly-disabled.txt" ]; then
+    printf 'id\texists\tenabled\tversionCode\n' > "$STATE/modules-before.tsv"
+fi
 PLANNED="$STATE/.newly-disabled.$$"
 : > "$PLANNED"
 cleanup_migration() {
     status=$?
     if [ "$status" != 0 ]; then
-        if [ -f "$STATE/newly-disabled.txt" ]; then
+        if [ "$CREATED_MIGRATION" = 1 ] && [ -f "$STATE/newly-disabled.txt" ]; then
             while IFS= read -r id; do
                 [ -n "$id" ] && rm -f "/data/adb/modules/$id/disable"
             done < "$STATE/newly-disabled.txt"
@@ -63,6 +77,9 @@ cleanup_migration() {
 }
 trap cleanup_migration EXIT HUP INT TERM
 
+# Preserve the first migration journal on integrated-to-integrated upgrades.
+if [ ! -f "$STATE/newly-disabled.txt" ]; then
+    CREATED_MIGRATION=1
 printf 'version\t1\ncreated\t%s\n' "$(date +%s)" > "$STATE/meta.tsv"
 printf '%s\n' \
     security_pc_secure_protect_mode_key="$(settings --user 0 get secure security_pc_secure_protect_mode_key 2>/dev/null)" \
@@ -86,6 +103,16 @@ done
 mv "$PLANNED" "$STATE/newly-disabled.txt"
 sync
 
+else
+    while IFS= read -r id; do
+        case "$id" in
+            tb371fc_account_compat|tb371fc_split_compat|tb371fc_pen_lockfix|tb371fc_battery_stats|tb371fc_pps_temp_test|tb371fc_system_compat|tb371fc_kernel_updater|tb371fc_stock_charge|'') ;;
+            *) abort '! Existing migration journal has an unknown module id';;
+        esac
+    done < "$STATE/newly-disabled.txt"
+    rm -f "$PLANNED"
+fi
+
 if [ -d "$R" ]; then
     OLD_STOCK_OWNER=$(cat "$R/moddir" 2>/dev/null)
     [ -n "$OLD_STOCK_OWNER" ] && [ -f "$OLD_STOCK_OWNER/service.sh" ] || abort '! Existing charging runtime has no recoverable owner'
@@ -93,6 +120,13 @@ if [ -d "$R" ]; then
     STOPPED_STOCK=1
 fi
 if [ -d /dev/tb371fc_battery_stats ]; then
+    active_pid=$(cat /dev/tb371fc_battery_stats/pid 2>/dev/null)
+    case "$active_pid" in ''|*[!0-9]*) ;; *)
+        active_script=$(tr '\000' '\n' < "/proc/$active_pid/cmdline" 2>/dev/null | grep '/tb371fc_battery_stats/daemon[.]sh$' | tail -1)
+        case "$active_script" in
+            /data/adb/modules/tb371fc_integrated/components/tb371fc_battery_stats/daemon.sh|/data/adb/modules/tb371fc_battery_stats/daemon.sh) OLD_BAT=${active_script%/*};;
+        esac;;
+    esac
     [ -f "$OLD_BAT/daemon.sh" ] || abort '! Existing capacity runtime has no recoverable owner'
     sh "$OLD_BAT/daemon.sh" --stop || abort '! Existing capacity daemon did not stop safely'
     STOPPED_BAT=1
@@ -100,6 +134,17 @@ fi
 if [ -d /dev/tb371fc_pps_temp_probe ]; then
     [ -f /data/adb/modules/tb371fc_pps_temp_test/rollback.sh ] || abort '! Existing PPS runtime has no recoverable owner'
     su -M -c "sh '/data/adb/modules/tb371fc_pps_temp_test/rollback.sh'" || abort '! Existing PPS experiment did not roll back'
+fi
+if [ -d /dev/tb371fc_geq_guard ] &&
+   [ -f /data/adb/modules/tb371fc_integrated/components/tb371fc_geq_guard/service.sh ]; then
+    sh /data/adb/modules/tb371fc_integrated/components/tb371fc_geq_guard/service.sh --stop ||
+        abort '! Existing MiSound guard did not stop safely'
+    n=0
+    while [ -d /dev/tb371fc_geq_guard ] && [ "$n" -lt 12 ]; do
+        sleep 1
+        n=$((n + 1))
+    done
+    [ ! -d /dev/tb371fc_geq_guard ] || abort '! Existing MiSound guard is still active'
 fi
 
 [ "$(sha256sum "$APK" | cut -d' ' -f1)" = "$BASE_APK_SHA" ] || abort '! Exact R8 original Security Center is not visible after stopping its owner'
@@ -124,8 +169,12 @@ esac
 for file in \
     "$MODPATH/customize.sh" "$MODPATH/post-fs-data.sh" "$MODPATH/service.sh" \
     "$MODPATH/action.sh" "$MODPATH/uninstall.sh" "$MODPATH/run-pps.sh" \
-    "$MODPATH/run-kernel.sh" "$MODPATH/tools/migration.sh" \
+    "$MODPATH/run-kernel.sh" "$MODPATH/kernel-auto.sh" "$MODPATH/tools/migration.sh" \
     "$MODPATH/tools/rollback-migration.sh" \
+    "$COMP/tb371fc_touch_direction/service.sh" \
+    "$COMP/tb371fc_pen_icon/service.sh" "$COMP/tb371fc_pen_icon/rollback.sh" "$COMP/tb371fc_pen_icon/on-event.sh" \
+    "$COMP/tb371fc_geq_guard/service.sh" "$COMP/tb371fc_geq_guard/rollback.sh" \
+    "$COMP/tb371fc_geq_guard/on-event.sh" "$COMP/tb371fc_geq_guard/action.sh" \
     "$COMP/tb371fc_account_compat/service.sh" \
     "$COMP/tb371fc_split_compat/service.sh" "$COMP/tb371fc_split_compat/rollback.sh" \
     "$COMP/tb371fc_pen_lockfix/service.sh" \
@@ -149,6 +198,9 @@ for file in \
     "$COMP/tb371fc_account_compat/payload/RtMiCloudSDK.apk" \
     "$COMP/tb371fc_split_compat/payload/MiuiSystemUI.apk" \
     "$COMP/tb371fc_pps_temp_test/hvdcp_opti.temp-chain-v3-test" \
+    "$COMP/tb371fc_geq_guard/payload/classes.dex" \
+    "$COMP/tb371fc_geq_guard/payload/classes.sha256" \
+    "$COMP/tb371fc_geq_guard/base-apk.sha256" "$COMP/tb371fc_geq_guard/apk-patcher.jar" \
     "$COMP/tb371fc_stock_charge/securitycenter.apk" \
     "$COMP/tb371fc_stock_charge/generated-apk.sha256" \
     "$COMP/tb371fc_stock_charge/charge-bridge.jar" "$COMP/tb371fc_stock_charge/apk-patcher.jar" \
@@ -168,5 +220,30 @@ trap - EXIT HUP INT TERM
 
 ui_print '- Account, split, pen, capacity, system, charging and kernel tools are integrated'
 ui_print '- Legacy module folders are retained and disabled; rollback script can re-enable them'
-ui_print '- PPS remains manual; kernel update remains manual double-confirmation'
+if [ "$KERNEL_PENDING" = 1 ]; then
+    ui_print '- Current boot is the supported pre-#25 image; runtime remains dormant'
+    ui_print '- Open the module action twice within five minutes to update boot'
+else
+    ui_print '- Validated HyperOS #25 boot detected'
+fi
+ui_print '- PPS remains manual; supported old boot is updated automatically after install'
+ui_print '- Touch direction and pen icon use events; unsupported Dirac GEQ is hidden safely'
+ui_print '- Dolby DAP and the Lenovo vendor audio calibration remain untouched'
 ui_print '- Reboot to activate the integrated module'
+
+if [ "$KERNEL_PENDING" = 1 ]; then
+    AUTO_STATE=/data/adb/tb371fc-integrated/kernel-auto
+    mkdir -p "$AUTO_STATE" || abort '! Cannot create automatic kernel state directory'
+    cp -f "$MODPATH/kernel-auto.sh" "$AUTO_STATE/runner.sh" || abort '! Cannot stage automatic kernel runner'
+    chown 0:0 "$AUTO_STATE/runner.sh" || abort '! Cannot own automatic kernel runner'
+    chmod 0755 "$AUTO_STATE/runner.sh" || abort '! Cannot execute automatic kernel runner'
+    version=$(sed -n 's/^version=//p' "$MODPATH/module.prop" | head -1)
+    [ -n "$version" ] || abort '! Cannot determine integrated module version'
+    printf '%s\n' "$version" > "$AUTO_STATE/request-version"
+    printf 'time=%s state=queued version=%s\n' "$(date '+%F %T')" "$version" > "$AUTO_STATE/status"
+    : > "$AUTO_STATE/status.log"
+    setsid sh "$AUTO_STATE/runner.sh" </dev/null >>"$AUTO_STATE/status.log" 2>&1 &
+    echo "$!" > "$AUTO_STATE/pid"
+    ui_print '- Automatic #25 kernel update queued; it starts after this install commits'
+    ui_print '- A validated boot write is followed by an automatic reboot'
+fi

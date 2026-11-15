@@ -1,0 +1,39 @@
+{
+  "base_sha256": "8bb7b6fc36e2bfbe4f3ee2ae91512c95ee32209e86a71e1437040f3eaf45e5bb",
+  "patched_sha256": "0b243aebb7efe8f5655dbe467d61e0def5fc502005be508028857fa3d57089da",
+  "member": "classes5.dex",
+  "instruction_file_offset": 3683454,
+  "changed_members": [
+    "classes5.dex"
+  ],
+  "changed_dex_bytes": [
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    3683454,
+    3683455
+  ],
+  "apk_bytes": 36796551,
+  "scope": "Only IS_TOPBOTTOM_SPLIT_DEVICE result; module must gate device and exact ROM"
+}

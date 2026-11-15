@@ -7,6 +7,14 @@ PAYLOAD_SHA=a9fb2b73e43e8e8bb1b7a8456bf772e6729b68c110ed57bf7f2c1d1cf417b981
 OLD_SHA=a0d3a11eb761dbe63d0175dd4ea597a3d26881c8a3ef264ca2b3fe42d886a5a9
 CONFIRM="$M/confirm-action"
 LAST="$M/last-backup"
+AUTO=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --auto) AUTO=1;;
+    *) echo "未知参数：$arg"; exit 2;;
+  esac
+done
 
 fail() { echo "错误：$*"; exit 1; }
 [ "$(id -u)" = 0 ] || fail "需要 root"
@@ -17,11 +25,16 @@ slot=$(getprop ro.boot.slot_suffix)
 case "$slot" in _a|_b) ;; *) fail "活动槽无效：$slot";; esac
 target="/dev/block/by-name/boot$slot"
 [ -b "$target" ] || fail "找不到 $target"
+
+current=$(sha256sum "$target"); current=${current%% *}
+if [ "$AUTO" = 1 ] && [ "$current" = "$PAYLOAD_SHA" ]; then
+  echo '当前已经是最新内核，无需重复写入。'
+  exit 0
+fi
+
 [ -f "$PAYLOAD" ] || fail "缺少内核载荷"
 payload_hash=$(sha256sum "$PAYLOAD"); payload_hash=${payload_hash%% *}
 [ "$payload_hash" = "$PAYLOAD_SHA" ] || fail "载荷哈希错误"
-
-current=$(sha256sum "$target"); current=${current%% *}
 operation=install
 source=$PAYLOAD
 expected=$PAYLOAD_SHA
@@ -41,12 +54,16 @@ elif [ "$current" != "$OLD_SHA" ]; then
   fail "当前 boot 哈希不在安全白名单：$current"
 fi
 
-now=$(date +%s)
-armed=
-if [ -f "$CONFIRM" ]; then
-  IFS='|' read -r oldop oldhash oldtime < "$CONFIRM" || true
-  if [ "$oldop" = "$operation" ] && [ "$oldhash" = "$current" ] && [ $((now-oldtime)) -le 300 ]; then
-    armed=1
+if [ "$AUTO" = 1 ]; then
+  armed=1
+else
+  now=$(date +%s)
+  armed=
+  if [ -f "$CONFIRM" ]; then
+    IFS='|' read -r oldop oldhash oldtime < "$CONFIRM" || true
+    if [ "$oldop" = "$operation" ] && [ "$oldhash" = "$current" ] && [ $((now-oldtime)) -le 300 ]; then
+      armed=1
+    fi
   fi
 fi
 
@@ -78,4 +95,8 @@ written=$(sha256sum "$target"); written=${written%% *}
 rm -f "$CONFIRM"
 echo "完成：$operation"
 echo "当前 boot SHA-256：$written"
-echo '请手动重启；模块不会自动重启设备。'
+if [ "$AUTO" = 1 ]; then
+  echo '首次安装自动内核流程已写入；即将自动重启。'
+else
+  echo '请手动重启；模块不会自动重启设备。'
+fi
