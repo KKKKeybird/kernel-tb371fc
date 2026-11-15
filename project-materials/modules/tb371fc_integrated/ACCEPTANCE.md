@@ -16,6 +16,9 @@
 | MiSound 空值 | 原版 APK 同样可复现三音效均不可用时的 `getValue()==null`；补丁将空值回落为 `none`，并保护初始化、偏好变化和销毁链路 |
 | Dirac | 系统无 `libdirac.so`；GEQ 入口继续隐藏，直接启动 `DolbyEqActivity` 不崩溃 |
 | Dolby | 恢复缺失的 `ro.vendor.audio.dolby.dax.support=true`；AudioFlinger 仍加载原生 `DAP`/`DAP_game` |
+| ZUI 出厂 Dolby 配置 | ZUI 16.0.474 `vendor_a:/etc/dolby/dax-default.xml` 与当前文件 SHA-256 同为 `f170bc230c8c95207d71916fb59f3f0f214a5b0afa9d7e2e36543b046c61f207` |
+| Dolby 实现链 | ZUI 与当前 `vendor.dolby.hardware.dms@2.0-impl.so`、DMS 接口、`libdapparamstorage.so`、`libswdap.so` SHA-256 均一致 |
+| 当前所选 profile | DAP SQLite 配置为 `Profile=0`，对应 `Dynamic`，`State=true`；ZUI 默认配置的首个 default 组 profile 同为 `0 Dynamic` |
 | 电池保护页 | 页面正常打开；10200mAh 与正常/智能/健康/旁路四档均存在，无闪退 |
 | 旧模块迁移 | 八个旧模块目录未启用，整合模块单独运行 |
 
