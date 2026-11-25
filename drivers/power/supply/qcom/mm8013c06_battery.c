@@ -836,8 +836,11 @@ static int mm8013_get_property(struct power_supply *psy,
         }
 /*Linden code for JLINDEN-17 by kangkai4 at 20221128 end*/
         break;
+    case POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT:
     case POWER_SUPPLY_PROP_VOLTAGE_MAX:
         ret = mm8013_get_chg_voltage(&val->intval);
+        if (!ret && val->intval <= 0)
+            ret = -ENODATA;
         break;
     case POWER_SUPPLY_PROP_CHARGE_FULL:
         ret = mm8013_get_fixed_capacity(chip, REG_CHARGE_FULL,
@@ -846,9 +849,6 @@ static int mm8013_get_property(struct power_supply *psy,
     case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
         ret = mm8013_get_fixed_capacity(chip, REG_CHARGE_FULL_DESIGN,
                                         &val->intval);
-        break;
-    case POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT:
-        ret = mm8013_soc(&val->intval);
         break;
     case POWER_SUPPLY_PROP_VOLTAGE_OCV:
         ret = mm8013_voltage(&val->intval);

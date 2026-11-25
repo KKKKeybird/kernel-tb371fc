@@ -19,6 +19,21 @@
 #include <linux/regmap.h>
 #include <linux/iio/consumer.h>
 
+/*
+ * Test opt-in for the TB371FC PM8150B AMUX_THM2 wiring. Do not change
+ * the IIO provider scale: ISNS also uses the same channel.
+ */
+static bool tb371fc_vtemp;
+module_param_named(tb371fc_vtemp, tb371fc_vtemp, bool, 0444);
+MODULE_PARM_DESC(tb371fc_vtemp, "Use SMB1398 VTEMP calibration on TB371FC");
+
+#define TB371FC_VTEMP_ADC_MAX		0x7fff
+#define TB371FC_VTEMP_ADC_FULL_SCALE	0x70e4
+#define TB371FC_VTEMP_ADC_REF_UV		1875000
+#define TB371FC_VTEMP_SLOPE		340
+#define TB371FC_VTEMP_OFFSET_MC		268235
+#define TB371FC_VTEMP_MIN_MC		(-40000)
+
 /* Status register definition */
 #define PERPH0_REVISION4		0x2603
 
@@ -337,6 +352,7 @@ struct smb1398_chip {
 	struct work_struct	taper_work;
 
 	struct mutex		die_chan_lock;
+	bool			temp_mux_unrestored;
 	spinlock_t		status_change_lock;
 
 	int			irqs[NUM_IRQS];
@@ -519,6 +535,55 @@ static int smb1398_get_1s_vout_mv(struct smb1398_chip *chip, int *vout_mv)
 	return 0;
 }
 
+static bool smb1398_has_tb371fc_vtemp(struct smb1398_chip *chip)
+{
+	return tb371fc_vtemp && chip->div2_cp_role == DIV2_CP_MASTER &&
+		chip->pmic_rev_id->rev4 > 2;
+}
+
+static int smb1398_tb371fc_vtemp_mc(int raw, int *temp_mc)
+{
+	s64 uv;
+	int converted;
+
+	if (raw <= 0 || raw > TB371FC_VTEMP_ADC_MAX)
+		return -ENODATA;
+
+	/* Same transfer function as qcom_vadc_scale_hw_smb1398_temp. */
+	uv = div_s64((s64)raw * TB371FC_VTEMP_ADC_REF_UV,
+		     TB371FC_VTEMP_ADC_FULL_SCALE);
+	converted = div_s64(uv * 100, TB371FC_VTEMP_SLOPE) -
+		TB371FC_VTEMP_OFFSET_MC;
+	if (converted < TB371FC_VTEMP_MIN_MC)
+		return -ENODATA;
+
+	*temp_mc = converted;
+	return 0;
+}
+
+static int smb1398_read_tb371fc_vtemp(struct smb1398_chip *chip, int *temp_mc)
+{
+	int raw, rc;
+	u8 mux;
+
+	/* Caller holds die_chan_lock across the mux check and conversion. */
+	rc = smb1398_read(chip, SSUPLY_TEMP_CTRL_REG, &mux);
+	if (rc < 0)
+		return rc;
+	if ((mux & SEL_OUT_TEMP_MAX_MASK) != SEL_OUT_VTEMP)
+		return -ENODATA;
+
+	rc = iio_read_channel_raw(chip->die_temp_chan, &raw);
+	if (rc < 0)
+		return rc;
+
+	rc = smb1398_tb371fc_vtemp_mc(raw, temp_mc);
+	if (!rc)
+		dev_info_once(chip->dev, "TB371FC VTEMP ADC %d -> %d mC\n",
+			      raw, *temp_mc);
+	return rc;
+}
+
 static int smb1398_get_die_temp(struct smb1398_chip *chip, int *temp)
 {
 	int die_temp_deciC = 0, rc = 0;
@@ -531,8 +596,16 @@ static int smb1398_get_die_temp(struct smb1398_chip *chip, int *temp)
 		return -ENODATA;
 
 	mutex_lock(&chip->die_chan_lock);
-	rc = iio_read_channel_processed(chip->die_temp_chan, &die_temp_deciC);
+	if (chip->temp_mux_unrestored)
+		rc = -ENODATA;
+	else if (smb1398_has_tb371fc_vtemp(chip))
+		rc = smb1398_read_tb371fc_vtemp(chip, &die_temp_deciC);
+	else
+		rc = iio_read_channel_processed(chip->die_temp_chan,
+				&die_temp_deciC);
 	mutex_unlock(&chip->die_chan_lock);
+	if (rc == -ENODATA)
+		return rc;
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't read die_temp_chan, rc=%d\n", rc);
 	} else {
@@ -713,7 +786,7 @@ static int smb1398_div2_cp_get_master_isns(
 		struct smb1398_chip *chip, int *isns_ua)
 {
 	union power_supply_propval pval = {0};
-	int rc = 0, temp;
+	int rc, temp, restore_rc;
 
 	rc = smb1398_get_enable_status(chip);
 	if (rc < 0)
@@ -743,11 +816,12 @@ static int smb1398_div2_cp_get_master_isns(
 		}
 	}
 
+	chip->temp_mux_unrestored = true;
 	rc = smb1398_div2_cp_isns_mode_control(chip, ISNS_MODE_ACTIVE);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set master ISNS_MODE_ACTIVE, rc=%d\n",
 				rc);
-		goto unlock;
+		goto restore_master;
 	}
 
 	rc = smb1398_masked_write(chip, PERPH0_DIV2_SLAVE,
@@ -755,7 +829,7 @@ static int smb1398_div2_cp_get_master_isns(
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set PERPH0_DIV2_SLAVE, rc=%d\n",
 				rc);
-		goto unlock;
+		goto restore_phase;
 	}
 
 	/* Delay for the phase switch to take effect */
@@ -764,24 +838,28 @@ static int smb1398_div2_cp_get_master_isns(
 	rc = iio_read_channel_processed(chip->die_temp_chan, &temp);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't read die_temp_chan, rc=%d\n", rc);
-		goto unlock;
+		goto restore_phase;
 	}
 
-	rc = smb1398_masked_write(chip, PERPH0_DIV2_SLAVE,
+restore_phase:
+	restore_rc = smb1398_masked_write(chip, PERPH0_DIV2_SLAVE,
 			CFG_DIV2_SYNC_CLK_PHASE_90, CFG_DIV2_SYNC_CLK_PHASE_90);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't set PERPH0_DIV2_SLAVE, rc=%d\n",
-				rc);
-		goto unlock;
+	if (restore_rc < 0) {
+		dev_err(chip->dev, "Couldn't restore CP clock phase, rc=%d\n",
+			restore_rc);
+		if (rc >= 0)
+			rc = restore_rc;
 	}
-
-	rc = smb1398_div2_cp_isns_mode_control(chip, ISNS_MODE_STANDBY);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't set master ISNS_MODE_STANDBY, rc=%d\n",
-				rc);
-		goto unlock;
+restore_master:
+	restore_rc = smb1398_div2_cp_isns_mode_control(chip, ISNS_MODE_STANDBY);
+	if (restore_rc < 0) {
+		dev_err(chip->dev, "Couldn't restore master VTEMP, rc=%d\n",
+			restore_rc);
+		if (rc >= 0)
+			rc = restore_rc;
+	} else {
+		chip->temp_mux_unrestored = false;
 	}
-
 unlock:
 	mutex_unlock(&chip->die_chan_lock);
 	if (rc >= 0) {
@@ -796,7 +874,7 @@ static int smb1398_div2_cp_get_slave_isns(
 		struct smb1398_chip *chip, int *isns_ua)
 {
 	union power_supply_propval pval = {0};
-	int temp = 0, rc;
+	int temp = 0, rc, restore_rc;
 
 	if (!is_cps_available(chip)) {
 		*isns_ua = 0;
@@ -817,14 +895,16 @@ static int smb1398_div2_cp_get_slave_isns(
 	 *   set DIV2_CP switch phase-shift to 0 deg;
 	 *   read corresponding ADC channel in Kekaha;
 	 *   set DIV2_CP switch phase-shif back to 90 deg;
+	 *   set slave CP TEMP_MUX to HighZ;
 	 *   set master CP TEMP_MUX to VTEMP;
 	 */
 	mutex_lock(&chip->die_chan_lock);
+	chip->temp_mux_unrestored = true;
 	rc = smb1398_div2_cp_isns_mode_control(chip, ISNS_MODE_OFF);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set master ISNS_MODE_OFF, rc=%d\n",
 				rc);
-		goto unlock;
+		goto restore_slave;
 	}
 
 	pval.intval = ISNS_MODE_ACTIVE;
@@ -833,7 +913,7 @@ static int smb1398_div2_cp_get_slave_isns(
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set slave ISNS_MODE_ACTIVE, rc=%d\n",
 				rc);
-		goto unlock;
+		goto restore_slave;
 	}
 
 	rc = smb1398_masked_write(chip, PERPH0_DIV2_SLAVE,
@@ -841,7 +921,7 @@ static int smb1398_div2_cp_get_slave_isns(
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set PERPH0_DIV2_SLAVE, rc=%d\n",
 				rc);
-		goto unlock;
+		goto restore_phase;
 	}
 
 	/* Delay for the phase switch to take effect */
@@ -850,22 +930,38 @@ static int smb1398_div2_cp_get_slave_isns(
 	rc = iio_read_channel_processed(chip->die_temp_chan, &temp);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't get die_temp_chan, rc=%d\n", rc);
-		goto unlock;
+		goto restore_phase;
 	}
 
-	rc = smb1398_masked_write(chip, PERPH0_DIV2_SLAVE,
+restore_phase:
+	restore_rc = smb1398_masked_write(chip, PERPH0_DIV2_SLAVE,
 			CFG_DIV2_SYNC_CLK_PHASE_90, CFG_DIV2_SYNC_CLK_PHASE_90);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't set PERPH0_DIV2_SLAVE, rc=%d\n",
-				rc);
+	if (restore_rc < 0) {
+		dev_err(chip->dev, "Couldn't restore CP clock phase, rc=%d\n",
+			restore_rc);
+		if (rc >= 0)
+			rc = restore_rc;
+	}
+restore_slave:
+	/* Release the shared ADC input before re-enabling master VTEMP. */
+	pval.intval = ISNS_MODE_OFF;
+	restore_rc = power_supply_set_property(chip->div2_cp_slave_psy,
+			POWER_SUPPLY_PROP_CURRENT_CAPABILITY, &pval);
+	if (restore_rc < 0) {
+		dev_err(chip->dev, "Couldn't restore slave High-Z, rc=%d\n",
+			restore_rc);
+		if (rc >= 0)
+			rc = restore_rc;
 		goto unlock;
 	}
-
-	rc = smb1398_div2_cp_isns_mode_control(chip, ISNS_MODE_STANDBY);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't set master ISNS_MODE_STANDBY, rc=%d\n",
-				rc);
-		goto unlock;
+	restore_rc = smb1398_div2_cp_isns_mode_control(chip, ISNS_MODE_STANDBY);
+	if (restore_rc < 0) {
+		dev_err(chip->dev, "Couldn't restore master VTEMP, rc=%d\n",
+			restore_rc);
+		if (rc >= 0)
+			rc = restore_rc;
+	} else {
+		chip->temp_mux_unrestored = false;
 	}
 unlock:
 	mutex_unlock(&chip->die_chan_lock);
@@ -1066,7 +1162,9 @@ static int div2_cp_master_get_prop(struct power_supply *psy,
 		rc = smb1398_get_die_temp(chip, &temp);
 		if (rc >= 0) {
 			val->intval = temp;
-			if (temp <= THERMAL_SUSPEND_DECIDEGC)
+			/* A calibrated high reading must reach the consumer. */
+			if (smb1398_has_tb371fc_vtemp(chip) ||
+			    temp <= THERMAL_SUSPEND_DECIDEGC)
 				chip->die_temp = temp;
 			else if (chip->die_temp == -ENODATA)
 				rc = -ENODATA;

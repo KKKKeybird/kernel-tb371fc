@@ -1859,6 +1859,11 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		if (val->intval < 0)
 			val->intval = get_client_vote(chg->fv_votable,
 						      BATT_PROFILE_VOTER);
+		/* An external JEITA policy may be the only active FV voter. */
+		if (val->intval < 0)
+			val->intval = get_effective_result(chg->fv_votable);
+		if (val->intval <= 0)
+			return -ENODATA;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_QNOVO:
 		val->intval = get_client_vote_locked(chg->fv_votable,
@@ -1874,6 +1879,11 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		val->intval = get_client_vote(chg->fcc_votable,
 					      BATT_PROFILE_VOTER);
+		/* Lenovo JEITA can supply FCC without a battery-profile vote. */
+		if (val->intval < 0)
+			val->intval = get_effective_result(chg->fcc_votable);
+		if (val->intval < 0)
+			return -ENODATA;
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 		val->intval = get_effective_result(chg->fcc_votable);
@@ -1961,6 +1971,11 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 #ifdef CONFIG_SPINEL_CHARGER
 	case POWER_SUPPLY_PROP_MAIN_CHARGE_INFO:
 		val->intval = POWER_SUPPLY_MAIN_CHARGEIC;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
+		/* Read back the same user request controlled by the setter. */
+		val->intval = is_client_vote_enabled(chg->chg_disable_votable,
+						     USER_VOTER);
 		break;
 	case POWER_SUPPLY_PROP_BM_ENABLE:
 		val->intval = chg->bm_enable;
