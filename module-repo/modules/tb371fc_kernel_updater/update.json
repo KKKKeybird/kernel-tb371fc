@@ -1,6 +1,6 @@
 {
-  "version": "2.2-hyperos25",
-  "versionCode": 25,
-  "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-kernel-updater-v2.2-hyperos25/TB371FC-KernelUpdater-v2.2-hyperos25.zip",
-  "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater/CHANGELOG.md"
+  "version": "4.0-r8-charging",
+  "versionCode": 40,
+  "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/kernel-r8-charging-v4/TB371FC-KernelUpdater-v4.0-r8-charging.zip",
+  "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater_v4/CHANGELOG.md"
 }

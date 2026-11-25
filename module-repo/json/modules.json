@@ -177,17 +177,25 @@
     },
     {
       "id": "tb371fc_kernel_updater",
-      "name": "R8 内核更新器",
-      "version": "2.2-hyperos25",
-      "versionCode": 25,
+      "name": "R8 内核更新器（PPS 修复 v4）",
+      "version": "4.0-r8-charging",
+      "versionCode": 40,
       "author": "KKKKeybird",
-      "description": "【旧版回退，停止维护；内核能力已并入整合模块的手动入口】主动双击确认后更新活动槽 boot，永不自动刷写。",
-      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater/README.md",
+      "description": "仅适用 TB371FC HyperOS 3 R8。双确认后备份并更新活动槽，安装和开机不自动写入。",
+      "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater_v4/README.md",
       "track": {
-        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_kernel_updater"
+        "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_kernel_updater_v4"
       },
-      "size": 100667442,
+      "size": 100666529,
       "versions": [
+        {
+          "version": "4.0-r8-charging",
+          "versionCode": 40,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/kernel-r8-charging-v4/TB371FC-KernelUpdater-v4.0-r8-charging.zip",
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater_v4/CHANGELOG.md",
+          "timestamp": 1795613671,
+          "size": 100666529
+        },
         {
           "version": "2.2-hyperos25",
           "versionCode": 25,
