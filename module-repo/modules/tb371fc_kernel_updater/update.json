@@ -1,6 +1,0 @@
-{
-  "version": "4.0-r8-charging",
-  "versionCode": 40,
-  "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/kernel-r8-charging-v4/TB371FC-KernelUpdater-v4.0-r8-charging.zip",
-  "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater_v4/CHANGELOG.md"
-}

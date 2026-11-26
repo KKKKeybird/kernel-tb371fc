@@ -1,7 +1,0 @@
-id=tb371fc_kernel_updater
-name=TB371FC R8 内核更新器（PPS 修复 v4）
-version=4.0-r8-charging
-versionCode=40
-author=KKKKeybird
-description=仅适用于 TB371FC HyperOS 3 R8。用户主动双击确认后才备份并更新活动槽 boot。包含 PPS 起泵、温度及充电回读修复。
-updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_kernel_updater/update.json
