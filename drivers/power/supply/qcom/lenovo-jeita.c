@@ -526,11 +526,11 @@ static void status_change_work(struct work_struct *work)
 	else
 		type_val = pval.intval;
 
-	/* sec6 0x1d58..0x1e0c: fcc_index 150..449 magic */
-	if (chip->jeita_fcc_index >= 150 && chip->jeita_fcc_index <= 449) {
-		if (type_val == 2)
+	/* Stock ZUI selects the protocol FCC for 15.0–44.9°C. */
+	if (temp >= 150 && temp <= 449) {
+		if (pd_val == POWER_SUPPLY_PD_PPS_ACTIVE)
 			fcc_ua = 6000000;
-		else if (pd_val == 13)
+		else if (type_val == POWER_SUPPLY_TYPE_USB_HVDCP_3)
 			fcc_ua = 4500000;
 	}
 after_usb:
