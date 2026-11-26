@@ -9,10 +9,8 @@ BOOT_SLOT=$(getprop ro.boot.slot_suffix)
 case "$BOOT_SLOT" in _a|_b) ;; *) abort '! Invalid active boot slot';; esac
 BOOT_SHA=$(sha256sum "/dev/block/by-name/boot$BOOT_SLOT" | cut -d' ' -f1)
 case "$BOOT_SHA" in
-    a0d3a11eb761dbe63d0175dd4ea597a3d26881c8a3ef264ca2b3fe42d886a5a9)
-        KERNEL_PENDING=1;;
-    a9fb2b73e43e8e8bb1b7a8456bf772e6729b68c110ed57bf7f2c1d1cf417b981)
-        KERNEL_PENDING=0;;
+    a0d3a11eb761dbe63d0175dd4ea597a3d26881c8a3ef264ca2b3fe42d886a5a9|a9fb2b73e43e8e8bb1b7a8456bf772e6729b68c110ed57bf7f2c1d1cf417b981|d866525241e212429beda800854cb3cbc1a4c3c4caea800f683b0225da11c43d|2825eb9593e6593581c1f42ba52faeac1f6a53f1a3aaf94012ccef7a0b8bc272) KERNEL_PENDING=1;;
+    6bec20e4f3ca4ae2dc2d47ed2a55f1f873f6d1f689ccda8ca13ce6081896af64) KERNEL_PENDING=0;;
     *) abort "! Unsupported active boot SHA-256: $BOOT_SHA";;
 esac
 
@@ -221,10 +219,10 @@ trap - EXIT HUP INT TERM
 ui_print '- Account, split, pen, capacity, system, charging and kernel tools are integrated'
 ui_print '- Legacy module folders are retained and disabled; rollback script can re-enable them'
 if [ "$KERNEL_PENDING" = 1 ]; then
-    ui_print '- Current boot is the supported pre-#25 image; runtime remains dormant'
-    ui_print '- Open the module action twice within five minutes to update boot'
+    ui_print '- Current boot is a supported previous release'
+    ui_print '- The kernel update starts after the module installation commits'
 else
-    ui_print '- Validated HyperOS #25 boot detected'
+    ui_print '- Verified v5 boot detected; no automatic write or reboot'
 fi
 ui_print '- PPS remains manual; supported old boot is updated automatically after install'
 ui_print '- Touch direction and pen icon use events; unsupported Dirac GEQ is hidden safely'
@@ -244,6 +242,6 @@ if [ "$KERNEL_PENDING" = 1 ]; then
     : > "$AUTO_STATE/status.log"
     setsid sh "$AUTO_STATE/runner.sh" </dev/null >>"$AUTO_STATE/status.log" 2>&1 &
     echo "$!" > "$AUTO_STATE/pid"
-    ui_print '- Automatic #25 kernel update queued; it starts after this install commits'
+    ui_print '- Automatic v5 kernel update queued; it starts after this install commits'
     ui_print '- A validated boot write is followed by an automatic reboot'
 fi

@@ -1,7 +1,6 @@
 id=tb371fc_kernel_updater
-name=TB371FC R8 内核更新器
-version=2.2-hyperos25
-versionCode=25
+name=TB371FC 整合内核更新器
+version=5.0-integrated
+versionCode=50
 author=KKKKeybird
-description=首次安装整合模块时自动备份并更新活动槽boot后重启；失败不改写boot。仅适配TB371FC HyperOS3 R8精确基础镜像。
-updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_kernel_updater/update.json
+description=整合模块内核工具组件，不单独安装。

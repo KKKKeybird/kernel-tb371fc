@@ -38,17 +38,26 @@ done
     exit 1
 }
 
-publish installing_kernel "$EXPECTED_VERSION"
-if ! sh "$MODULE/run-kernel.sh" --auto; then
-    publish failed kernel_update
-    exit 1
+slot=${TB371FC_KERNEL_SLOT:-$(getprop ro.boot.slot_suffix)}
+case "$slot" in _a|_b) ;; *) publish failed invalid_slot; exit 1;; esac
+target=${TB371FC_KERNEL_TARGET:-/dev/block/by-name/boot$slot}
+expected=${TB371FC_KERNEL_EXPECTED_SHA:-6bec20e4f3ca4ae2dc2d47ed2a55f1f873f6d1f689ccda8ca13ce6081896af64}
+current=$(sha256sum "$target" | awk '{print $1}')
+if [ "$current" = "$expected" ]; then
+    publish already_current "$current"
+    exit 0
 fi
 
-slot=${TB371FC_KERNEL_SLOT:-$(getprop ro.boot.slot_suffix)}
-target=${TB371FC_KERNEL_TARGET:-/dev/block/by-name/boot$slot}
-expected=${TB371FC_KERNEL_EXPECTED_SHA:-a9fb2b73e43e8e8bb1b7a8456bf772e6729b68c110ed57bf7f2c1d1cf417b981}
+publish installing_kernel "$EXPECTED_VERSION"
+sh "$MODULE/run-kernel.sh" --auto
+result=$?
+case "$result" in
+    0) ;;
+    10) publish already_current "$expected"; exit 0;;
+    *) publish failed kernel_update; exit 1;;
+esac
 current=$(sha256sum "$target" | awk '{print $1}')
-[ "$current" = "$expected" ] || {
+[ "$current" = "$expected" ] && [ "${TB371FC_KERNEL_SLOT:-$(getprop ro.boot.slot_suffix)}" = "$slot" ] || {
     publish failed post_write_verification
     exit 1
 }

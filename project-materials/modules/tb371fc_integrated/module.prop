@@ -1,7 +1,7 @@
 id=tb371fc_integrated
 name=TB371FC R8 整合维护与兼容修复
-version=1.3-test1
-versionCode=130
+version=1.4.1
+versionCode=141
 author=KKKKeybird
-description=首次安装时自动校验、备份并更新#25 boot，成功回读后自动重启；同时修复满电容量采样、音质音效空值崩溃、触控方向、手写笔图标与不可用Dirac均衡器。保留Lenovo原厂Dolby DAP与音效校准，不写Google Play数据。
+description=整合原有系统兼容、音效、电池保护与 v5 充电修复。安装提交后自动更新已知旧 boot，校验并备份成功后重启。已是 v5 则跳过。
 updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_integrated/update.json

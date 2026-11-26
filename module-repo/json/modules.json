@@ -9,16 +9,24 @@
     {
       "id": "tb371fc_integrated",
       "name": "R8 整合维护与兼容修复",
-      "version": "1.3-test1",
-      "versionCode": 130,
+      "version": "1.4.1",
+      "versionCode": 141,
       "author": "KKKKeybird",
-      "description": "首次安装自动更新已验证#25 boot并重启；同时维护账号、上下分屏、手写笔锁、容量统计、系统服务、四档充电、Dolby兼容与音效页面修复。旧单模块改为回退保留。",
+      "description": "集成 v5 内核与原有兼容修复。模块安装提交后自动校验、备份并更新已知旧 boot，写后回读通过才重启。已是 v5 则跳过。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_integrated/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_integrated"
       },
-      "size": 34274654,
+      "size": 34271956,
       "versions": [
+        {
+          "version": "1.4.1",
+          "versionCode": 141,
+          "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-integrated-v1.4.1/TB371FC-Integrated-v1.4.1.zip",
+          "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_integrated/CHANGELOG.md",
+          "timestamp": 1795718132,
+          "size": 34271956
+        },
         {
           "version": "1.3-test1",
           "versionCode": 130,
@@ -177,11 +185,11 @@
     },
     {
       "id": "tb371fc_kernel_updater",
-      "name": "R8 内核更新器（PPS 修复 v4）",
+      "name": "【已废弃】R8 独立内核更新器",
       "version": "4.0-r8-charging",
       "versionCode": 40,
       "author": "KKKKeybird",
-      "description": "仅适用 TB371FC HyperOS 3 R8。双确认后备份并更新活动槽，安装和开机不自动写入。",
+      "description": "由 R8 整合维护与兼容修复 1.4.1 接替。旧版下载仅保留供回退，后续内核由整合模块提供。",
       "readme": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_kernel_updater_v4/README.md",
       "track": {
         "source": "https://github.com/KKKKeybird/kernel-tb371fc/tree/main/project-materials/modules/tb371fc_kernel_updater_v4"
