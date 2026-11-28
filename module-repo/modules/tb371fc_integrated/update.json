@@ -1,6 +1,6 @@
 {
-  "version": "1.4.2",
-  "versionCode": 142,
-  "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-integrated-v1.4.2/TB371FC-Integrated-v1.4.2.zip",
+  "version": "1.4.3",
+  "versionCode": 143,
+  "zipUrl": "https://github.com/KKKKeybird/kernel-tb371fc/releases/download/module-integrated-v1.4.3/TB371FC-Integrated-v1.4.3.zip",
   "changelog": "https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/project-materials/modules/tb371fc_integrated/CHANGELOG.md"
 }
