@@ -164,6 +164,12 @@ case "$actual" in
 esac
 [ "$(sha256sum "$MODPATH/system/product/etc/device_features/sheng.xml" | cut -d' ' -f1)" = "$FIXED_PROFILE" ] || abort '! Capacity profile verification failed'
 
+WPS_OVERLAY="$MODPATH/system/etc/tb371fc/wps"
+sh "$MODPATH/tools/prepare-wps-launcher.sh" \
+    /system/etc/tb371fc/wps/run-runtime.sh "$WPS_OVERLAY/run-runtime.sh" ||
+    abort '! Unrecognized R8 WPS launcher'
+ui_print '- WPS will clear existing CUPS logs once and enable 1 MiB rotation'
+
 for file in \
     "$MODPATH/customize.sh" "$MODPATH/post-fs-data.sh" "$MODPATH/service.sh" \
     "$MODPATH/action.sh" "$MODPATH/uninstall.sh" "$MODPATH/run-pps.sh" \

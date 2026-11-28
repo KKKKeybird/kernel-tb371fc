@@ -1,7 +1,7 @@
 id=tb371fc_integrated
 name=TB371FC R8 整合维护与兼容修复
-version=1.4.1
-versionCode=141
+version=1.4.2
+versionCode=142
 author=KKKKeybird
-description=整合原有系统兼容、音效、电池保护与 v5 充电修复。安装提交后自动更新已知旧 boot，校验并备份成功后重启。已是 v5 则跳过。
+description=整合原有系统兼容、音效、电池保护与 v5 充电修复。安装提交后自动更新已知旧 boot，校验并备份成功后重启。已是 v5 则跳过。修复 WPS 打印日志无限增长。
 updateJson=https://raw.githubusercontent.com/KKKKeybird/kernel-tb371fc/main/module-repo/modules/tb371fc_integrated/update.json
